@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>YAN4 IB 직납 SLA</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Malgun Gothic", sans-serif;
+      background: #eef4fb;
+      color: #0f172a;
+    }
+    .container { max-width: 1280px; margin: 0 auto; padding: 24px; }
+    h1 { margin: 0 0 8px; font-size: 24px; font-weight: 800; color: #123a7a; }
+    .sub { font-size: 14px; color: #64748b; margin-bottom: 18px; line-height: 1.5; }
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+      padding: 20px;
+      margin-bottom: 18px;
+      border-top: 4px solid #2563eb;
+    }
+    .card-title { margin: 0 0 10px; font-size: 17px; font-weight: 800; color: #123a7a; }
+    .paste-area {
+      width: 100%;
+      min-height: 200px;
+      padding: 14px;
+      border: 2px solid #cbd5e1;
+      border-radius: 12px;
+      font-family: Consolas, "Malgun Gothic", monospace;
+      font-size: 12px;
+      line-height: 1.45;
+      resize: vertical;
+      background: #fafafa;
+    }
+    .paste-area:focus {
+      outline: none;
+      border-color: #2563eb;
+      background: #fff;
+    }
+    .hint { font-size: 13px; color: #64748b; margin-top: 8px; line-height: 1.5; }
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .kpi {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+    .kpi-label { font-size: 11px; font-weight: 700; color: #64748b; }
+    .kpi-value { font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; }
+    .table-wrap { overflow: auto; max-height: 65vh; border: 1px solid #dbeafe; border-radius: 12px; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; background: #fff; }
+    th {
+      position: sticky;
+      top: 0;
+      background: #0f4c8a;
+      color: #fff;
+      padding: 10px 8px;
+      text-align: left;
+      white-space: nowrap;
+      z-index: 1;
+    }
+    td { border-bottom: 1px solid #e5e7eb; padding: 8px; vertical-align: middle; }
+    tr:hover td { background: #f8fbff; }
+    .urgency { font-weight: 800; font-variant-numeric: tabular-nums; }
+    .row-past td { background: #f4f4f5; color: #18181b; }
+    .row-past:hover td { background: #e4e4e7; }
+    .row-past .urgency { color: #09090b; }
+    .row-warn-3h td { background: #fff7ed; }
+    .row-warn-3h:hover td { background: #ffedd5; }
+    .row-warn-2h td { background: #fffbeb; }
+    .row-warn-2h:hover td { background: #fef3c7; }
+    .row-warn-1h td { background: #fef2f2; }
+    .row-warn-1h:hover td { background: #fee2e2; }
+    .row-ok td { background: #f0fdf4; }
+    .row-ok:hover td { background: #dcfce7; }
+    .err { background: #fef2f2; color: #b91c1c; padding: 12px; border-radius: 10px; font-size: 14px; }
+    .mono { font-variant-numeric: tabular-nums; }
+    td.mono a.ibc-link {
+      color: #1d4ed8;
+      font-weight: 700;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+    td.mono a.ibc-link:hover { color: #1e40af; }
+    .worker-filter-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0 0 12px;
+      flex-wrap: wrap;
+    }
+    .worker-filter-bar label { font-size: 13px; font-weight: 700; color: #334155; }
+    .worker-filter-bar select {
+      min-width: 200px;
+      max-width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      font-size: 13px;
+      background: #fff;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>YAN4 IB 직납 SLA</h1>
+    <div class="card">
+      <h2 class="card-title">여기에 붙여넣기</h2>
+      <textarea id="pasteBox" class="paste-area" placeholder="헤더 포함 표 전체 선택 → Ctrl+C → 여기 Ctrl+V" spellcheck="false"></textarea>
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+        <button id="runBtn" type="button" style="border:0;border-radius:10px;padding:10px 14px;font-weight:700;background:#2563eb;color:#fff;cursor:pointer;">실행</button>
+      </div>
+    </div>
+
+    <div class="card" id="resultCard" style="display:none;">
+      <h2 class="card-title">급한 순</h2>
+      <div class="kpi-row" id="kpiRow"></div>
+      <p class="hint" style="margin:0 0 12px;">
+        주황: 3시간 이내 · 노랑: 2시간 이내 · 빨강: 1시간 이내 · 검정줄: 데드라인 지남 · 초록: 여유 · 긴급도 1초마다 갱신
+      </p>
+      <div class="worker-filter-bar" id="workerFilterBar" style="display: none;" aria-hidden="true">
+        <label for="workerFilter">하차작업자</label>
+        <select id="workerFilter"></select>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>긴급도(남은시간)</th>
+              <th>하차번호</th>
+              <th>업체명</th>
+              <th>하차작업자</th>
+              <th>하차일시</th>
+              <th>SLA (+12h)</th>
+              <th>입고</th>
+              <th>진열완료</th>
+              <th>진열오류</th>
+              <th>남은 진열</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="globalErr"></div>
+  </div>
+
+  <script>
+    (function () {
+      const DEADLINE_HOURS = 12;
+      const MS_1H = 60 * 60 * 1000;
+      const MS_2H = 2 * MS_1H;
+      const MS_3H = 3 * MS_1H;
+
+      /** 하차작업자 코드 → 닉네임 (표·드롭다운에 CODE(닉네임) 형식). 추가·수정은 여기만. */
+      const WORKER_NICK = Object.freeze({
+        D9117447: "Patt",
+        V7279297: "Stone",
+        N7503080: "Teo",
+        G4828831: "Judy",
+        N8352146: "Han",
+        S1997861: "Youngwoon",
+        Q8121675: "Solin",
+        R1684286: "Luca",
+        J3866485: "Pepe",
+        U6075063: "Aron",
+        L7515480: "Diah",
+        R7449799: "Eri",
+        V6703574: "Wiz",
+        E4468275: "Vulin",
+        S9779996: "민경두",
+        U7058151: "조문희",
+        H9228142: "강혜인",
+        A9141217: "강보윤",
+        G8398692: "박광현",
+        G4216365: "이은주",
+        Q1448448: "신도윤",
+        X1193767: "박연순",
+        M6743291: "박결",
+        U3995226: "송태정",
+        K7516127: "민윤경",
+      });
+
+      function formatWorkerLabel(raw) {
+        const code = String(raw || "").trim();
+        if (!code) return "";
+        const upper = code.toUpperCase();
+        const nick = WORKER_NICK[upper];
+        if (nick) return upper + "(" + nick + ")";
+        return code;
+      }
+
+      function parseUnloadTime(v) {
+        if (v == null || v === "") return null;
+        const s = String(v).trim();
+        const m = s.match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{1,2}):(\d{2})/);
+        if (!m) return null;
+        const d = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], 0, 0);
+        return isNaN(d.getTime()) ? null : d;
+      }
+
+      function num(v) {
+        if (v == null || v === "") return NaN;
+        const n = parseFloat(String(v).replace(/,/g, "").replace(/\s+출력\s*$/i, "").trim());
+        return isNaN(n) ? NaN : n;
+      }
+
+      function fmtDT(d) {
+        if (!d) return "";
+        const y = d.getFullYear();
+        const mo = String(d.getMonth() + 1).padStart(2, "0");
+        const da = String(d.getDate()).padStart(2, "0");
+        const h = String(d.getHours()).padStart(2, "0");
+        const mi = String(d.getMinutes()).padStart(2, "0");
+        return y + "-" + mo + "-" + da + " " + h + ":" + mi;
+      }
+
+      function formatRemain(ms) {
+        if (ms <= 0) {
+          const over = Math.abs(ms);
+          const h = Math.floor(over / 3600000);
+          const m = Math.floor((over % 3600000) / 60000);
+          const s = Math.floor((over % 60000) / 1000);
+          return "초과 " + h + "h " + m + "m " + s + "s";
+        }
+        const h = Math.floor(ms / 3600000);
+        const m = Math.floor((ms % 3600000) / 60000);
+        const s = Math.floor((ms % 60000) / 1000);
+        return h + "h " + m + "m " + s + "s";
+      }
+
+      function urgencyCellTextAndClass(deadline, now) {
+        const ms = deadline.getTime() - now;
+        let cls = "";
+        let u = formatRemain(ms);
+        if (ms <= 0) {
+          cls = "row-past";
+          u = "⚫ " + u;
+        } else if (ms <= MS_1H) {
+          cls = "row-warn-1h";
+          u = "🔴 " + u;
+        } else if (ms <= MS_2H) {
+          cls = "row-warn-2h";
+          u = "🟡 " + u;
+        } else if (ms <= MS_3H) {
+          cls = "row-warn-3h";
+          u = "🟠 " + u;
+        } else {
+          cls = "row-ok";
+          u = "🟢 " + u;
+        }
+        return { cls, text: u };
+      }
+
+      function updateKpiFromRows(rows, now) {
+        const kpiRow = document.getElementById("kpiRow");
+        if (!kpiRow) return;
+        let past = 0;
+        let in1h = 0;
+        let in2h = 0;
+        let in3h = 0;
+        let ok = 0;
+        let remainTotal = 0;
+        rows.forEach((x) => {
+          const ms = x.deadline.getTime() - now;
+          remainTotal += Number(x.remainQty || 0);
+          if (ms <= 0) past++;
+          else if (ms <= MS_1H) in1h++;
+          else if (ms <= MS_2H) in2h++;
+          else if (ms <= MS_3H) in3h++;
+          else ok++;
+        });
+        kpiRow.innerHTML =
+          '<div class="kpi"><div class="kpi-label">미진열</div><div class="kpi-value">' +
+          rows.length +
+          '</div></div><div class="kpi"><div class="kpi-label">SLA 초과</div><div class="kpi-value" style="color:#18181b">' +
+          past +
+          '</div></div><div class="kpi"><div class="kpi-label">1h 이하</div><div class="kpi-value" style="color:#b91c1c">' +
+          in1h +
+          '</div></div><div class="kpi"><div class="kpi-label">2h 이하</div><div class="kpi-value" style="color:#b45309">' +
+          in2h +
+          '</div></div><div class="kpi"><div class="kpi-label">3h 이하</div><div class="kpi-value" style="color:#c2410c">' +
+          in3h +
+          '</div></div><div class="kpi"><div class="kpi-label">3h 초과</div><div class="kpi-value" style="color:#15803d">' +
+          ok +
+          '</div></div><div class="kpi"><div class="kpi-label">남은 진열총량</div><div class="kpi-value" style="color:#1d4ed8">' +
+          remainTotal +
+          "</div></div>";
+      }
+
+      function escapeHtml(s) {
+        return String(s)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      }
+
+      function escapeAttr(s) {
+        return String(s)
+          .replace(/&/g, "&amp;")
+          .replace(/"/g, "&quot;")
+          .replace(/</g, "&lt;");
+      }
+
+      /** href 속성용: 스크립트·이상 스킴 차단 */
+      function sanitizeHref(href) {
+        if (href == null || href === "") return null;
+        const s = String(href).trim();
+        if (/^javascript:/i.test(s) || /^data:/i.test(s)) return null;
+        if (/^https?:\/\//i.test(s)) return s;
+        if (s.startsWith("/") && !s.startsWith("//")) return s;
+        if (s.startsWith("./") || s.startsWith("../")) return s;
+        return null;
+      }
+
+      function hrefFromTableCell(table, rowIndex, colIndex) {
+        if (!table || colIndex < 0) return null;
+        const trs = table.querySelectorAll("tr");
+        const tr = trs[rowIndex];
+        if (!tr) return null;
+        const cells = tr.querySelectorAll("th,td");
+        const cell = cells[colIndex];
+        if (!cell) return null;
+        const a = cell.querySelector("a[href]");
+        if (!a) return null;
+        return sanitizeHref(a.getAttribute("href"));
+      }
+
+      function hrefByIbcText(table, ibcText) {
+        if (!table || !ibcText) return null;
+        const want = String(ibcText).trim();
+        if (!want) return null;
+        const anchors = table.querySelectorAll("a[href]");
+        for (const a of anchors) {
+          const label = String(a.textContent || "").replace(/\u00a0/g, " ").trim();
+          if (label === want) {
+            const href = sanitizeHref(a.getAttribute("href"));
+            if (href) return href;
+          }
+        }
+        return null;
+      }
+
+      function rememberAllAnchorsFromTable(table) {
+        if (!table) return;
+        const anchors = table.querySelectorAll("a[href]");
+        for (const a of anchors) {
+          const label = String(a.textContent || "").replace(/\u00a0/g, " ").trim();
+          const href = sanitizeHref(a.getAttribute("href"));
+          if (label && href) savedIbcLinks[label] = href;
+        }
+      }
+
+      function ibcCellHtml(x) {
+        const label = escapeHtml(x.ibc);
+        if (x.ibcUrl) {
+          return (
+            '<a class="ibc-link" href="' +
+            escapeAttr(x.ibcUrl) +
+            '" target="_blank" rel="noopener noreferrer">' +
+            label +
+            "</a>"
+          );
+        }
+        return label;
+      }
+
+      /** 남은 진열 = 하차번호와 동일 하이퍼링크(있을 때). 로컬 HTML은 타 도메인 자동 fetch 불가 → 클릭으로 상세 탭 오픈. */
+      function remainQtyCellHtml(x) {
+        const q = String(x.remainQty != null ? x.remainQty : "");
+        if (x.ibcUrl) {
+          return (
+            '<a class="ibc-link" href="' +
+            escapeAttr(x.ibcUrl) +
+            '" target="_blank" rel="noopener noreferrer" title="하차 상세와 동일 주소 · SKU 자동 추적은 사내 페이지 Userscript">' +
+            escapeHtml(q) +
+            "</a>"
+          );
+        }
+        return escapeHtml(q);
+      }
+
+      function pendingRowToTr(x, now) {
+        const { cls, text: u } = urgencyCellTextAndClass(x.deadline, now);
+        return (
+          "<tr class='" +
+          cls +
+          "'><td class='urgency'>" +
+          escapeHtml(u) +
+          "</td><td class='mono'>" +
+          ibcCellHtml(x) +
+          "</td><td>" +
+          escapeHtml(x.vendor) +
+          "</td><td>" +
+          escapeHtml(formatWorkerLabel(x.worker)) +
+          "</td><td class='mono'>" +
+          fmtDT(x.unload) +
+          "</td><td class='mono'>" +
+          fmtDT(x.deadline) +
+          "</td><td class='mono'>" +
+          x.recv +
+          "</td><td class='mono'>" +
+          x.disp +
+          "</td><td class='mono'>" +
+          x.errQty +
+          "</td><td class='mono' style='font-weight:800'>" +
+          remainQtyCellHtml(x) +
+          "</td></tr>"
+        );
+      }
+
+      function populateWorkerFilterOptions() {
+        const bar = document.getElementById("workerFilterBar");
+        const sel = document.getElementById("workerFilter");
+        if (!bar || !sel) return;
+        const names = lastWorkerChoices.slice().sort((a, b) =>
+          formatWorkerLabel(a).localeCompare(formatWorkerLabel(b), "ko")
+        );
+        const prev = sel.value;
+        sel.innerHTML =
+          '<option value="">전체</option>' +
+          names
+            .map(
+              (w) =>
+                '<option value="' + escapeAttr(w) + '">' + escapeHtml(formatWorkerLabel(w)) + "</option>"
+            )
+            .join("");
+        if (prev && names.indexOf(prev) >= 0) sel.value = prev;
+        else sel.value = "";
+        const show = lastHasWorkerCol;
+        bar.style.display = show ? "flex" : "none";
+        bar.setAttribute("aria-hidden", show ? "false" : "true");
+      }
+
+      function applyWorkerFilter() {
+        const tbody = document.getElementById("tbody");
+        const sel = document.getElementById("workerFilter");
+        if (!tbody || !sel) return;
+        const v = sel.value;
+        const now = Date.now();
+        if (!fullPendingRows.length) {
+          lastRows = [];
+          clearUrgencyTimer();
+          if (v === "") {
+            if (lastEmptyBodyHtml != null) tbody.innerHTML = lastEmptyBodyHtml;
+            else
+              tbody.innerHTML =
+                "<tr><td colspan='10' style='text-align:center;padding:24px;color:#64748b'>미진열 없음</td></tr>";
+            document.getElementById("kpiRow").innerHTML = "";
+          } else {
+            tbody.innerHTML =
+              "<tr><td colspan='10' style='text-align:center;padding:24px;color:#64748b'>선택한 하차작업자에 해당하는 미진열이 없습니다.</td></tr>";
+            updateKpiFromRows([], now);
+          }
+          return;
+        }
+        const filtered =
+          v === ""
+            ? fullPendingRows.slice()
+            : fullPendingRows.filter((r) => String(r.worker || "").trim() === v);
+        lastRows = filtered;
+        clearUrgencyTimer();
+        if (!filtered.length && v !== "") {
+          tbody.innerHTML =
+            "<tr><td colspan='10' style='text-align:center;padding:24px;color:#64748b'>선택한 하차작업자에 해당하는 미진열이 없습니다.</td></tr>";
+          updateKpiFromRows([], now);
+          return;
+        }
+        if (!filtered.length) {
+          tbody.innerHTML =
+            "<tr><td colspan='10' style='text-align:center;padding:24px;color:#64748b'>표시할 행이 없습니다.</td></tr>";
+          updateKpiFromRows([], now);
+          return;
+        }
+        tbody.innerHTML = filtered.map((x) => pendingRowToTr(x, now)).join("");
+        updateKpiFromRows(filtered, now);
+        startUrgencyTimer();
+      }
+
+      function normKey(s) {
+        return String(s || "")
+          .replace(/\s+/g, "")
+          .toLowerCase();
+      }
+
+      function findCol(headers, candidates) {
+        const h = headers.map((x, i) => ({ n: normKey(x), i }));
+        for (const c of candidates) {
+          const cn = normKey(c);
+          const hit = h.find((x) => x.n === cn || x.n.includes(cn) || cn.includes(x.n));
+          if (hit) return hit.i;
+        }
+        return -1;
+      }
+
+      /**
+       * 헤더 행: 하차일시·입고·진열완료 열이 글자로 되어 있고, 하차일시 칸이 날짜로 파싱되지 않아야 함(데이터 행 오인 방지).
+       */
+      function findHeaderMap(aoa) {
+        for (let r = 0; r < Math.min(15, aoa.length); r++) {
+          const texts = aoa[r].map((c) => String(c ?? "").trim());
+          const idxUnload = findCol(texts, ["하차일시"]);
+          const idxRecv = findCol(texts, ["입고 수량", "입고수량", "입고"]);
+          const idxDisp = findCol(texts, ["진열완료 수량", "진열완료수량", "진열완료"]);
+          if (idxUnload < 0 || idxRecv < 0 || idxDisp < 0) continue;
+          if (parseUnloadTime(texts[idxUnload])) continue;
+          const idxIbc = findCol(texts, ["하차번호(ibc)", "하차번호ibc", "하차번호", "ibc"]);
+          const idxVendor = findCol(texts, ["업체명", "업체"]);
+          const idxErr = findCol(texts, ["진열오류 수량", "진열오류수량", "진열오류"]);
+          const idxWorker = findCol(texts, ["하차작업자", "하차 작업자"]);
+          return {
+            headerRow: r,
+            idxIbc,
+            idxVendor,
+            idxWorker,
+            idxUnload,
+            idxRecv,
+            idxDisp,
+            idxErr,
+          };
+        }
+        return null;
+      }
+
+      function parseDataRow(row, m) {
+        const c = row.map((x) => String(x ?? "").trim());
+        const unload = parseUnloadTime(c[m.idxUnload]);
+        const recv = num(c[m.idxRecv]);
+        const disp = num(c[m.idxDisp]);
+        if (!unload || isNaN(recv) || isNaN(disp)) return null;
+        let errQty = 0;
+        if (m.idxErr >= 0) {
+          const e = num(c[m.idxErr]);
+          errQty = isNaN(e) ? 0 : e;
+        }
+        return {
+          ibc: m.idxIbc >= 0 ? c[m.idxIbc] || "" : "",
+          vendor: m.idxVendor >= 0 ? c[m.idxVendor] || "" : "",
+          worker: m.idxWorker >= 0 ? c[m.idxWorker] || "" : "",
+          unload,
+          recv,
+          disp,
+          errQty,
+        };
+      }
+
+      function htmlTableToAoa(html) {
+        const doc = new DOMParser().parseFromString(html, "text/html");
+        const table = doc.querySelector("table");
+        if (!table) return null;
+        const aoa = [];
+        table.querySelectorAll("tr").forEach((tr) => {
+          const cells = tr.querySelectorAll("th,td");
+          if (!cells.length) return;
+          aoa.push(
+            Array.from(cells).map((cell) =>
+              String(cell.textContent != null ? cell.textContent : "")
+                .replace(/\u00a0/g, " ")
+                .trim()
+            )
+          );
+        });
+        if (!aoa.length) return null;
+        return { aoa: aoa, table: table };
+      }
+
+      function lineToCells(line) {
+        if (line.indexOf("\t") >= 0) return line.split("\t").map((s) => s.trim());
+        const parts = line.split(/\s{2,}/).map((s) => s.trim()).filter(Boolean);
+        if (parts.length >= 6) return parts;
+        return [line.trim()];
+      }
+
+      function tsvToAoa(text) {
+        if (!text || !String(text).trim()) return [];
+        const aoa = [];
+        for (const line of String(text).split(/\r?\n/)) {
+          if (line.trim()) aoa.push(lineToCells(line));
+        }
+        return aoa;
+      }
+
+      function padRows(aoa) {
+        let max = 0;
+        aoa.forEach((r) => {
+          if (r.length > max) max = r.length;
+        });
+        return aoa.map((r) => {
+          const row = r.slice();
+          while (row.length < max) row.push("");
+          return row;
+        });
+      }
+
+      function processRows(aoa, opts) {
+        opts = opts || {};
+        const htmlTable = opts.htmlTable || null;
+        if (!aoa.length) throw new Error("붙여넣은 줄이 없습니다.");
+        aoa = padRows(aoa);
+
+        const map = findHeaderMap(aoa);
+        if (!map) {
+          throw new Error(
+            '헤더 행을 찾지 못했습니다. 표의 첫 줄(또는 위쪽)에 "하차일시", "입고 수량", "진열완료 수량" 같은 열 이름이 보이게 헤더까지 포함해 복사하세요.'
+          );
+        }
+
+        const dataStart = map.headerRow + 1;
+        const dataLineCount = Math.max(0, aoa.length - dataStart);
+        if (dataLineCount === 0) {
+          throw new Error("헤더만 있고 데이터 행이 없습니다.");
+        }
+
+        const out = [];
+        const workerNames = new Set();
+        let parsed = 0;
+        for (let r = dataStart; r < aoa.length; r++) {
+          const parsedRow = parseDataRow(aoa[r], map);
+          if (!parsedRow) continue;
+          parsed++;
+          const w = String(parsedRow.worker || "").trim();
+          if (w) workerNames.add(w);
+          const remainQty = parsedRow.recv - parsedRow.disp - parsedRow.errQty;
+          if (remainQty <= 0) continue;
+          const deadline = new Date(parsedRow.unload.getTime() + DEADLINE_HOURS * 3600000);
+          const ibcUrl =
+            (htmlTable && map.idxIbc >= 0 ? hrefFromTableCell(htmlTable, r, map.idxIbc) : null) ||
+            savedIbcLinks[String(parsedRow.ibc || "").trim()] ||
+            null;
+          out.push({
+            ibc: parsedRow.ibc,
+            ibcUrl: ibcUrl || undefined,
+            vendor: parsedRow.vendor,
+            worker: parsedRow.worker,
+            unload: parsedRow.unload,
+            deadline,
+            recv: parsedRow.recv,
+            disp: parsedRow.disp,
+            errQty: parsedRow.errQty,
+            remainQty,
+          });
+        }
+        out.sort((a, b) => a.deadline - b.deadline);
+        const workerChoices = [...workerNames].sort((a, b) => a.localeCompare(b, "ko"));
+        return {
+          pending: out,
+          parsed,
+          totalLines: aoa.length,
+          dataLineCount,
+          workerChoices,
+          hasWorkerCol: map.idxWorker >= 0,
+        };
+      }
+
+      let lastRows = [];
+      let fullPendingRows = [];
+      let lastWorkerChoices = [];
+      let lastHasWorkerCol = false;
+      let lastEmptyBodyHtml = null;
+      const savedIbcLinks = Object.create(null);
+      let storedHeaderRow = null;
+      let mergedHtmlAoa = null;
+      let urgencyTimer = null;
+
+      function clearUrgencyTimer() {
+        if (urgencyTimer !== null) {
+          clearInterval(urgencyTimer);
+          urgencyTimer = null;
+        }
+      }
+
+      function tickUrgencyCells() {
+        const tbody = document.getElementById("tbody");
+        if (!tbody || !lastRows.length) {
+          clearUrgencyTimer();
+          return;
+        }
+        const now = Date.now();
+        const trs = tbody.querySelectorAll("tr");
+        lastRows.forEach((x, i) => {
+          const tr = trs[i];
+          if (!tr) return;
+          const { cls, text } = urgencyCellTextAndClass(x.deadline, now);
+          tr.className = cls;
+          const cell = tr.querySelector(".urgency");
+          if (cell) cell.textContent = text;
+        });
+        updateKpiFromRows(lastRows, now);
+      }
+
+      function startUrgencyTimer() {
+        clearUrgencyTimer();
+        if (!lastRows.length) return;
+        tickUrgencyCells();
+        urgencyTimer = setInterval(tickUrgencyCells, 1000);
+      }
+
+      function buildAoaUsingStoredHeader(rawAoa) {
+        const aoa = padRows(rawAoa || []);
+        if (!aoa.length) return aoa;
+        const map = findHeaderMap(aoa);
+        if (map) {
+          storedHeaderRow = aoa[map.headerRow].slice();
+          return aoa;
+        }
+        if (storedHeaderRow && storedHeaderRow.length) {
+          return padRows([storedHeaderRow.slice()].concat(aoa));
+        }
+        return aoa;
+      }
+
+      function rememberLinksFromHtmlPack(pack) {
+        if (!pack || !pack.aoa || !pack.table) return;
+        rememberAllAnchorsFromTable(pack.table);
+        const originalAoa = padRows(pack.aoa);
+        const localMap = findHeaderMap(originalAoa);
+        const aoa = localMap ? originalAoa : buildAoaUsingStoredHeader(pack.aoa);
+        const map = findHeaderMap(aoa);
+        if (!map || map.idxIbc < 0) return;
+        const dataStart = localMap ? map.headerRow + 1 : 1;
+        for (let r = dataStart; r < aoa.length; r++) {
+          const parsedRow = parseDataRow(aoa[r], map);
+          if (!parsedRow) continue;
+          const ibc = String(parsedRow.ibc || "").trim();
+          if (!ibc) continue;
+          const rowIndexInTable = localMap ? r : r - 1;
+          const href =
+            hrefFromTableCell(pack.table, rowIndexInTable, map.idxIbc) ||
+            hrefByIbcText(pack.table, ibc);
+          if (href) savedIbcLinks[ibc] = href;
+        }
+      }
+
+      function appendHtmlPack(pack) {
+        if (!pack || !pack.aoa || !pack.aoa.length) return null;
+        const originalAoa = padRows(pack.aoa);
+        const localMap = findHeaderMap(originalAoa);
+        const nextAoa = localMap ? originalAoa : buildAoaUsingStoredHeader(pack.aoa);
+        const nextMap = findHeaderMap(nextAoa);
+        if (!nextMap) return nextAoa;
+        if (!mergedHtmlAoa || !mergedHtmlAoa.length) {
+          mergedHtmlAoa = nextAoa.map((row) => row.slice());
+          return mergedHtmlAoa;
+        }
+        const mergedMap = findHeaderMap(mergedHtmlAoa);
+        if (!mergedMap) {
+          mergedHtmlAoa = mergedHtmlAoa.concat(nextAoa);
+          mergedHtmlAoa = padRows(mergedHtmlAoa);
+          return mergedHtmlAoa;
+        }
+        const rowsToAppend = nextAoa.slice(localMap ? nextMap.headerRow + 1 : 1);
+        mergedHtmlAoa = mergedHtmlAoa.concat(rowsToAppend);
+        mergedHtmlAoa = padRows(mergedHtmlAoa);
+        return mergedHtmlAoa;
+      }
+
+      function render(result) {
+        const rows = result.pending;
+        fullPendingRows = rows;
+        lastWorkerChoices = result.workerChoices || [];
+        lastHasWorkerCol = !!result.hasWorkerCol;
+        clearUrgencyTimer();
+        document.getElementById("globalErr").innerHTML = "";
+        const card = document.getElementById("resultCard");
+        const tbody = document.getElementById("tbody");
+        const kpiRow = document.getElementById("kpiRow");
+
+        card.style.display = "block";
+        if (!rows.length) {
+          lastEmptyBodyHtml = null;
+          let msg = "미진열 없음";
+          if (result.parsed === 0 && result.dataLineCount > 0) {
+            msg =
+              "데이터는 있는데 읽기 실패입니다. 하차일시 형식(<code>2026-03-27 18:45</code>)과 입고·진열 숫자 열을 확인하세요.";
+          } else if (result.parsed > 0) {
+            msg =
+              "미진열 없음 — 읽은 행 " +
+              result.parsed +
+              "건은 모두 입고=진열완료+진열오류입니다.";
+          }
+          const emptyRow =
+            "<tr><td colspan='10' style='text-align:center;padding:24px;color:#64748b'>" + msg + "</td></tr>";
+          tbody.innerHTML = emptyRow;
+          lastEmptyBodyHtml = emptyRow;
+          kpiRow.innerHTML = "";
+          populateWorkerFilterOptions();
+          return;
+        }
+
+        lastEmptyBodyHtml = null;
+        populateWorkerFilterOptions();
+        applyWorkerFilter();
+      }
+
+      const pasteBox = document.getElementById("pasteBox");
+      const runBtn = document.getElementById("runBtn");
+
+      function appendToPasteBox(text) {
+        const incoming = String(text || "").trim();
+        if (!incoming) return;
+        const current = String(pasteBox.value || "").trim();
+        pasteBox.value = current ? current + "\n" + incoming : incoming;
+      }
+
+      function resetAccumulatedStateIfEmpty() {
+        if (!String(pasteBox.value || "").trim()) {
+          mergedHtmlAoa = null;
+          storedHeaderRow = null;
+        }
+      }
+
+      function runCurrentInput() {
+        resetAccumulatedStateIfEmpty();
+        const globalErrEl = document.getElementById("globalErr");
+        globalErrEl.innerHTML = "";
+        const errs = [];
+
+        const mainTxt = String(pasteBox.value || "").trim();
+        if (mainTxt) {
+          try {
+            render(processRows(buildAoaUsingStoredHeader(tsvToAoa(pasteBox.value)), { htmlTable: null }));
+          } catch (e) {
+            errs.push("하차 표: " + (e.message || String(e)));
+            clearUrgencyTimer();
+            lastRows = [];
+            fullPendingRows = [];
+            lastWorkerChoices = [];
+            lastHasWorkerCol = false;
+            lastEmptyBodyHtml = null;
+            mergedHtmlAoa = null;
+            document.getElementById("resultCard").style.display = "none";
+          }
+        } else {
+          clearUrgencyTimer();
+          lastRows = [];
+          fullPendingRows = [];
+          document.getElementById("resultCard").style.display = "none";
+        }
+
+        if (errs.length) {
+          globalErrEl.innerHTML =
+            '<div class="err">' + errs.map((m) => escapeHtml(m)).join("<br/>") + "</div>";
+        }
+      }
+
+      pasteBox.addEventListener("paste", (e) => {
+        const html = e.clipboardData.getData("text/html");
+        if (html && /<table[\s>]/i.test(html)) {
+          const pack = htmlTableToAoa(html);
+          if (pack && pack.aoa.length) {
+            e.preventDefault();
+            rememberLinksFromHtmlPack(pack);
+            appendToPasteBox(pack.aoa.map((r) => r.join("\t")).join("\n"));
+            appendHtmlPack(pack);
+            return;
+          }
+        }
+        const text = e.clipboardData.getData("text/plain");
+        if (text) {
+          e.preventDefault();
+          mergedHtmlAoa = null;
+          appendToPasteBox(text);
+          return;
+        }
+        setTimeout(resetAccumulatedStateIfEmpty, 0);
+      });
+      pasteBox.addEventListener("input", resetAccumulatedStateIfEmpty);
+
+      if (runBtn) runBtn.addEventListener("click", runCurrentInput);
+
+      const workerFilterEl = document.getElementById("workerFilter");
+      if (workerFilterEl) workerFilterEl.addEventListener("change", applyWorkerFilter);
+
+      document.addEventListener("visibilitychange", function () {
+        if (document.hidden) clearUrgencyTimer();
+        else if (lastRows.length > 0) startUrgencyTimer();
+      });
+
+    })();
+  </script>
+</body>
+</html>

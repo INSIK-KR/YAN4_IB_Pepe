@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>창고 미니맵 · 적재 여유 시각화</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --panel: #1a2332;
+      --text: #e6edf3;
+      --muted: #8b9cb3;
+      --aisle: #f4f6f8;
+      --border: #2d3a4d;
+      /* 상태색 — 필요 시 아래 팔레트만 바꿔도 됨 */
+      --st-empty: #ffffff;
+      --st-low: #7eb8ff;
+      --st-mid: #ffd54f;
+      --st-high: #ff9800;
+      --st-full: #e53935;
+      --st-block: #90a4ae;
+      --st-ok: #43a047;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    .page {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 1rem 1.25rem 2rem;
+    }
+    h1 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin: 0 0 0.35rem;
+    }
+    .sub {
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin-bottom: 1rem;
+      line-height: 1.45;
+    }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+    .toolbar label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    input[type="range"] { width: 120px; }
+    button {
+      background: #3d5a80;
+      color: #fff;
+      border: none;
+      padding: 0.45rem 0.85rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+    button:hover { filter: brightness(1.08); }
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.65rem 1rem;
+      padding: 0.65rem 0.85rem;
+      background: var(--panel);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      margin-bottom: 1rem;
+      font-size: 0.75rem;
+    }
+    .legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    .swatch {
+      width: 14px;
+      height: 14px;
+      border-radius: 2px;
+      border: 1px solid rgba(0,0,0,0.15);
+    }
+    .map-wrap {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: auto;
+      max-height: min(78vh, 900px);
+      padding: 12px;
+    }
+    .map-scale {
+      transform-origin: top left;
+      display: inline-block;
+    }
+    /* 한 구역 = 가로로 랙 나열, 랙 안은 세로 빈 스택 */
+    .zone {
+      margin-bottom: 18px;
+      padding-bottom: 14px;
+      border-bottom: 1px dashed var(--border);
+    }
+    .zone:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+    .zone-title {
+      font-size: 0.7rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 8px;
+    }
+    .zone-row {
+      display: flex;
+      flex-direction: row;
+      align-items: flex-end;
+      gap: 0;
+      flex-wrap: nowrap;
+    }
+    .aisle {
+      width: 10px;
+      min-width: 10px;
+      align-self: stretch;
+      min-height: 40px;
+      background: var(--aisle);
+      border-radius: 2px;
+    }
+    .aisle.wide { width: 18px; min-width: 18px; }
+    .rack {
+      display: flex;
+      flex-direction: column-reverse;
+      gap: 1px;
+      outline: 1px solid rgba(255,255,255,0.06);
+      padding: 2px;
+      background: rgba(0,0,0,0.2);
+      border-radius: 3px;
+    }
+    .rack-label {
+      font-size: 7px;
+      color: var(--muted);
+      text-align: center;
+      margin-top: 4px;
+      writing-mode: horizontal-tb;
+    }
+    .bin {
+      width: 14px;
+      height: 8px;
+      min-height: 8px;
+      border-radius: 1px;
+      cursor: default;
+      transition: transform 0.12s;
+    }
+    .bin:hover {
+      transform: scale(1.25);
+      z-index: 2;
+      box-shadow: 0 0 0 1px #fff;
+    }
+    .editor {
+      margin-top: 1.25rem;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+    @media (max-width: 900px) { .editor { grid-template-columns: 1fr; } }
+    .editor h2 {
+      font-size: 0.85rem;
+      margin: 0 0 0.5rem;
+      color: var(--muted);
+    }
+    textarea.config {
+      width: 100%;
+      min-height: 220px;
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 11px;
+      line-height: 1.35;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #0d1117;
+      color: #c9d1d9;
+      resize: vertical;
+    }
+    .hint { font-size: 0.75rem; color: var(--muted); margin-top: 0.5rem; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h1>창고 미니맵 (레이아웃 JSON + 상태 데이터)</h1>
+    <p class="sub">
+      아래 <strong>레이아웃</strong>으로 랙·통로를 정의하고, <strong>상태</strong> 객체에 빈 ID별로 <code>empty | low | mid | high | full | block | ok</code>를 넣으면 색이 반영됩니다.
+      실제 창고 도면에 맞추려면 구역(<code>zones</code>)을 나누고 랙(<code>racks</code>)마다 <code>bins</code> 개수와 <code>aisleAfter</code>로 통로 폭을 조정하면 됩니다.
+    </p>
+
+    <div class="toolbar">
+      <label>미니맵 축소 <input type="range" id="zoom" min="40" max="120" value="72" /></label>
+      <button type="button" id="btnApply">레이아웃·데이터 적용</button>
+      <button type="button" id="btnRandom">샘플 데이터 랜덤 채우기</button>
+    </div>
+
+    <div class="legend" id="legend"></div>
+
+    <div class="map-wrap">
+      <div class="map-scale" id="mapScale">
+        <div id="mapRoot"></div>
+      </div>
+    </div>
+
+    <div class="editor">
+      <div>
+        <h2>① 레이아웃 JSON</h2>
+        <textarea class="config" id="taLayout" spellcheck="false"></textarea>
+        <p class="hint">통로는 <code>aisleAfter: true</code> 또는 <code>"wide"</code> 로 표시. 빈 ID는 <code>zoneId-rackId-b인덱스</code> (1부터).</p>
+      </div>
+      <div>
+        <h2>② 상태 데이터 JSON</h2>
+        <textarea class="config" id="taData" spellcheck="false"></textarea>
+        <p class="hint">키 예: <code>"A-R01-12"</code> → <code>"high"</code>. 없는 빈은 기본색(empty) 처리.</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+(function () {
+  "use strict";
+
+  const STATUS_CLASS = {
+    empty: "var(--st-empty)",
+    low: "var(--st-low)",
+    mid: "var(--st-mid)",
+    high: "var(--st-high)",
+    full: "var(--st-full)",
+    block: "var(--st-block)",
+    ok: "var(--st-ok)"
+  };
+
+  const DEFAULT_LAYOUT = {
+    zones: [
+      {
+        id: "MAIN",
+        title: "메인 스토어지",
+        racks: [
+          { id: "R01", bins: 32, aisleAfter: true },
+          { id: "R02", bins: 32, aisleAfter: true },
+          { id: "R03", bins: 28, aisleAfter: true },
+          { id: "R04", bins: 28, aisleAfter: "wide" }
+        ]
+      },
+      {
+        id: "SIDE",
+        title: "측면 구역",
+        racks: [
+          { id: "S01", bins: 24, aisleAfter: true },
+          { id: "S02", bins: 24 }
+        ]
+      }
+    ]
+  };
+
+  const DEFAULT_DATA = {
+    "MAIN-R01-5": "full",
+    "MAIN-R01-6": "high",
+    "MAIN-R02-10": "mid",
+    "MAIN-R03-1": "low",
+    "SIDE-S01-3": "ok",
+    "SIDE-S02-20": "block"
+  };
+
+  function binId(zoneId, rackId, binIndex1) {
+    return zoneId + "-" + rackId + "-" + binIndex1;
+  }
+
+  function renderLegend() {
+    var el = document.getElementById("legend");
+    var parts = [];
+    var labels = {
+      empty: "여유 많음",
+      low: "여유",
+      mid: "보통",
+      high: "혼잡",
+      full: "만재",
+      block: "블록/사용불가",
+      ok: "OK/정상"
+    };
+    Object.keys(STATUS_CLASS).forEach(function (k) {
+      parts.push(
+        "<span><span class=\"swatch\" style=\"background:" +
+          STATUS_CLASS[k] +
+          "\"></span> " +
+          k +
+          " · " +
+          (labels[k] || k) +
+          "</span>"
+      );
+    });
+    el.innerHTML = parts.join("");
+  }
+
+  function renderMap(layout, data) {
+    var root = document.getElementById("mapRoot");
+    root.innerHTML = "";
+    var zones = layout.zones || [];
+    for (var z = 0; z < zones.length; z++) {
+      var zone = zones[z];
+      var zoneEl = document.createElement("div");
+      zoneEl.className = "zone";
+      var zTitle = document.createElement("div");
+      zTitle.className = "zone-title";
+      zTitle.textContent = (zone.title || zone.id || "ZONE") + " · " + zone.id;
+      zoneEl.appendChild(zTitle);
+
+      var row = document.createElement("div");
+      row.className = "zone-row";
+
+      var racks = zone.racks || [];
+      for (var r = 0; r < racks.length; r++) {
+        var rack = racks[r];
+        var rackWrap = document.createElement("div");
+        rackWrap.style.display = "flex";
+        rackWrap.style.flexDirection = "column";
+        rackWrap.style.alignItems = "center";
+
+        var rackEl = document.createElement("div");
+        rackEl.className = "rack";
+        var n = Math.max(1, parseInt(rack.bins, 10) || 1);
+        for (var b = 1; b <= n; b++) {
+          var id = binId(zone.id, rack.id, b);
+          var st = data[id] || "empty";
+          var cell = document.createElement("div");
+          cell.className = "bin";
+          cell.style.background = STATUS_CLASS[st] || STATUS_CLASS.empty;
+          cell.title = id + " → " + st;
+          rackEl.appendChild(cell);
+        }
+        rackWrap.appendChild(rackEl);
+        var lbl = document.createElement("div");
+        lbl.className = "rack-label";
+        lbl.textContent = rack.id;
+        rackWrap.appendChild(lbl);
+        row.appendChild(rackWrap);
+
+        var aa = rack.aisleAfter;
+        if (aa) {
+          var aisle = document.createElement("div");
+          aisle.className = "aisle" + (aa === "wide" ? " wide" : "");
+          aisle.title = "통로";
+          row.appendChild(aisle);
+        }
+      }
+      zoneEl.appendChild(row);
+      root.appendChild(zoneEl);
+    }
+  }
+
+  function parseJson(text, fallback) {
+    try {
+      return JSON.parse(text);
+    } catch (e) {
+      alert("JSON 오류: " + e.message);
+      return fallback;
+    }
+  }
+
+  function randomStatus() {
+    var keys = Object.keys(STATUS_CLASS);
+    return keys[Math.floor(Math.random() * keys.length)];
+  }
+
+  function fillRandomData(layout) {
+    var out = {};
+    var zones = layout.zones || [];
+    for (var z = 0; z < zones.length; z++) {
+      var zone = zones[z];
+      var racks = zone.racks || [];
+      for (var r = 0; r < racks.length; r++) {
+        var rack = racks[r];
+        var n = Math.max(1, parseInt(rack.bins, 10) || 1);
+        for (var b = 1; b <= n; b++) {
+          if (Math.random() < 0.35) {
+            out[binId(zone.id, rack.id, b)] = randomStatus();
+          }
+        }
+      }
+    }
+    return out;
+  }
+
+  function applyZoom(pct) {
+    var scale = document.getElementById("mapScale");
+    scale.style.transform = "scale(" + pct / 100 + ")";
+  }
+
+  function apply() {
+    var layout = parseJson(
+      document.getElementById("taLayout").value,
+      DEFAULT_LAYOUT
+    );
+    var data = parseJson(document.getElementById("taData").value, {});
+    if (!layout || !layout.zones) return;
+    renderMap(layout, data);
+  }
+
+  document.getElementById("taLayout").value = JSON.stringify(DEFAULT_LAYOUT, null, 2);
+  document.getElementById("taData").value = JSON.stringify(DEFAULT_DATA, null, 2);
+
+  document.getElementById("btnApply").addEventListener("click", apply);
+  document.getElementById("btnRandom").addEventListener("click", function () {
+    var layout = parseJson(
+      document.getElementById("taLayout").value,
+      DEFAULT_LAYOUT
+    );
+    if (!layout || !layout.zones) return;
+    var data = fillRandomData(layout);
+    document.getElementById("taData").value = JSON.stringify(data, null, 2);
+    renderMap(layout, data);
+  });
+
+  document.getElementById("zoom").addEventListener("input", function () {
+    applyZoom(parseInt(this.value, 10));
+  });
+
+  renderLegend();
+  apply();
+  applyZoom(parseInt(document.getElementById("zoom").value, 10));
+})();
+  </script>
+</body>
+</html>

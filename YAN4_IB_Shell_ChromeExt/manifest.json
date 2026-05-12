@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "YAN4 IB 통합 UI Shell",
+  "version": "0.22.7",
+  "description": "Coupang IB/Inventory/Outbound용 통합 패널 (원본 userscript 확장 이식). 개발자 모드 → 압축해제된 확장 프로그램 로드.",
+  "icons": {
+    "16": "icon96.png",
+    "48": "icon96.png",
+    "96": "icon96.png",
+    "128": "icon128.png"
+  },
+  "permissions": ["storage", "clipboardWrite"],
+  "host_permissions": [
+    "https://inbound.coupang.com/*",
+    "https://inventory.coupang.com/*",
+    "https://outbound.coupang.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://inventory.coupang.com/*",
+        "https://inbound.coupang.com/*",
+        "https://outbound.coupang.com/workflow/nob/dashboard*",
+        "https://outbound.coupang.com/workflow/nob/v2/view/needToReplenish/detail/*"
+      ],
+      "js": ["gm-bridge.js", "shell.js"],
+      "run_at": "document_end",
+      "all_frames": false
+    }
+  ]
+}

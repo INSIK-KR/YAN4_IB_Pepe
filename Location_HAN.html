@@ -1,0 +1,983 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>YAN4 IB CONSOLIDATION</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", Arial, sans-serif;
+    min-height: 100vh;
+    background:
+      radial-gradient(circle at top right, rgba(96, 165, 250, 0.18), transparent 28%),
+      linear-gradient(180deg, #f4f8ff 0%, #eef4fb 100%);
+    color: #0f172a;
+  }
+  .container {
+    max-width: 1480px;
+    margin: 0 auto;
+    padding: 28px 24px 40px;
+  }
+  .page-title {
+    margin: 0 0 6px;
+    font-size: 32px;
+    font-weight: 800;
+    color: #123a7a;
+  }
+  .card {
+    background: #fff;
+    border-radius: 20px;
+    box-shadow: 0 14px 36px rgba(15, 23, 42, 0.08);
+    padding: 22px;
+    margin-bottom: 20px;
+    border: 1px solid rgba(219, 234, 254, 0.9);
+    border-top: 5px solid #2563eb;
+  }
+  .card-title {
+    margin: 0 0 16px;
+    font-size: 18px;
+    font-weight: 800;
+    color: #123a7a;
+    letter-spacing: -0.01em;
+  }
+  textarea {
+    width: 100%;
+    min-height: 170px;
+    resize: vertical;
+    border: 1px solid #cbd5e1;
+    border-radius: 16px;
+    padding: 16px;
+    font-size: 14px;
+    outline: none;
+    line-height: 1.5;
+    background: #f8fbff;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+  }
+  textarea:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 4px rgba(59,130,246,0.12);
+    background: #fff;
+  }
+  .actions {
+    margin-top: 12px;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  button {
+    border: 0;
+    border-radius: 12px;
+    padding: 12px 18px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    color: white;
+    background: linear-gradient(135deg, #1d4ed8, #60a5fa);
+    box-shadow: 0 8px 18px rgba(37,99,235,0.25);
+    transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+  }
+  button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 12px 22px rgba(37,99,235,0.28);
+    filter: saturate(1.05);
+  }
+  button:active {
+    transform: translateY(0);
+  }
+
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 16px;
+  }
+  .kpi-box {
+    background: linear-gradient(180deg, #f8fbff, #eef6ff);
+    border: 1px solid #dbeafe;
+    border-radius: 18px;
+    padding: 18px 16px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.65);
+  }
+  .kpi-label {
+    font-size: 13px;
+    color: #64748b;
+    margin-bottom: 8px;
+    font-weight: 700;
+  }
+  .kpi-value {
+    font-size: 28px;
+    font-weight: 800;
+    color: #123a7a;
+  }
+
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+    width: 100%;
+    align-items: start;
+  }
+  .summary-panel {
+    border-radius: 18px;
+    padding: 20px;
+    background: #f8fbff;
+    border: 1px solid #dbeafe;
+    min-width: 0;
+  }
+  .summary-panel.stocking {
+    border-left: 6px solid #16a34a;
+  }
+  .summary-panel.relocation {
+    border-left: 6px solid #f59e0b;
+  }
+  .summary-panel h3 {
+    margin: 0 0 14px;
+    font-size: 22px;
+    color: #123a7a;
+  }
+  .summary-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    background: white;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    transition: background 0.15s ease, transform 0.15s ease;
+  }
+  .summary-item:hover {
+    background: #f8fbff;
+    transform: translateY(-1px);
+  }
+  .summary-item:last-child {
+    margin-bottom: 0;
+  }
+  .summary-left {
+    font-weight: 800;
+    min-width: 0;
+    flex: 1;
+    line-height: 1.35;
+  }
+  .summary-right {
+    color: #334155;
+    text-align: right;
+    font-size: 14px;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .summary-card-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 14px;
+    margin-bottom: 16px;
+  }
+  .summary-card-head .card-title {
+    margin: 0;
+  }
+  .summary-quick-btns {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+  }
+  .summary-qbtn {
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    color: #334155;
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  }
+  .summary-qbtn--all:hover {
+    border-color: #64748b;
+    color: #1e293b;
+    background: #f8fafc;
+  }
+  .summary-qbtn--all.active {
+    background: linear-gradient(135deg, #334155, #64748b);
+    border-color: transparent;
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(51, 65, 85, 0.28);
+  }
+  .zone-pill-cp {
+    border-color: rgba(22, 163, 74, 0.42);
+    color: #166534;
+  }
+  .zone-pill-cp:hover {
+    border-color: #16a34a;
+    background: rgba(34, 197, 94, 0.1);
+    color: #14532d;
+  }
+  .zone-pill-cp.active {
+    background: linear-gradient(135deg, #15803d, #22c55e);
+    border-color: transparent;
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(22, 163, 74, 0.28);
+  }
+  .zone-pill-fp {
+    border-color: rgba(37, 99, 235, 0.42);
+    color: #1e40af;
+  }
+  .zone-pill-fp:hover {
+    border-color: #2563eb;
+    background: rgba(59, 130, 246, 0.1);
+    color: #1e3a8a;
+  }
+  .zone-pill-fp.active {
+    background: linear-gradient(135deg, #1d4ed8, #3b82f6);
+    border-color: transparent;
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.28);
+  }
+  .zone-pill-ap {
+    border-color: rgba(202, 138, 4, 0.5);
+    color: #854d0e;
+  }
+  .zone-pill-ap:hover {
+    border-color: #ca8a04;
+    background: rgba(250, 204, 21, 0.22);
+    color: #713f12;
+  }
+  .zone-pill-ap.active {
+    background: linear-gradient(135deg, #b45309, #eab308);
+    border-color: transparent;
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(180, 83, 9, 0.22);
+  }
+  .zone-pill-apr {
+    border-color: rgba(139, 92, 246, 0.45);
+    color: #5b21b6;
+  }
+  .zone-pill-apr:hover {
+    border-color: #7c3aed;
+    background: rgba(167, 139, 250, 0.18);
+    color: #4c1d95;
+  }
+  .zone-pill-apr.active {
+    background: linear-gradient(135deg, #6d28d9, #a855f7);
+    border-color: transparent;
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(109, 40, 217, 0.28);
+  }
+
+  .comment-box {
+    background: linear-gradient(135deg, #123a7a, #2563eb);
+    color: white;
+    border-radius: 18px;
+    padding: 20px;
+    line-height: 1.8;
+    font-size: 15px;
+    box-shadow: 0 12px 28px rgba(37,99,235,0.2);
+  }
+  .comment-box strong {
+    color: #dbeafe;
+  }
+  .comment-card {
+    display: none;
+  }
+
+  .chart-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+
+  .chart-wrap {
+    height: 340px;
+  }
+
+  .table-wrap {
+    overflow: auto;
+    max-height: 520px;
+    border: 1px solid #dbeafe;
+    border-radius: 14px;
+    background: white;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    background: white;
+  }
+  th {
+    position: sticky;
+    top: 0;
+    background: #123a7a;
+    color: white;
+    padding: 11px 8px;
+    text-align: center;
+    z-index: 2;
+    box-shadow: inset 0 -1px 0 rgba(255,255,255,0.08);
+  }
+  td {
+    border-bottom: 1px solid #e5e7eb;
+    padding: 10px 8px;
+    text-align: center;
+  }
+  tbody tr:nth-child(even) td {
+    background: #fbfdff;
+  }
+  tr:hover td {
+    background: #f8fbff;
+  }
+
+  .legend-row {
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+    font-size: 13px;
+    color: #475569;
+  }
+  .legend-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+
+  .zone-chart-section {
+    margin-bottom: 32px;
+  }
+  .zone-chart-section:last-child {
+    margin-bottom: 0;
+  }
+  .zone-chart-heading {
+    margin: 0 0 14px;
+    font-size: 17px;
+    font-weight: 800;
+    color: #334155;
+  }
+  .zone-empty-note {
+    padding: 14px;
+    background: #f8fafc;
+    border-radius: 12px;
+    color: #64748b;
+    font-size: 14px;
+    margin-bottom: 8px;
+  }
+
+  @media (max-width: 1100px) {
+    .kpi-grid, .summary-grid, .chart-grid {
+      grid-template-columns: 1fr;
+    }
+    .container {
+      padding: 20px 16px 32px;
+    }
+    .page-title {
+      font-size: 28px;
+    }
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <h1 class="page-title">YAN4 IB CONSOLIDATION</h1>
+    <p class="page-subtitle">구역별 비어있는 로케이션과 콘솔 작업 우선 구간을 빠르게 확인하는 대시보드입니다.</p>
+
+    <div class="card">
+      <h2 class="card-title">📋 데이터 붙여넣기</h2>
+      <textarea id="excelData" placeholder="테이블 값 붙여넣기"></textarea>
+      <div class="actions">
+        <button onclick="render()">분석 실행</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">📊 주요 지표</h2>
+      <p style="margin:0 0 14px;font-size:14px;color:#64748b;">구역 필터는 아래 <strong>작업 우선순위 요약</strong>의 버튼을 사용하세요.</p>
+      <div class="kpi-grid" id="kpi"></div>
+    </div>
+
+    <div class="card">
+      <div class="summary-card-head">
+        <h2 class="card-title">🎯 작업 우선순위 요약</h2>
+        <div class="summary-quick-btns" role="group" aria-label="요약 구역 빠른 필터">
+          <button type="button" class="summary-qbtn summary-qbtn--all active" data-sum-zone="All">전체</button>
+          <button type="button" class="summary-qbtn zone-pill-cp" data-sum-zone="CP">냉장</button>
+          <button type="button" class="summary-qbtn zone-pill-fp" data-sum-zone="FP">냉동</button>
+          <button type="button" class="summary-qbtn zone-pill-ap" data-sum-zone="AP">상온</button>
+          <button type="button" class="summary-qbtn zone-pill-apr" data-sum-zone="APR">로켓</button>
+        </div>
+      </div>
+      <div class="summary-grid" id="summary"></div>
+    </div>
+
+    <div class="card comment-card">
+      <h2 class="card-title">📝 자동 보고 코멘트</h2>
+      <div class="comment-box" id="comment">데이터를 넣고 분석 실행을 눌러주세요.</div>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">📊 구역별 그래프</h2>
+      <p style="margin:0 0 14px;font-size:14px;color:#64748b;">요약의 <strong>전체</strong> 버튼일 때만 구역별(냉장·냉동·상온·로켓) 그래프가 나란히 보입니다. <strong>냉장</strong> 등을 누르면 <strong>TOP5와 그래프가 함께</strong> 그 구역만 표시됩니다.</p>
+      <div id="chartsMount"></div>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">📋 원본 데이터</h2>
+      <div class="table-wrap" id="table"></div>
+    </div>
+  </div>
+
+<script>
+const ZONE_ORDER = ["CP", "FP", "AP", "APR"];
+/** 화면 표시용 (1CP→냉장, 1FP→냉동, 1AP→상온, 1APR→로켓) */
+const ZONE_LABEL = { CP: "냉장", FP: "냉동", AP: "상온", APR: "로켓" };
+/** 구역별 UI·차트 톤 (냉장 초록 / 냉동 파랑 / 상온 황색 / 로켓 보라) */
+const ZONE_THEME = {
+  CP: { text: "#166534", chartHi: "#16a34a", chartLo: "rgba(34, 197, 94, 0.38)", legendLo: "#bbf7d0" },
+  FP: { text: "#1e40af", chartHi: "#2563eb", chartLo: "rgba(96, 165, 250, 0.42)", legendLo: "#bfdbfe" },
+  AP: { text: "#854d0e", chartHi: "#ca8a04", chartLo: "rgba(234, 179, 8, 0.48)", legendLo: "#fde68a" },
+  APR: { text: "#6d28d9", chartHi: "#9333ea", chartLo: "rgba(192, 132, 252, 0.42)", legendLo: "#e9d5ff" }
+};
+const CHART_RELOC_HI = "#ea580c";
+const CHART_MIXED_LO = "rgba(148, 163, 184, 0.55)";
+function zoneLabel(code) {
+  return ZONE_LABEL[code] || code;
+}
+
+function zoneTextColor(zoneType) {
+  if (zoneType && ZONE_THEME[zoneType]) return ZONE_THEME[zoneType].text;
+  return "#64748b";
+}
+
+function zoneChartPalette(zoneType) {
+  const t = zoneType && ZONE_THEME[zoneType];
+  if (!t) {
+    return {
+      stockHi: "#16a34a",
+      stockLo: CHART_MIXED_LO,
+      relocHi: CHART_RELOC_HI,
+      relocLo: CHART_MIXED_LO,
+      legendMuted: "#cbd5e1"
+    };
+  }
+  return {
+    stockHi: t.chartHi,
+    stockLo: t.chartLo,
+    relocHi: CHART_RELOC_HI,
+    relocLo: t.chartLo,
+    legendMuted: t.legendLo
+  };
+}
+let chartInstances = [];
+/** 요약 TOP5만 좁히는 빠른 필터: All | CP | FP | AP | APR */
+let summaryQuickZone = "All";
+let lastSummaryData = null;
+let lastNormalized = null;
+
+function parsePercent(value) {
+  if (value === undefined || value === null) return 0;
+  return parseFloat(String(value).replace(/[%\s,]/g, "")) || 0;
+}
+
+function parseNumber(value) {
+  if (value === undefined || value === null) return 0;
+  return parseFloat(String(value).replace(/[,\s]/g, "")) || 0;
+}
+
+function getZoneType(zoneName) {
+  if (!zoneName) return "Unknown";
+  const normalized = zoneName.trim().toUpperCase();
+  if (normalized.endsWith("CP")) return "CP";
+  if (normalized.endsWith("FP")) return "FP";
+  if (normalized.endsWith("APR")) return "APR";
+  if (normalized.endsWith("AP")) return "AP";
+  return "Unknown";
+}
+
+function normalizeData(data) {
+  return data.map(row => {
+    const emptyLoc = parseNumber(row["비어있는로케이션"]);
+    const availableSpace = parsePercent(row["진열가능공간"]);
+    const usageRate = parsePercent(row["로케이션사용률"]);
+    const fillRate = parsePercent(row["FILLRATE"]);
+    const totalLoc = parseNumber(row["전체로케이션"]);
+    const usedLoc = parseNumber(row["사용중인로케이션"]);
+
+    // 진열 작업:
+    // 비어있는 로케이션이 많고, 진열가능공간도 높은 곳
+    const stockingScore = (emptyLoc * 0.65) + (availableSpace * 0.35);
+
+    // 콘솔 작업:
+    // 비어있는 로케이션은 적은데, 진열가능공간은 높은 곳
+    // emptyLoc가 적을수록 점수 올라가게 반전
+    const relocationScore = ((Math.max(0, 5 - emptyLoc)) * 12) + (availableSpace * 0.7);
+
+    return {
+      ...row,
+      _emptyLoc: emptyLoc,
+      _availableSpace: availableSpace,
+      _usageRate: usageRate,
+      _fillRate: fillRate,
+      _totalLoc: totalLoc,
+      _usedLoc: usedLoc,
+      _zoneType: getZoneType(row["존"] || row["존 유형"] || ""),
+      _stockingScore: Number(stockingScore.toFixed(2)),
+      _relocationScore: Number(relocationScore.toFixed(2))
+    };
+  });
+}
+
+function isStockingTarget(row) {
+  return row._emptyLoc >= 1 && row._availableSpace >= 60;
+}
+
+function isRelocationTarget(row) {
+  return row._emptyLoc <= 1 && row._availableSpace >= 60;
+}
+
+function render() {
+  const raw = document.getElementById("excelData").value.trim();
+  if (!raw) {
+    alert("데이터를 붙여넣어주세요.");
+    return;
+  }
+
+  const rows = raw.split(/\r?\n/)
+    .map(r => r.split("\t").map(cell => (cell || "").trim()))
+    .filter(row => row.some(cell => cell !== ""));
+
+  const defaultHeaders = ["존 유형", "존", "통로", "유닛 수", "인벤토리", "로케이션", "FILLRATE", "진열가능공간", "사용중인로케이션", "비어있는로케이션", "전체로케이션", "로케이션사용률"];
+
+  let headers;
+  let dataRows;
+
+  const firstRow = rows[0];
+  const isHeaderRow = firstRow && defaultHeaders.every(h => firstRow.includes(h));
+
+  if (isHeaderRow) {
+    headers = firstRow;
+    dataRows = rows.slice(1);
+  } else {
+    headers = defaultHeaders;
+    dataRows = rows;
+  }
+
+  const data = dataRows
+    .map(row => {
+      const obj = {};
+      headers.forEach((h, i) => obj[h.trim()] = (row[i] || "").trim());
+      return obj;
+    });
+
+  const normalized = normalizeData(data);
+
+  lastNormalized = normalized;
+
+  drawKPI(normalized);
+  drawSummary(normalized);
+  drawComment(normalized);
+  drawCharts(normalized);
+  drawTable(headers, normalized);
+}
+
+function drawKPI(data) {
+  const stockingTargets = data.filter(isStockingTarget);
+  const relocationTargets = data.filter(isRelocationTarget);
+  const totalEmpty = data.reduce((sum, row) => sum + row._emptyLoc, 0);
+  const avgAvailable =
+    data.length === 0
+      ? "0.0"
+      : (data.reduce((sum, row) => sum + row._availableSpace, 0) / data.length).toFixed(1);
+
+  document.getElementById("kpi").innerHTML = `
+    <div class="kpi-box">
+      <div class="kpi-label">진열 작업 대상</div>
+      <div class="kpi-value">${stockingTargets.length}</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-label">콘솔 대상</div>
+      <div class="kpi-value">${relocationTargets.length}</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-label">전체 빈 로케이션</div>
+      <div class="kpi-value">${totalEmpty}</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-label">평균 진열가능공간</div>
+      <div class="kpi-value">${avgAvailable}%</div>
+    </div>
+  `;
+}
+
+function summaryTopRowsHtml(stockingTop, relocationTop) {
+  const stockingBlock = stockingTop.length
+    ? stockingTop.map(d => `
+        <div class="summary-item">
+          <div class="summary-left"><span style="color:${zoneTextColor(d._zoneType)};font-weight:800;">${zoneLabel(d._zoneType)}</span> <span style="color:#64748b;font-weight:600;">(통로 ${d["통로"] ?? ""})</span></div>
+          <div class="summary-right">빈 로케이션 ${d._emptyLoc} / 진열가능공간 ${d._availableSpace}%</div>
+        </div>
+      `).join("")
+    : `<div class="summary-item"><div class="summary-left">대상 없음</div><div class="summary-right">조건 충족 구간 없음</div></div>`;
+  const relocationBlock = relocationTop.length
+    ? relocationTop.map(d => `
+        <div class="summary-item">
+          <div class="summary-left"><span style="color:${zoneTextColor(d._zoneType)};font-weight:800;">${zoneLabel(d._zoneType)}</span> <span style="color:#64748b;font-weight:600;">(통로 ${d["통로"] ?? ""})</span></div>
+          <div class="summary-right">빈 로케이션 ${d._emptyLoc} / 진열가능공간 ${d._availableSpace}%</div>
+        </div>
+      `).join("")
+    : `<div class="summary-item"><div class="summary-left">대상 없음</div><div class="summary-right">조건 충족 구간 없음</div></div>`;
+  return `
+    <div class="summary-panel stocking">
+      <h3>📦 비어있는 로케이션 TOP5</h3>
+      ${stockingBlock}
+    </div>
+    <div class="summary-panel relocation">
+      <h3>🔄 콘솔 작업 우선 TOP5</h3>
+      ${relocationBlock}
+    </div>
+  `;
+}
+
+function drawSummary(data) {
+  lastSummaryData = data;
+  let slice = data;
+  if (summaryQuickZone !== "All") {
+    slice = data.filter(function (row) {
+      return row._zoneType === summaryQuickZone;
+    });
+  }
+
+  const stockingTop = [...slice]
+    .filter(isStockingTarget)
+    .sort((a, b) => b._stockingScore - a._stockingScore)
+    .slice(0, 5);
+  const relocationTop = [...slice]
+    .sort((a, b) => b._relocationScore - a._relocationScore)
+    .slice(0, 5);
+
+  document.getElementById("summary").innerHTML = summaryTopRowsHtml(stockingTop, relocationTop);
+}
+
+function syncSummaryQuickButtonsUi() {
+  document.querySelectorAll(".summary-qbtn").forEach(function (b) {
+    b.classList.toggle("active", b.getAttribute("data-sum-zone") === summaryQuickZone);
+  });
+}
+
+function drawComment(data) {
+  const stockingTop = [...data]
+    .filter(isStockingTarget)
+    .sort((a, b) => b._stockingScore - a._stockingScore)
+    .slice(0, 3);
+
+  const relocationTop = [...data]
+    .sort((a, b) => b._relocationScore - a._relocationScore)
+    .slice(0, 3);
+
+  const cpData = data.filter(d => d._zoneType === "CP");
+  const fpData = data.filter(d => d._zoneType === "FP");
+  const cpTop = cpData.sort((a, b) => b._stockingScore - a._stockingScore).slice(0, 3);
+  const fpTop = fpData.sort((a, b) => b._stockingScore - a._stockingScore).slice(0, 3);
+
+  let html = "";
+
+  if (stockingTop.length) {
+    html += `<strong>비어있는 로케이션:</strong> ${stockingTop.map(d => `${d["존"]}(${d._emptyLoc}개 / ${d._availableSpace}%)`).join(", ")}<br>`;
+  } else {
+    html += `<strong>비어있는 로케이션:</strong> 현재 기준상 두드러지는 비어있는 로케이션 구간은 없습니다.<br>`;
+  }
+
+  if (relocationTop.length) {
+    html += `<strong>콘솔 작업 우선 구간:</strong> ${relocationTop.map(d => `${d["존"]}(${d._emptyLoc}개 / ${d._availableSpace}%)`).join(", ")}<br>`;
+  } else {
+    html += `<strong>콘솔 작업 우선 구간:</strong> 표시할 데이터가 없습니다.<br>`;
+  }
+
+  html += `<br><strong>냉장 그룹 (${cpData.length}개) 최상위:</strong> ${cpTop.length ? cpTop.map(d => `${d["존"]}(${d._emptyLoc}, ${d._availableSpace}%)`).join(", ") : "대상 없음"}.<br>`;
+  html += `<strong>냉동 그룹 (${fpData.length}개) 최상위:</strong> ${fpTop.length ? fpTop.map(d => `${d["존"]}(${d._emptyLoc}, ${d._availableSpace}%)`).join(", ") : "대상 없음"}.<br><br>`;
+
+  html += `<strong>권장 운영 방향:</strong> 빈 로케이션이 존재하면서 진열가능공간이 높은 구간에는 진열 인력을 우선 투입하고, 빈 로케이션이 부족하지만 진열가능공간이 넉넉한 구간에는 콘솔 작업자를 투입해 추가 빈 로케이션을 확보하는 방향으로 운영합니다.`;
+
+  document.getElementById("comment").innerHTML = html;
+}
+
+function chartTooltipTitleWithPassage(ctx, passageNumbers) {
+  if (!ctx || !ctx.length || !ctx[0]) return "";
+  const c = ctx[0];
+  const idx = c.dataIndex;
+  if (idx < 0 || idx >= passageNumbers.length) return c.label || "";
+  const zone = c.label || "";
+  const passage = passageNumbers[idx];
+  if (passage) return [zone, "통로: " + passage];
+  return zone;
+}
+
+function destroyAllCharts() {
+  chartInstances.forEach(function (ch) {
+    try {
+      ch.destroy();
+    } catch (e) {}
+  });
+  chartInstances.length = 0;
+}
+
+function passageNumbersFromData(data) {
+  return data.map(function (d) {
+    let p = d["통로"];
+    if (p != null && String(p).trim() !== "") return String(p).trim();
+    p = d["통로번호"];
+    if (p != null && String(p).trim() !== "") return String(p).trim();
+    return "";
+  });
+}
+
+function chartPairMountHtml(stockingId, relocationId, pal) {
+  const p = pal || zoneChartPalette(null);
+  return (
+    '<div class="chart-grid">' +
+    '<div class="card">' +
+    '<h2 class="card-title">📊 비어있는 로케이션</h2>' +
+    '<div class="chart-wrap"><canvas id="' +
+    stockingId +
+    '"></canvas></div>' +
+    '<div class="legend-row">' +
+    '<span><span class="legend-dot" style="background:' +
+    p.stockHi +
+    ';"></span>진열 대상 강조</span>' +
+    '<span><span class="legend-dot" style="background:' +
+    p.legendMuted +
+    ';"></span>일반 구간</span>' +
+    "</div></div>" +
+    '<div class="card">' +
+    '<h2 class="card-title">📊 콘솔 작업 우선 구간</h2>' +
+    '<div class="chart-wrap"><canvas id="' +
+    relocationId +
+    '"></canvas></div>' +
+    '<div class="legend-row">' +
+    '<span><span class="legend-dot" style="background:' +
+    p.relocHi +
+    ';"></span>콘솔 우선 강조</span>' +
+    '<span><span class="legend-dot" style="background:' +
+    p.legendMuted +
+    ';"></span>일반 구간</span>' +
+    "</div></div></div>"
+  );
+}
+
+function createBarPair(stockingCanvasId, relocationCanvasId, data, zoneForPalette) {
+  const pal = zoneChartPalette(zoneForPalette);
+  const labels = data.map(function (d) {
+    return d["존"];
+  });
+  const passageNumbers = passageNumbersFromData(data);
+  const stockingScores = data.map(function (d) {
+    return d._stockingScore;
+  });
+  const relocationScores = data.map(function (d) {
+    return d._relocationScore;
+  });
+  const stockingColors = data.map(function (d) {
+    return isStockingTarget(d) ? pal.stockHi : pal.stockLo;
+  });
+  const relocationColors = data.map(function (d) {
+    return isRelocationTarget(d) ? pal.relocHi : pal.relocLo;
+  });
+
+  const opt = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          title: function (ctx) {
+            return chartTooltipTitleWithPassage(ctx, passageNumbers);
+          }
+        }
+      }
+    },
+    scales: {
+      y: { beginAtZero: true }
+    }
+  };
+
+  const elS = document.getElementById(stockingCanvasId);
+  const elR = document.getElementById(relocationCanvasId);
+  if (!elS || !elR) return;
+
+  chartInstances.push(
+    new Chart(elS, {
+      type: "bar",
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: "비어있는 로케이션",
+            data: stockingScores,
+            backgroundColor: stockingColors,
+            borderRadius: 8
+          }
+        ]
+      },
+      options: opt
+    })
+  );
+
+  chartInstances.push(
+    new Chart(elR, {
+      type: "bar",
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: "콘솔 작업 우선도",
+            data: relocationScores,
+            backgroundColor: relocationColors,
+            borderRadius: 8
+          }
+        ]
+      },
+      options: opt
+    })
+  );
+}
+
+function drawCharts(normalized) {
+  const mount = document.getElementById("chartsMount");
+  if (!mount) return;
+
+  if (!normalized || !normalized.length) {
+    mount.innerHTML =
+      '<div class="zone-empty-note">데이터를 붙여넣고 분석 실행 후 그래프를 확인하세요.</div>';
+    return;
+  }
+
+  if (typeof Chart === "undefined") {
+    console.error("Chart.js 로드 실패: chart.umd 번들을 확인하세요.");
+    mount.innerHTML = '<p class="zone-empty-note">Chart.js를 불러오지 못했습니다. 네트워크를 확인하세요.</p>';
+    return;
+  }
+
+  destroyAllCharts();
+
+  const showAllZoneSections = summaryQuickZone === "All";
+
+  if (showAllZoneSections) {
+    let html = "";
+    for (let zi = 0; zi < ZONE_ORDER.length; zi++) {
+      const z = ZONE_ORDER[zi];
+      const slice = normalized.filter(function (row) {
+        return row._zoneType === z;
+      });
+      if (slice.length === 0) {
+        html +=
+          '<div class="zone-chart-section">' +
+          '<h2 class="zone-chart-heading" style="color:' +
+          zoneTextColor(z) +
+          '">' +
+          zoneLabel(z) +
+          " 구역</h2>" +
+          '<div class="zone-empty-note">이 구역에 해당하는 행이 없습니다.</div></div>';
+        continue;
+      }
+      const palZ = zoneChartPalette(z);
+      html +=
+        '<div class="zone-chart-section">' +
+        '<h2 class="zone-chart-heading" style="color:' +
+        zoneTextColor(z) +
+        '">' +
+        zoneLabel(z) +
+        " 구역</h2>" +
+        chartPairMountHtml("stockingChart-" + z, "relocationChart-" + z, palZ) +
+        "</div>";
+    }
+    mount.innerHTML = html;
+    for (let zj = 0; zj < ZONE_ORDER.length; zj++) {
+      const z2 = ZONE_ORDER[zj];
+      const slice2 = normalized.filter(function (row) {
+        return row._zoneType === z2;
+      });
+      if (slice2.length === 0) continue;
+      createBarPair("stockingChart-" + z2, "relocationChart-" + z2, slice2, z2);
+    }
+    return;
+  }
+
+  let chartRows = normalized;
+  if (summaryQuickZone !== "All") {
+    chartRows = normalized.filter(function (row) {
+      return row._zoneType === summaryQuickZone;
+    });
+  }
+
+  if (chartRows.length === 0) {
+    mount.innerHTML =
+      '<div class="zone-empty-note">선택한 구역에 맞는 그래프 데이터가 없습니다. 요약 버튼을 바꿔 보세요.</div>';
+    return;
+  }
+
+  const zoneKinds = [];
+  chartRows.forEach(function (r) {
+    if (zoneKinds.indexOf(r._zoneType) < 0) zoneKinds.push(r._zoneType);
+  });
+  const heading =
+    zoneKinds.length === 1
+      ? zoneLabel(zoneKinds[0]) + " 구역"
+      : "선택 구역";
+  const headingColor =
+    zoneKinds.length === 1 ? zoneTextColor(zoneKinds[0]) : "#334155";
+  const palOne = zoneChartPalette(zoneKinds.length === 1 ? zoneKinds[0] : null);
+
+  mount.innerHTML =
+    '<div class="zone-chart-section">' +
+    '<h2 class="zone-chart-heading" style="color:' +
+    headingColor +
+    '">' +
+    heading +
+    "</h2>" +
+    chartPairMountHtml("stockingChart", "relocationChart", palOne) +
+    "</div>";
+  createBarPair(
+    "stockingChart",
+    "relocationChart",
+    chartRows,
+    zoneKinds.length === 1 ? zoneKinds[0] : null
+  );
+}
+
+function drawTable(headers, data) {
+  let html = "<table><thead><tr>";
+  headers.forEach(h => {
+    html += `<th>${h}</th>`;
+  });
+  html += "</tr></thead><tbody>";
+
+  data.forEach(row => {
+    html += "<tr>";
+    headers.forEach(h => {
+      html += `<td>${row[h.trim()] ?? ""}</td>`;
+    });
+    html += "</tr>";
+  });
+
+  html += "</tbody></table>";
+  document.getElementById("table").innerHTML = html;
+}
+
+document.querySelectorAll(".summary-qbtn").forEach(function (btn) {
+  btn.addEventListener("click", function () {
+    const z = btn.getAttribute("data-sum-zone");
+    if (!z) return;
+    summaryQuickZone = z;
+    syncSummaryQuickButtonsUi();
+    if (lastSummaryData) drawSummary(lastSummaryData);
+    if (lastNormalized) drawCharts(lastNormalized);
+  });
+});
+
+</script>
+</body>
+</html>
