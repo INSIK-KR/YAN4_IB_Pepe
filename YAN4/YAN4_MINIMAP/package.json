@@ -1,0 +1,52 @@
+{
+  "name": "yna4-excel-minimap-desktop",
+  "version": "0.4.0",
+  "private": true,
+  "description": "YAN4 1챔ber chamber-layout JSON 미니맵 + inventory API",
+  "main": "main.js",
+  "scripts": {
+    "postinstall": "node copy-vendor-xlsx.js",
+    "start": "electron .",
+    "import-layout": "node import-chamber-from-xlsx.js",
+    "compress-layout": "node compress-chamber-layout.js",
+    "setup-kenney": "node setup-kenney-stamps.js",
+    "dist": "electron-builder --win portable"
+  },
+  "dependencies": {
+    "xlsx": "0.18.5"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.yan4.excel-minimap.desktop",
+    "productName": "YNA4미니맵",
+    "directories": {
+      "output": "release"
+    },
+    "icon": "build/icon.png",
+    "files": [
+      "main.js",
+      "preload.js",
+      "location-capacity-api.js",
+      "chamber-layout-core.js",
+      "chamber-excel-import.js",
+      "chamber-layout.json",
+      "asset-catalog.js",
+      "stamp-registry.js",
+      "setup-kenney-stamps.js",
+      "index.html",
+      "minimap.js",
+      "minimap.css",
+      "assets/**/*",
+      "package.json",
+      "build/icon.ico",
+      "build/icon.png"
+    ],
+    "win": {
+      "target": ["portable"],
+      "signAndEditExecutable": false
+    }
+  }
+}

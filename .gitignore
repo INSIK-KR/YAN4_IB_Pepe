@@ -1,0 +1,8 @@
+CFS_IB_LIVE/
+node_modules/
+**/bin/Release/
+**/obj/
+~$*
+*.psd
+/확장프로그램 백업/*.zip
+/확장프로그램 백업/*.exe

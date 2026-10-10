@@ -1,29 +1,74 @@
 {
   "manifest_version": 3,
   "name": "YAN4 IB 통합 UI Shell",
-  "version": "0.22.7",
-  "description": "Coupang IB/Inventory/Outbound용 통합 패널 (원본 userscript 확장 이식). 개발자 모드 → 압축해제된 확장 프로그램 로드.",
+  "version": "0.27.135",
+  "description": "CFS YAN4 IB 통합 운영 패널. WMS·STOW·워크플로우 등 현장 보조. 업무용 빌드 — 개발자 pepe.",
   "icons": {
     "16": "icon96.png",
     "48": "icon96.png",
     "96": "icon96.png",
     "128": "icon128.png"
   },
-  "permissions": ["storage", "clipboardWrite"],
+  "permissions": ["storage", "clipboardWrite", "downloads", "alarms"],
   "host_permissions": [
     "https://inbound.coupang.com/*",
     "https://inventory.coupang.com/*",
-    "https://outbound.coupang.com/*"
+    "https://outbound.coupang.com/*",
+    "https://wms-front.coupang.com/*",
+    "https://coupangfsnam.sharepoint.com/*",
+    "https://mos.coupang.net/*",
+    "https://po-management.coupang.net/*",
+    "https://*.coupang.com/*"
+  ],
+  "background": {
+    "service_worker": "sla-download-bg.js"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "media/stow-watch-alarm.wav",
+        "media/SR.wav",
+        "media/farm-fresh-seal.png",
+        "media/gomgom-logo.png",
+        "yan4-ats-page.css",
+        "yan4-sla-page.css",
+        "yan4-stow-error-page.css",
+        "recvq-fetch-hook.js"
+      ],
+      "matches": [
+        "https://inbound.coupang.com/*",
+        "https://inventory.coupang.com/*",
+        "https://outbound.coupang.com/*",
+        "https://wms-front.coupang.com/*"
+      ]
+    }
   ],
   "content_scripts": [
     {
       "matches": [
         "https://inventory.coupang.com/*",
         "https://inbound.coupang.com/*",
+        "https://wms-front.coupang.com/receiving*",
         "https://outbound.coupang.com/workflow/nob/dashboard*",
         "https://outbound.coupang.com/workflow/nob/v2/view/needToReplenish/detail/*"
       ],
-      "js": ["gm-bridge.js", "shell.js"],
+      "js": [
+        "vendor/chart.umd.min.js",
+        "vendor/xlsx.full.min.js",
+        "vendor/JsBarcode.all.min.js",
+        "vendor/qrcode.min.js",
+        "vendor/html2canvas.min.js",
+        "gm-bridge.js",
+        "yan4-sla-page.js",
+        "yan4-ats-page.js",
+        "yan4-stow-error-page.js",
+        "yan4-rcrt-label-print.js",
+        "yan4-bipyo-label-print.js",
+        "yan4-location-consolidation-page.js",
+        "yan4-damage-verify-page.js",
+        "yan4-avail-history-page.js",
+        "shell.js"
+      ],
       "run_at": "document_end",
       "all_frames": false
     }

@@ -1,0 +1,41 @@
+{
+  "name": "yan4-ats-live-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "YAN4 ATS 보충 라이브 대시보드 — 확장 독립 Electron (확장 차단 대비)",
+  "main": "main.js",
+  "scripts": {
+    "prestart": "node copy-ats-assets.js",
+    "start": "electron .",
+    "predist": "node copy-ats-assets.js",
+    "dist": "electron-builder --win portable"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "png-to-ico": "^3.0.0"
+  },
+  "build": {
+    "appId": "com.yan4.ats.live.desktop",
+    "productName": "YAN4-ATS-Live",
+    "directories": {
+      "output": "release"
+    },
+    "icon": "build/icon.ico",
+    "files": [
+      "main.js",
+      "preload.js",
+      "copy-ats-assets.js",
+      "package.json",
+      "build/icon.ico",
+      "renderer/**/*"
+    ],
+    "win": {
+      "target": [
+        "portable"
+      ],
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": false
+    }
+  }
+}

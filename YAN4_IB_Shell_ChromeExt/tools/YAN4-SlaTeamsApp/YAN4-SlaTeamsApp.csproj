@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>YAN4-SlaTeams</AssemblyName>
+    <RootNamespace>YAN4.SlaTeams</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="..\YAN4-SLA-TeamsPaste.ps1">
+      <LogicalName>YAN4.SlaTeams.PasteScript.ps1</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+</Project>

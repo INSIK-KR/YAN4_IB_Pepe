@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "name": "YAN4 1챔ber",
+  "meta": {
+    "tilePx": 32,
+    "canvasPx": 1600,
+    "artSource": "photoshop-png"
+  },
+  "grid": {
+    "rows": 50,
+    "cols": 50
+  },
+  "background": {
+    "enabled": false,
+    "asset": "bg",
+    "mode": "repeat"
+  },
+  "baseMap": {
+    "asset": "bg",
+    "mode": "contain"
+  },
+  "sprites": [],
+  "fixed": [],
+  "markers": [],
+  "aisles": [],
+  "variable": {
+    "shelf": { "segments": [] },
+    "pallet": { "segments": [] }
+  },
+  "apiBoxes": []
+}

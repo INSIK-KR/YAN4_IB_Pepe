@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>YAN4 1챔ber · 챔버 맵</title>
+  <link rel="stylesheet" href="minimap.css" />
+</head>
+<body class="mode-view map-hq">
+  <div class="app">
+    <header class="hud-header">
+      <div class="hud-brand">
+        <span class="hud-led" aria-hidden="true"></span>
+        <div>
+          <h1>YAN4 · 1CHAMBER MAP</h1>
+          <p>포토샵 PNG · chamber-layout.json · API</p>
+        </div>
+      </div>
+      <span class="status hud-status" id="statusText">로딩 중…</span>
+    </header>
+
+    <aside class="sidebar hud-sidebar" id="viewSidebar">
+      <div class="panel hud-panel">
+        <h2>레이아웃</h2>
+        <div class="layout-actions">
+          <button type="button" class="btn btn-secondary" id="reloadBtn">다시 로드</button>
+          <button type="button" class="btn btn-secondary" id="saveBtn">JSON 저장</button>
+        </div>
+        <label class="upload-zone" id="uploadZone">
+          <input type="file" id="fileInput" accept=".json,application/json" />
+          <strong>chamber-layout.json</strong>
+          <span>백업용 불러오기</span>
+        </label>
+        <div class="meta" id="metaBox">로딩 중…</div>
+      </div>
+
+      <div class="panel hud-panel">
+        <h2>1007 박스 배치</h2>
+        <div class="layout-actions">
+          <button type="button" class="btn btn-primary" id="placeModeBtn">배치 모드 OFF</button>
+        </div>
+        <label class="field">
+          <span>1007 로케이션</span>
+          <input type="text" id="placeText" placeholder="1007-1C1-01-A01" />
+        </label>
+        <div class="field field--inline">
+          <span>크기</span>
+          <input type="number" id="placeW" min="1" max="10" value="1" />
+          <span>×</span>
+          <input type="number" id="placeH" min="1" max="10" value="1" />
+        </div>
+        <label class="field">
+          <span>기준 PNG (임시)</span>
+          <input type="file" id="guidePngInput" accept="image/png" />
+        </label>
+        <p class="hint">배치 모드 ON → 맵 클릭하면 추가. 기존 박스 클릭은 삭제.</p>
+      </div>
+
+      <div class="panel hud-panel">
+        <h2>범례</h2>
+        <ul class="floorplan-legend">
+          <li><span class="swatch swatch--shelf"></span>선반 (1C)</li>
+          <li><span class="swatch swatch--pallet"></span>PLT (1CP)</li>
+          <li><span class="swatch swatch--mezzanine"></span>메자닌·리프트</li>
+          <li><span class="swatch swatch--nys"></span>NYS·WMS</li>
+          <li><span class="swatch swatch--conveyor"></span>컨베이어</li>
+          <li><span class="swatch swatch--rail"></span>레일</li>
+          <li><span class="swatch swatch--entrance"></span>챔버입구</li>
+        </ul>
+      </div>
+
+      <details class="panel hud-panel hud-panel--api" id="apiPanel">
+        <summary>API (진열 여유)</summary>
+        <div class="api-actions">
+          <button type="button" class="btn btn-secondary" id="loginBtn">inventory 로그인</button>
+          <button type="button" class="btn btn-primary" id="fetchBtn">API 조회</button>
+        </div>
+        <p class="hint api-hint">JSON <code>apiBoxes</code></p>
+        <div class="meta" id="apiStatus">—</div>
+      </details>
+    </aside>
+
+    <main class="main hud-main">
+      <div class="toolbar hud-toolbar">
+        <label>
+          <span class="lbl">ZOOM</span>
+          <input type="number" id="cellSize" min="8" max="128" step="8" value="32" title="격자 1칸 px — 기본 32 (50×50 = 1600×1600)" />
+        </label>
+        <label>
+          <span class="lbl">GAP</span>
+          <input type="number" id="gutter" min="0" max="4" value="0" />
+        </label>
+      </div>
+      <div class="viewport-wrap">
+        <div class="viewport-stack">
+          <div class="viewport" id="viewport">
+            <p class="hint">로딩 중…</p>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="chamber-layout-core.js"></script>
+  <script src="asset-catalog.js"></script>
+  <script src="stamp-registry.js"></script>
+  <script src="minimap.js"></script>
+</body>
+</html>

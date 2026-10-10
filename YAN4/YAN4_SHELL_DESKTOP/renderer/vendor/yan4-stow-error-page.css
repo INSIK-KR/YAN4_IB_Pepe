@@ -1,0 +1,451 @@
+.yna4-stow-error-root {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  flex: 1 1 auto;
+  font: 12px/1.45 "Segoe UI", "Malgun Gothic", sans-serif;
+  color: #334155;
+}
+
+.yna4-stow-error-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 12;
+}
+
+.yna4-stow-error-title {
+  font-size: 12px;
+  font-weight: 800;
+  color: #0f172a;
+  margin-right: 4px;
+}
+
+.yna4-stow-error-month {
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 3px 8px;
+  min-height: 24px;
+  background: #fff;
+}
+
+.yna4-stow-error-btn {
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  color: #334155;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 4px 10px;
+  min-height: 24px;
+  cursor: pointer;
+}
+
+.yna4-stow-error-btn--primary {
+  color: #fff;
+  background: #4f46e5;
+  border-color: #4338ca;
+}
+
+.yna4-stow-error-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.yna4-stow-error-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 10px;
+  font-size: 11px;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  background: #fff;
+  color: #64748b;
+}
+
+.yna4-stow-error-summary {
+  font-size: 12px;
+  font-weight: 700;
+  color: #0f172a;
+  padding: 0 4px;
+  min-height: 18px;
+}
+
+.yna4-stow-error-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.yna4-stow-error-empty {
+  padding: 28px 12px;
+  text-align: center;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.yna4-stow-error-empty--err {
+  color: #dc2626;
+}
+
+.yna4-stow-error-table-wrap {
+  overflow: auto;
+}
+
+.yna4-stow-error-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.yna4-stow-error-table > thead > tr > th,
+.yna4-stow-error-table > tbody > tr.yna4-stow-error-tr-group > td,
+.yna4-stow-error-table > tbody > tr.yna4-stow-error-tr-person > td {
+  border: 1px solid #e2e8f0;
+  padding: 6px 8px;
+  vertical-align: middle;
+}
+
+.yna4-stow-error-table > thead > tr > th {
+  position: sticky;
+  top: 0;
+  background: #334155;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  white-space: nowrap;
+  z-index: 1;
+}
+
+.yna4-stow-error-th-sub {
+  display: block;
+  font-size: 9px;
+  font-weight: 500;
+  opacity: 0.85;
+}
+
+.yna4-stow-error-td-name {
+  font-weight: 700;
+  white-space: nowrap;
+  color: #0f172a;
+}
+
+.yna4-stow-error-name-btn {
+  font: inherit;
+  font-weight: 800;
+  color: #1d4ed8;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.yna4-stow-error-name-btn:hover {
+  color: #1e3a8a;
+}
+
+.yna4-stow-error-name-btn.is-open {
+  color: #0f172a;
+  text-decoration: none;
+}
+
+.yna4-stow-error-tr-person {
+  cursor: pointer;
+}
+
+.yna4-stow-error-tr-person.is-open td {
+  border-bottom-color: #93c5fd;
+}
+
+.yna4-stow-error-tr-drill > td {
+  padding: 0;
+  background: #f8fafc;
+  border-top: 0;
+}
+
+.yna4-stow-error-drill {
+  padding: 10px 12px 14px;
+  text-align: left;
+}
+
+.yna4-stow-error-drill-head {
+  font-size: 12px;
+  font-weight: 800;
+  color: #0f172a;
+  margin-bottom: 8px;
+}
+
+.yna4-stow-error-drill-empty {
+  color: #94a3b8;
+  font-weight: 600;
+  padding: 8px 0;
+}
+
+.yna4-stow-error-drill-week {
+  margin-top: 10px;
+  display: block;
+  overflow: auto;
+}
+
+.yna4-stow-error-drill-week-title {
+  font-size: 11px;
+  font-weight: 800;
+  color: #475569;
+  margin-bottom: 4px;
+}
+
+.yna4-stow-error-drill-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 11px;
+  background: #fff;
+}
+
+.yna4-stow-error-drill-table th,
+.yna4-stow-error-drill-table td {
+  border: 1px solid #e2e8f0;
+  padding: 5px 8px;
+  vertical-align: top;
+  box-sizing: border-box;
+}
+
+.yna4-stow-error-drill-table thead th {
+  position: static;
+  background: #e2e8f0;
+  color: #334155;
+  font-size: 10px;
+  font-weight: 700;
+  text-align: left;
+}
+
+.yna4-stow-error-drill-td-at {
+  width: 148px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+  color: #475569;
+}
+
+.yna4-stow-error-drill-td-kind {
+  width: 92px;
+  font-weight: 800;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.yna4-stow-error-drill-td-kind--o {
+  color: #c2410c;
+  background: #fff7ed;
+}
+
+.yna4-stow-error-drill-td-kind--s {
+  color: #1d4ed8;
+  background: #eff6ff;
+}
+
+.yna4-stow-error-drill-td-no {
+  width: 120px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.yna4-stow-error-drill-link {
+  color: #1d4ed8;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.yna4-stow-error-drill-link:hover {
+  color: #1e3a8a;
+}
+
+.yna4-stow-error-drill-td-reason {
+  width: auto;
+  word-break: break-word;
+}
+
+.yna4-stow-error-drill-td-status {
+  width: 110px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #64748b;
+}
+
+.yna4-stow-error-td-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.yna4-stow-error-td-total {
+  background: #fef9c3;
+}
+
+.yna4-stow-error-td-o {
+  color: #b45309;
+  background: #fff7ed;
+}
+
+.yna4-stow-error-td-s {
+  color: #1d4ed8;
+  background: #eff6ff;
+}
+
+.yna4-stow-error-td-week {
+  text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  min-width: 92px;
+}
+
+.yna4-stow-error-td-shift {
+  text-align: center;
+  white-space: nowrap;
+}
+
+.yna4-stow-error-week-os {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.yna4-stow-error-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 38px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.yna4-stow-error-chip--o {
+  color: #9a3412;
+  background: #ffedd5;
+}
+
+.yna4-stow-error-chip--s {
+  color: #1e40af;
+  background: #dbeafe;
+}
+
+.yna4-stow-error-chip.is-zero {
+  color: #94a3b8;
+  background: #f1f5f9;
+  font-weight: 600;
+}
+
+.yna4-stow-error-week-zero {
+  color: #cbd5e1;
+  font-weight: 600;
+}
+
+.yna4-stow-error-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.yna4-stow-error-badge--day {
+  color: #0f766e;
+  background: #ccfbf1;
+}
+
+.yna4-stow-error-badge--aft {
+  color: #c2410c;
+  background: #ffedd5;
+}
+
+.yna4-stow-error-badge--eve {
+  color: #6d28d9;
+  background: #ede9fe;
+}
+
+.yna4-stow-error-badge--night {
+  color: #1e3a8a;
+  background: #e0e7ff;
+}
+
+.yna4-stow-error-badge--none {
+  color: #64748b;
+  background: #e2e8f0;
+}
+
+.yna4-stow-error-tr-group td {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  text-align: left;
+  padding: 8px 12px;
+  border-top: 2px solid #cbd5e1;
+}
+
+.yna4-stow-error-tr-group--day td {
+  color: #0f766e;
+  background: #f0fdfa;
+}
+
+.yna4-stow-error-tr-group--aft td {
+  color: #c2410c;
+  background: #fff7ed;
+}
+
+.yna4-stow-error-tr-group--eve td {
+  color: #6d28d9;
+  background: #f5f3ff;
+}
+
+.yna4-stow-error-tr-group--night td {
+  color: #1e3a8a;
+  background: #eef2ff;
+}
+
+.yna4-stow-error-tr-group--none td {
+  color: #475569;
+  background: #f1f5f9;
+}
+
+.yna4-stow-error-tr-person.is-alt td:not(.yna4-stow-error-td-o):not(.yna4-stow-error-td-s):not(.yna4-stow-error-td-total) {
+  background: #f8fafc;
+}
+
+.yna4-stow-error-tr-person:hover td {
+  filter: brightness(0.985);
+}

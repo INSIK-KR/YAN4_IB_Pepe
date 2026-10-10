@@ -1,0 +1,21 @@
+{
+  "enabled": true,
+  "lookupEngine": "http",
+  "method": "GET",
+  "urlTemplate": "https://inventory.coupang.com/async/inventory/search?searched=true&locationType=&zone=&fromLocation=&toLocation=&locationBarcode={{loc}}&skuId=&externalSkuId=&skuBarcode=&lpnId=&inventoryId=&saleableChangeType=&availableInventory=true&page=0&pageSize=20",
+  "hasDataJsonPath": "result.content",
+  "useElectronSessionFetch": true,
+  "sessionPartition": "persist:yna4-coupang-inventory",
+  "timeoutMs": 45000,
+  "delayMsBetweenRequests": 200,
+  "headers": {
+    "Accept": "*/*",
+    "Referer": "https://inventory.coupang.com/inventory/list",
+    "X-Requested-With": "XMLHttpRequest"
+  },
+  "noDataHttpStatuses": [404, 204, 410],
+  "treatAsNoDataIfBodyEmpty": true,
+  "treatAsNoDataIfJsonEmpty": true,
+  "treatEmptyObjectAsNoData": true,
+  "_comment": "쿠팡 재고 API: result.content 배열이 비면 초록. useElectronSessionFetch+sessionPartition 으로 앱 '재고 로그인…' 세션 쿠키 사용. lookupEngine: coupang_inventory_dom 은 DOM 자동화(백업)."
+}

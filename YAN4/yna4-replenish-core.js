@@ -1,4 +1,4 @@
-﻿(function () {
+(function () {
   "use strict";
 
   const YNA4_PAGE_ROLE = window.YNA4_PAGE_ROLE || "combined";
@@ -45,7 +45,7 @@
     broadcastReplenishSync("tsv");
   }
 
-  function persistWorkbooksToStorage() {
+  function persistWorkbooksToStorageCore() {
     if (!IS_DATA_PAGE) return;
     const isSingleWorkbookMode = workbooks[0] && workbooks[0] === workbooks[1];
     const b64Cache = new Map();
@@ -86,6 +86,29 @@
       } catch (e) {}
     }
     broadcastReplenishSync("wb");
+  }
+
+  let persistWorkbooksTimer = null;
+  function schedulePersistWorkbooksToStorage() {
+    if (persistWorkbooksTimer) clearTimeout(persistWorkbooksTimer);
+    persistWorkbooksTimer = setTimeout(function () {
+      persistWorkbooksTimer = null;
+      persistWorkbooksToStorageCore();
+    }, 450);
+  }
+
+  function flushPersistWorkbooksToStorage() {
+    if (!IS_DATA_PAGE) return;
+    if (persistWorkbooksTimer) {
+      clearTimeout(persistWorkbooksTimer);
+      persistWorkbooksTimer = null;
+    }
+    persistWorkbooksToStorageCore();
+  }
+
+  function persistWorkbooksToStorage() {
+    if (!IS_DATA_PAGE) return;
+    schedulePersistWorkbooksToStorage();
   }
 
   function loadWorkbooksFromStorage() {
@@ -144,11 +167,20 @@
     "우선순위",
     "온도대",
     "차량번호",
+    "상차시간",
     "하차시간",
     "상태",
-    "보충기한",
-    "완료"
+    "보충기한"
   ];
+
+  /** 팀즈 복사·인쇄 청크 등에서 제외(대시보드 화면에만 표시). */
+  const MERGE_TABLE_HEADERS_DASHBOARD_ONLY = new Set(["상차시간"]);
+
+  /** 인쇄/PDF 청크 복제 시에만 제거(화면·팀즈 복사에는 유지). */
+  const MERGE_TABLE_HEADER_PRINT_STRIP = new Set(["SKU ID"]);
+
+  /** buildMergePreviewTr 가 붙이는 데이터 td 개수(= MERGE_TABLE_HEADERS 길이). */
+  const MERGE_PREVIEW_BODY_TD_COUNT = 14;
 
   /** 워크플로 TSV 열 번호(1부터) — F=6 SKU, G=7 바코드, H=8 Unit, I=9 보충기한, J=10 상태 */
   const MERGE_SKU_WORKFLOW_COL_1BASED = 6;
@@ -200,6 +232,16 @@
     for (let i = 0; i < MERGE_DASHBOARD1_CHILLED_NAME_FRAGMENTS.length; i++) {
       if (t.indexOf(MERGE_DASHBOARD1_CHILLED_NAME_FRAGMENTS[i]) !== -1) return true;
     }
+    return false;
+  }
+
+  /** ① 패턴(10·15구/입) + 치즈·반숙이·반숙란 → ① 제외, CHILLED 나머지(④)로 귀속 */
+  function mergeProductNameChilledSmallPackCheeseOrSoftEggSkipsDash1ForDash4(nameText) {
+    const t = String(nameText || "");
+    if (!mergeProductNameMatchesChilledDashboard1(t)) return false;
+    if (t.indexOf("치즈") !== -1) return true;
+    if (t.indexOf("반숙이") !== -1) return true;
+    if (t.indexOf("반숙란") !== -1) return true;
     return false;
   }
 
@@ -273,7 +315,9 @@
     const n = String(productName || "");
     if (z === "CHILLED") {
       const noDash13ForMoistBakedEgg = mergeProductNameChilledMoistOrBakedEggExcludesDashboard1And3(n);
-      if (!noDash13ForMoistBakedEgg && mergeProductNameMatchesChilledDashboard1(n)) return 1;
+      const dash4CheeseSmall =
+        !noDash13ForMoistBakedEgg && mergeProductNameChilledSmallPackCheeseOrSoftEggSkipsDash1ForDash4(n);
+      if (!noDash13ForMoistBakedEgg && !dash4CheeseSmall && mergeProductNameMatchesChilledDashboard1(n)) return 1;
       if (mergeProductNameMatchesChilledDashboard2Sr(n)) return 2;
       if (!noDash13ForMoistBakedEgg && mergeProductNameMatchesChilledDashboard3LargeEgg(n)) return 3;
       return 4;
@@ -286,12 +330,14 @@
     return 8;
   }
 
-  /** 통합 상태(②): 진열대기·진열중·이동중을 한 붙여넣기에 넣음. A=GC → B·H·I·K·L (진열대기 열 배치, 첫 GC 행만 사용). */
+  /** 통합 상태(②): 진열대기·진열중·이동중을 한 붙여넣기에 넣음. A=GC → B·H·I·J·K·L (진열대기 열 배치, 첫 GC 행만 사용). */
   const PENDING_WB_INDEX = 1;
   const PENDING_GC_MATCH_COL_0 = 0;
   const PENDING_PRIORITY_COL_0 = 1;
   const PENDING_CT_COL_0 = 7;
   const PENDING_STATUS_COL_0 = 8;
+  /** 이관 시트 J열(1-based J): 진열대기·진열중·이동중 행의 상차 시각(날짜+시간 원문). */
+  const PENDING_LOAD_TIME_COL_0 = 9;
   const PENDING_VEHICLE_COL_0 = 10;
   const PENDING_UNLOAD_COL_0 = 11;
 
@@ -300,6 +346,35 @@
 
   function mergeStatusLooksLikeTransferSheet(s) {
     return MERGE_STATUS_TRANSFER_STATE_RE.test(String(s || ""));
+  }
+
+  /** 날짜+시간 문자열에서 시각만 HH:MM 또는 HH:MM:SS (이관 시트 J열 상차시간 등). */
+  function extractTimePartFromDateTimeCell(raw) {
+    const t = String(raw || "")
+      .replace(/\u00a0/g, " ")
+      .trim();
+    if (!t) return "";
+    const pad2 = function (n) {
+      return (n < 10 ? "0" : "") + n;
+    };
+    const mKr = t.match(/(\d{1,2})\s*시(?:\s*(\d{1,2})\s*분)?/);
+    if (mKr) {
+      const h = parseInt(mKr[1], 10);
+      const min = mKr[2] != null ? parseInt(mKr[2], 10) : 0;
+      if (Number.isFinite(h) && h >= 0 && h <= 23 && Number.isFinite(min) && min >= 0 && min <= 59) {
+        return pad2(h) + ":" + pad2(min);
+      }
+    }
+    let best = "";
+    const re = /\b(\d{1,2}):(\d{2})(?::(\d{2}))?\b/g;
+    let mm;
+    while ((mm = re.exec(t)) !== null) {
+      const h = parseInt(mm[1], 10);
+      if (h >= 0 && h <= 23) {
+        best = pad2(h) + ":" + mm[2] + (mm[3] != null && mm[3] !== "" ? ":" + mm[3] : "");
+      }
+    }
+    return best;
   }
 
   /** 워크플로 상태 열이 배송/운송 라벨인 경우 — 이관 상태를 가리지 않음 */
@@ -335,33 +410,114 @@
     return /재고\s*부족|재고부족/.test(String(statusDisplay || "").trim());
   }
 
+  /** SLA/진열대기 GC 문자열이 직납(1007…) 구간이면 true — 선택적 GC 접두 뒤 1007 시작. */
+  function mergeGcRawLooksDirectVendor1007(gcRaw) {
+    let u = String(gcRaw != null ? gcRaw : "")
+      .replace(/\u00a0/g, " ")
+      .trim()
+      .toUpperCase();
+    if (!u) return false;
+    u = u.replace(/^GC[-_\s]*/, "");
+    return u.indexOf("1007") === 0;
+  }
+
+  /** ①~⑧: GC 1007대 + (표시 전)재고부족일 때만 직납 행 스타일 규칙 적용 */
+  function mergeDirectVendor1007DisplayApplies(gcRaw, resolvedStatusBeforeOverride, dashboardSlot1) {
+    const st = String(resolvedStatusBeforeOverride != null ? resolvedStatusBeforeOverride : "").trim();
+    const slot = dashboardSlot1 != null ? Number(dashboardSlot1) : 9;
+    if (!Number.isFinite(slot) || slot < 1 || slot > 8) return false;
+    if (!mergeGcRawLooksDirectVendor1007(gcRaw)) return false;
+    if (!mergeDisplayStatusIsStockShortageForDashSort(st)) return false;
+    return true;
+  }
+
+  /**
+   * ①~⑧: 재고부족 → 상태는 진열대기로 맞춤(이관 흐름과 동일한 표시 규칙).
+   * @param {string} gcRaw
+   * @param {string} statusDisplay resolveMergeTableStatusDisplay 결과
+   * @param {number} [dashboardSlot1] 1~9
+   */
+  function applyDirectVendor1007StockStatusOverride(gcRaw, statusDisplay, dashboardSlot1) {
+    const st = String(statusDisplay != null ? statusDisplay : "").trim();
+    if (mergeDirectVendor1007DisplayApplies(gcRaw, st, dashboardSlot1)) return "진열대기";
+    return st;
+  }
+
+  /**
+   * ①~⑧: 동일 조건에서 우선순위 열에 직납 표기(데이터 소스 우선순위 대신).
+   */
+  function applyDirectVendor1007PriorityOverride(
+    gcRaw,
+    priorityDisplay,
+    resolvedStatusBeforeOverride,
+    dashboardSlot1
+  ) {
+    const st0 = String(resolvedStatusBeforeOverride != null ? resolvedStatusBeforeOverride : "").trim();
+    if (mergeDirectVendor1007DisplayApplies(gcRaw, st0, dashboardSlot1)) return "직납";
+    return String(priorityDisplay != null ? priorityDisplay : "").trim();
+  }
+
   const workbooks = [null, null];
   const currentSheet = ["", ""];
-  /** 대시보드: SKU별 보충 완료 체크 — 세션 중 localStorage에 두며, 페이지 새로고침 시 초기화 */
-  const mergeReplenishDoneBySku = new Set();
-  const MERGE_DONE_STORAGE_KEY = "yna4_merge_replenish_done_v1";
+  /** 대시보드: 더블클릭 또는 보충조회(로케이션 조회)로만 초록(완료) 표시 — SKU+GC 행 단위(v2). */
+  const mergeReplenishDoneKeys = new Set();
+  const MERGE_DONE_STORAGE_KEY = "yna4_merge_replenish_done_v2";
 
-  function mergeReplenishDoneKey(sku) {
-    return String(sku || "").trim() === "" ? "__EMPTY_SKU__" : String(sku).trim();
+  /** @param {string} sku @param {string} [gcRaw] */
+  function mergeReplenishDoneKey(sku, gcRaw) {
+    const skuPart =
+      String(sku || "").trim() === "" ? "__EMPTY_SKU__" : normalizeSkuJoinKey(sku);
+    const gcNorm = normalizeMergeGcKey(gcRaw);
+    const gcPart = gcNorm === "" ? "__NO_GC__" : gcNorm;
+    return skuPart + "|" + gcPart;
   }
 
   function loadMergeReplenishDoneFromStorage() {
     try {
       const raw = localStorage.getItem(MERGE_DONE_STORAGE_KEY);
       if (!raw) return;
-      const arr = JSON.parse(raw);
-      if (!Array.isArray(arr)) return;
-      mergeReplenishDoneBySku.clear();
-      for (let i = 0; i < arr.length; i++) {
-        mergeReplenishDoneBySku.add(String(arr[i]));
+      const j = JSON.parse(raw);
+      mergeReplenishDoneKeys.clear();
+      if (Array.isArray(j)) {
+        for (let i = 0; i < j.length; i++) {
+          mergeReplenishDoneKeys.add(String(j[i]));
+        }
+        return;
+      }
+      if (j && typeof j === "object") {
+        const m = j.m || j.manual;
+        if (Array.isArray(m)) {
+          for (let k = 0; k < m.length; k++) mergeReplenishDoneKeys.add(String(m[k]));
+        }
       }
     } catch (e) {}
   }
 
   function saveMergeReplenishDoneToStorage() {
     try {
-      localStorage.setItem(MERGE_DONE_STORAGE_KEY, JSON.stringify(Array.from(mergeReplenishDoneBySku)));
+      localStorage.setItem(
+        MERGE_DONE_STORAGE_KEY,
+        JSON.stringify({
+          m: Array.from(mergeReplenishDoneKeys)
+        })
+      );
     } catch (e) {}
+  }
+
+  /** 워크플로우 TSV가 바뀌면 완료(초록) 전부 초기화 */
+  let workflowTsvSnapshotForDoneReset = null;
+
+  function resetMergeReplenishDoneIfWorkflowChanged() {
+    const raw = getWorkflowTsvText();
+    if (workflowTsvSnapshotForDoneReset === null) {
+      workflowTsvSnapshotForDoneReset = raw;
+      return;
+    }
+    if (raw === workflowTsvSnapshotForDoneReset) return;
+    workflowTsvSnapshotForDoneReset = raw;
+    if (!mergeReplenishDoneKeys.size) return;
+    mergeReplenishDoneKeys.clear();
+    saveMergeReplenishDoneToStorage();
   }
 
   /** 페이지를 새로 불러올 때마다 이전 세션 데이터를 지운다. */
@@ -428,10 +584,25 @@
   }
 
   function populateSheetSelect(i, wb) {
+    if (!wb) return;
+    const names = wb.SheetNames || [];
+    const preferredByIndex = {
+      0: "②DBeaver",
+      1: "①이관현황 Data"
+    };
+    let pick = "";
+    if (currentSheet[i] && names.indexOf(currentSheet[i]) !== -1) {
+      pick = currentSheet[i];
+    } else if (preferredByIndex[i] && names.indexOf(preferredByIndex[i]) !== -1) {
+      pick = preferredByIndex[i];
+    } else {
+      pick = names[0] || "";
+    }
+    currentSheet[i] = pick;
+
     const strip = document.getElementById("sheetStrip" + i);
     const sel = document.getElementById("sheetSelect" + i);
-    if (!strip || !sel || !wb) return;
-    const names = wb.SheetNames || [];
+    if (!strip || !sel) return;
     sel.innerHTML = "";
     names.forEach(function (n) {
       const o = document.createElement("option");
@@ -446,20 +617,7 @@
       strip.classList.remove("is-visible");
       strip.setAttribute("aria-hidden", "true");
     }
-    const preferredByIndex = {
-      0: "②DBeaver",
-      1: "①이관현황 Data"
-    };
-    let pick = "";
-    if (currentSheet[i] && names.indexOf(currentSheet[i]) !== -1) {
-      pick = currentSheet[i];
-    } else if (preferredByIndex[i] && names.indexOf(preferredByIndex[i]) !== -1) {
-      pick = preferredByIndex[i];
-    } else {
-      pick = names[0] || "";
-    }
     sel.value = pick;
-    currentSheet[i] = pick;
   }
 
   function updateExcelSummary(i) {
@@ -608,7 +766,7 @@
     return String(r);
   }
 
-  /** 붙여넣기 각 줄 → { sku, bc, unitStr, deadlineRaw, statusRaw } */
+  /** 붙여넣기 각 줄 → { sku, bc, unitStr, deadlineRaw, statusRaw } (statusRaw = 워크플로 J열) */
   function parseWorkflowRowObjects(lines) {
     const out = [];
     for (let i = 0; i < lines.length; i++) {
@@ -755,14 +913,17 @@
       if (!Array.isArray(row)) continue;
       const skuRaw = String(row[SLA_SKU_COL_0] != null ? row[SLA_SKU_COL_0] : "").trim();
       const skuKey = normalizeSkuJoinKey(skuRaw);
-      if (!skuKey) continue;
+      const bcRaw = String(row[SLA_BARCODE_COL_0] != null ? row[SLA_BARCODE_COL_0] : "").trim();
+      const bcKey = normalizeSkuJoinKey(bcRaw);
+      const primaryKey = skuKey || bcKey;
+      if (!primaryKey) continue;
       const gc = String(row[SLA_GC_COL_0] != null ? row[SLA_GC_COL_0] : "").trim();
       const pname = String(row[SLA_PRODUCT_NAME_COL_0] != null ? row[SLA_PRODUCT_NAME_COL_0] : "").trim();
       const tempZone = String(row[SLA_TEMP_ZONE_COL_0] != null ? row[SLA_TEMP_ZONE_COL_0] : "").trim();
       const qtyRaw = String(row[SLA_QTY_COL_0] != null ? row[SLA_QTY_COL_0] : "").trim();
       const qtyNum = parseWorkflowUnitNumber(qtyRaw);
-      if (!map.has(skuKey)) map.set(skuKey, { entries: [], _byGc: new Map() });
-      const grp = map.get(skuKey);
+      if (!map.has(primaryKey)) map.set(primaryKey, { entries: [], _byGc: new Map() });
+      const grp = map.get(primaryKey);
       const gcDedupKey = normalizeMergeGcKey(gc);
       if (grp._byGc.has(gcDedupKey)) {
         const existing = grp._byGc.get(gcDedupKey);
@@ -776,10 +937,8 @@
         grp._byGc.set(gcDedupKey, ent);
         grp.entries.push(ent);
       }
-      const bcRaw = String(row[SLA_BARCODE_COL_0] != null ? row[SLA_BARCODE_COL_0] : "").trim();
-      const bcKey = normalizeSkuJoinKey(bcRaw);
-      if (bcKey && bcKey !== skuKey && !bcAlias.has(bcKey) && !map.has(bcKey)) {
-        bcAlias.set(bcKey, skuKey);
+      if (bcKey && bcKey !== primaryKey && !bcAlias.has(bcKey) && !map.has(bcKey)) {
+        bcAlias.set(bcKey, primaryKey);
       }
     }
     map.forEach(function (grp) {
@@ -832,7 +991,63 @@
     return out;
   }
 
-  /** A열 GC → B·H·I·K·L (통합 상태 붙여넣기: 진열대기·진열중·이동중 동일 열 가정, GC당 첫 행). */
+  /**
+   * 펼친 GC 행마다 보충수량 표시 — Unit을 SLA GC재고(P) 순으로 배분.
+   * ⑨ RCRT1 등 누적 제외 GC는 해당 줄에 워크플로 Unit 전체 표시(기존 ⑨ 정책).
+   */
+  function allocateUnitDisplayAcrossSlaEntries(slaEntries, unitNumeric, unitDisplayFallback) {
+    if (!slaEntries || !slaEntries.length) return [];
+    if (!Number.isFinite(unitNumeric) || unitNumeric <= 0) {
+      const u = String(unitDisplayFallback != null ? unitDisplayFallback : "");
+      return slaEntries.map(function () {
+        return u;
+      });
+    }
+    let remaining = unitNumeric;
+    const out = [];
+    let i;
+    for (i = 0; i < slaEntries.length; i++) {
+      const ent = slaEntries[i];
+      if (remaining <= 0) {
+        out.push("0");
+        continue;
+      }
+      if (mergeGcSlaQtyExcludedFromEtcDash9(ent.gc)) {
+        out.push(formatAggregatedUnitSum(unitNumeric));
+        continue;
+      }
+      const q = Number.isFinite(ent.qty) ? ent.qty : 0;
+      let alloc;
+      if (q > 0) {
+        alloc = Math.min(q, remaining);
+      } else if (i === slaEntries.length - 1) {
+        alloc = remaining;
+      } else {
+        alloc = 0;
+      }
+      remaining -= alloc;
+      out.push(formatAggregatedUnitSum(alloc));
+    }
+    return out;
+  }
+
+  /**
+   * 워크플로 → SLA 그룹: SKU(F) 우선, 실패 시 바코드(G) fallback (엑셀 N→DBeaver I 조인).
+   * @returns {{ group: object|null, sortKey: string }}
+   */
+  function resolveSlaLookupGroupForWorkflowRow(row, slaLookup) {
+    const skuKey = normalizeSkuJoinKey(row && row.sku);
+    if (skuKey && slaLookup.has(skuKey)) {
+      return { group: slaLookup.get(skuKey), sortKey: skuKey };
+    }
+    const bcKey = normalizeSkuJoinKey(row && row.barcode);
+    if (bcKey && slaLookup.has(bcKey)) {
+      return { group: slaLookup.get(bcKey), sortKey: skuKey || bcKey };
+    }
+    return { group: null, sortKey: skuKey || bcKey || "" };
+  }
+
+  /** A열 GC → B·H·I·J·K·L (통합 상태 붙여넣기: I=상태, J=상차시각, K=차량, L=하차, GC당 첫 행). */
   function buildGcSheetLookupMap(wbIndex) {
     const map = new Map();
     const wb = workbooks[wbIndex];
@@ -850,6 +1065,7 @@
       const priority = String(row[PENDING_PRIORITY_COL_0] != null ? row[PENDING_PRIORITY_COL_0] : "").trim();
       const ct = String(row[PENDING_CT_COL_0] != null ? row[PENDING_CT_COL_0] : "").trim();
       const status = String(row[PENDING_STATUS_COL_0] != null ? row[PENDING_STATUS_COL_0] : "").trim();
+      const loadTimeRaw = row[PENDING_LOAD_TIME_COL_0];
       const vehicle = String(row[PENDING_VEHICLE_COL_0] != null ? row[PENDING_VEHICLE_COL_0] : "").trim();
       const unloadRaw = row[PENDING_UNLOAD_COL_0];
       if (!map.has(gcKey))
@@ -857,6 +1073,7 @@
           ct: ct,
           priority: priority,
           status: status,
+          loadTimeRaw: loadTimeRaw,
           vehicle: vehicle,
           unloadRaw: unloadRaw
         });
@@ -895,6 +1112,25 @@
     return /재고|부족|결품|품절|단종|쿠팡배송/i.test(t);
   }
 
+  /** 워크플로 출고마감(I=9) → 보충기한: 엑셀 보충건 X열과 동일하게 50분 당김. */
+  const MERGE_REPLENISH_DEADLINE_OFFSET_MINUTES = 50;
+
+  function adjustWorkflowDeadlineRawForDisplay(raw) {
+    if (raw == null || raw === "") return raw;
+    if (workflowDeadlineRawIsLikelyStatusNotTime(raw)) return raw;
+    const d = parseUnloadDateTime(raw);
+    if (!d || isNaN(d.getTime())) return raw;
+    return new Date(d.getTime() - MERGE_REPLENISH_DEADLINE_OFFSET_MINUTES * 60 * 1000);
+  }
+
+  /** 보충기한 열·정렬·0:00/0:40 집계용 (출고마감 −50분). */
+  function formatReplenishDeadlineDisplay(raw) {
+    if (workflowDeadlineRawIsLikelyStatusNotTime(raw)) {
+      return formatUnloadTimeDisplay("");
+    }
+    return formatUnloadTimeDisplay(adjustWorkflowDeadlineRawForDisplay(raw));
+  }
+
   /** 하차시간·워크플로 보충기한(I=9열): 시:분만, 로컬 24시간 형식(00:00~23:59). */
   function formatUnloadTimeDisplay(raw) {
     const d = parseUnloadDateTime(raw);
@@ -909,7 +1145,7 @@
 
   function mergeStatusSummaryBucketFromDeadlineRaw(deadlineRaw) {
     const safeRaw = workflowDeadlineRawIsLikelyStatusNotTime(deadlineRaw) ? "" : deadlineRaw;
-    const disp = formatUnloadTimeDisplay(safeRaw);
+    const disp = formatReplenishDeadlineDisplay(safeRaw);
     const t = String(disp.text || "").trim();
     if (!t) return { label: "미지정", sortRank: 2, sortValue: Number.POSITIVE_INFINITY };
     const m = t.match(/^(\d{1,2})\s*:\s*(\d{2})$/);
@@ -931,142 +1167,167 @@
   function resolveMergeRowReplenishDeadlineSortKey(workflowRow) {
     const raw = workflowRow && workflowRow.deadlineRaw;
     if (workflowDeadlineRawIsLikelyStatusNotTime(raw)) return Number.POSITIVE_INFINITY;
-    const d = parseUnloadDateTime(raw);
+    const adjusted = adjustWorkflowDeadlineRawForDisplay(raw);
+    const d = parseUnloadDateTime(adjusted);
     if (d && !isNaN(d.getTime())) return d.getTime();
     const bucket = mergeStatusSummaryBucketFromDeadlineRaw(raw);
     return Number.isFinite(bucket.sortValue) ? bucket.sortValue : Number.POSITIVE_INFINITY;
   }
 
-  function mergeStatusSummaryTempInfoFromSlaEntry(slaEnt) {
-    if (!slaEnt) {
-      return { label: "미지정", order: 99 };
+  /** 통합표 보충기한 셀에서 마지막 시각 토큰(H:mm) → 0~1439 분. */
+  function mergeDisplayedDeadlineLastHmMinutes(deadlineCellText) {
+    const s = String(deadlineCellText != null ? deadlineCellText : "")
+      .replace(/\u00a0/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!s) return null;
+    let last = null;
+    const re = /(\d{1,2})\s*[:：]\s*(\d{2})/g;
+    let m;
+    while ((m = re.exec(s)) !== null) {
+      const h = parseInt(m[1], 10);
+      const mi = parseInt(m[2], 10);
+      if (h >= 0 && h <= 23 && mi >= 0 && mi <= 59) last = h * 60 + mi;
     }
-    const tz = formatTempZoneCell(slaEnt.tempZone);
-    const key = String(tz.filterKey || "");
-    if (key === "FROZEN") return { label: "FROZEN", order: 1 };
-    if (key === "CHILLED") return { label: "CHILLED", order: 2 };
-    if (key === "AMBIENT") return { label: "AMBIENT", order: 3 };
-    if (key === "RM") return { label: "RM", order: 4 };
-    if (key === "OTHER") return { label: String(tz.display || "기타"), order: 5 };
-    return { label: "미지정", order: 99 };
+    return last;
   }
 
-  function mergeStatusSummaryKey(statusText) {
-    const t = String(statusText || "").trim();
-    if (t === "진열대기") return "waiting";
-    if (t === "이동중") return "moving";
-    return "";
+  /** 보충기한 시각이 정확히 00:50 → 0:00 열, 01:30 → 0:40 열. 그 외는 집계 제외. */
+  function mergeReplenishWindow5730BandFromMinutes(mins) {
+    if (mins === 50) return "00:50";
+    if (mins === 90) return "01:30";
+    return null;
   }
 
-  function renderMergeTimeStatusSummary(summaryRowsByKey, deadlineMetaByLabel) {
+  function scanMergeDashboardsForReplenishWindowSummary() {
+    const idxStatus = MERGE_TABLE_HEADERS.indexOf("상태");
+    const idxDeadline = MERGE_TABLE_HEADERS.indexOf("보충기한");
+    const idxUnit = MERGE_TABLE_HEADERS.indexOf("보충수량");
+    const idxTemp = MERGE_TABLE_HEADERS.indexOf("온도대");
+    const out = {
+      AMBIENT: { col00: 0, col40: 0, prepack: 0 },
+      CHILLED: { col00: 0, col40: 0, prepack: 0 },
+      FROZEN: { col00: 0, col40: 0, prepack: 0 },
+    };
+    const prepackSlots = { 1: true, 2: true, 5: true };
+    let dash;
+    for (dash = 1; dash <= 8; dash++) {
+      const tbl = document.getElementById("mergePreviewTable" + dash);
+      if (!tbl) continue;
+      const isPrepackSlot = !!prepackSlots[dash];
+      const rows = tbl.querySelectorAll("tbody tr");
+      let ri;
+      for (ri = 0; ri < rows.length; ri++) {
+        const tr = rows[ri];
+        if (tr.classList.contains("merge-row-done")) continue;
+        const tds = tr.querySelectorAll("td");
+        if (tds.length <= Math.max(idxStatus, idxDeadline, idxUnit, idxTemp)) continue;
+        const status = mergePreviewCellTextForSheetsTsv(tds[idxStatus]);
+        if (status !== "진열대기") continue;
+        const mins = mergeDisplayedDeadlineLastHmMinutes(mergePreviewCellTextForSheetsTsv(tds[idxDeadline]));
+        const band = mergeReplenishWindow5730BandFromMinutes(mins);
+        if (!band) continue;
+        const tempCell = mergePreviewCellTextForSheetsTsv(tds[idxTemp]);
+        const tz = formatTempZoneCell(tempCell);
+        const fk = String(tz.filterKey || "");
+        if (fk !== "AMBIENT" && fk !== "CHILLED" && fk !== "FROZEN") continue;
+        const u = parseFloat(String(mergePreviewCellTextForSheetsTsv(tds[idxUnit]) || "").replace(/,/g, ""));
+        const qty = Number.isFinite(u) ? u : 0;
+        if (band === "00:50") out[fk].col00 += qty;
+        else out[fk].col40 += qty;
+        if (isPrepackSlot) out[fk].prepack += qty;
+      }
+    }
+    return out;
+  }
+
+  function formatReplenishWindowSummaryCell(n) {
+    if (!Number.isFinite(n) || n === 0) return "–";
+    return formatAggregatedUnitSum(n);
+  }
+
+  function renderMergeReplenishWindowSummary() {
     const thead = document.getElementById("mergeTimeStatusSummaryThead");
     const tbody = document.getElementById("mergeTimeStatusSummaryTbody");
     if (!thead || !tbody) return;
     thead.innerHTML = "";
     tbody.innerHTML = "";
-    const rowKeys = Object.keys(summaryRowsByKey || {});
-    const deadlineLabels = Object.keys(deadlineMetaByLabel || {}).sort(function (a, b) {
-      const aa = deadlineMetaByLabel[a] || {};
-      const bb = deadlineMetaByLabel[b] || {};
-      const ra = aa.sortRank != null ? aa.sortRank : 9;
-      const rb = bb.sortRank != null ? bb.sortRank : 9;
-      if (ra !== rb) return ra - rb;
-      const va = Number.isFinite(aa.sortValue) ? aa.sortValue : Number.POSITIVE_INFINITY;
-      const vb = Number.isFinite(bb.sortValue) ? bb.sortValue : Number.POSITIVE_INFINITY;
-      if (va !== vb) return va - vb;
-      return String(a).localeCompare(String(b), undefined, { numeric: true });
-    });
-    if (!rowKeys.length || !deadlineLabels.length) {
-      const trh = document.createElement("tr");
-      ["구분", "유닛수"].forEach(function (h) {
-        const th = document.createElement("th");
-        th.scope = "col";
-        th.textContent = h;
-        trh.appendChild(th);
-      });
-      thead.appendChild(trh);
-      const trEmpty = document.createElement("tr");
-      const tdEmpty = document.createElement("td");
-      tdEmpty.colSpan = 2;
-      tdEmpty.textContent = "집계할 데이터 없음";
-      trEmpty.appendChild(tdEmpty);
-      tbody.appendChild(trEmpty);
-      return;
-    }
+    const data = scanMergeDashboardsForReplenishWindowSummary();
+    const trTop = document.createElement("tr");
+    const thCat = document.createElement("th");
+    thCat.rowSpan = 2;
+    thCat.scope = "col";
+    thCat.textContent = "구분";
+    trTop.appendChild(thCat);
+    const thGroup = document.createElement("th");
+    thGroup.colSpan = 2;
+    thGroup.scope = "colgroup";
+    thGroup.textContent = "진열가능 보충건";
+    trTop.appendChild(thGroup);
+    const thPre = document.createElement("th");
+    thPre.rowSpan = 2;
+    thPre.scope = "col";
+    thPre.textContent = "PREPACK";
+    trTop.appendChild(thPre);
+    thead.appendChild(trTop);
 
-    const trHeader = document.createElement("tr");
-    const thLabel = document.createElement("th");
-    thLabel.scope = "col";
-    thLabel.textContent = "구분";
-    trHeader.appendChild(thLabel);
-    for (let d = 0; d < deadlineLabels.length; d++) {
-      const th = document.createElement("th");
-      th.scope = "col";
-      th.textContent = deadlineLabels[d];
-      trHeader.appendChild(th);
-    }
-    const thTotal = document.createElement("th");
-    thTotal.scope = "col";
-    thTotal.textContent = "합계";
-    trHeader.appendChild(thTotal);
-    thead.appendChild(trHeader);
+    const trSub = document.createElement("tr");
+    const th00 = document.createElement("th");
+    th00.className = "merge-time-status-summary-deadline";
+    th00.scope = "col";
+    th00.textContent = "0:00";
+    const th40 = document.createElement("th");
+    th40.className = "merge-time-status-summary-deadline";
+    th40.scope = "col";
+    th40.textContent = "0:40";
+    trSub.appendChild(th00);
+    trSub.appendChild(th40);
+    thead.appendChild(trSub);
 
-    const orderedRows = rowKeys.slice().sort(function (a, b) {
-      const ra = summaryRowsByKey[a] || {};
-      const rb = summaryRowsByKey[b] || {};
-      const ta = ra.tempOrder != null ? ra.tempOrder : 99;
-      const tb = rb.tempOrder != null ? rb.tempOrder : 99;
-      if (ta !== tb) return ta - tb;
-      const sa = ra.statusOrder != null ? ra.statusOrder : 99;
-      const sb = rb.statusOrder != null ? rb.statusOrder : 99;
-      if (sa !== sb) return sa - sb;
-      return String(ra.label || a).localeCompare(String(rb.label || b), undefined, { numeric: true });
-    });
-
-    const colTotals = {};
-    for (let d = 0; d < deadlineLabels.length; d++) {
-      colTotals[deadlineLabels[d]] = 0;
-    }
-    let grandTotal = 0;
-
-    for (let i = 0; i < orderedRows.length; i++) {
-      const rowKey = orderedRows[i];
-      const row = summaryRowsByKey[rowKey] || {};
+    const order = ["AMBIENT", "CHILLED", "FROZEN"];
+    let t00 = 0;
+    let t40 = 0;
+    let tPre = 0;
+    let i;
+    for (i = 0; i < order.length; i++) {
+      const k = order[i];
+      const row = data[k] || { col00: 0, col40: 0, prepack: 0 };
+      t00 += row.col00;
+      t40 += row.col40;
+      tPre += row.prepack;
       const tr = document.createElement("tr");
-      const tdLabel = document.createElement("td");
-      tdLabel.textContent = row.label || rowKey;
-      tr.appendChild(tdLabel);
-      let rowTotal = 0;
-      for (let d = 0; d < deadlineLabels.length; d++) {
-        const ddl = deadlineLabels[d];
-        const n = Number((row.byDeadline && row.byDeadline[ddl]) || 0);
-        rowTotal += n;
-        colTotals[ddl] += n;
-        const td = document.createElement("td");
-        td.textContent = formatAggregatedUnitSum(n);
-        tr.appendChild(td);
-      }
-      grandTotal += rowTotal;
-      const tdRowTotal = document.createElement("td");
-      tdRowTotal.textContent = formatAggregatedUnitSum(rowTotal);
-      tr.appendChild(tdRowTotal);
+      const tdL = document.createElement("td");
+      tdL.textContent = k;
+      tr.appendChild(tdL);
+      const td0 = document.createElement("td");
+      td0.className = "merge-time-status-summary-deadline";
+      td0.textContent = formatReplenishWindowSummaryCell(row.col00);
+      tr.appendChild(td0);
+      const td4 = document.createElement("td");
+      td4.className = "merge-time-status-summary-deadline";
+      td4.textContent = formatReplenishWindowSummaryCell(row.col40);
+      tr.appendChild(td4);
+      const tdP = document.createElement("td");
+      tdP.textContent = formatReplenishWindowSummaryCell(row.prepack);
+      tr.appendChild(tdP);
       tbody.appendChild(tr);
     }
-
-    const trTotal = document.createElement("tr");
-    const tdTotalLabel = document.createElement("td");
-    tdTotalLabel.textContent = "합계";
-    trTotal.appendChild(tdTotalLabel);
-    for (let d = 0; d < deadlineLabels.length; d++) {
-      const ddl = deadlineLabels[d];
-      const td = document.createElement("td");
-      td.textContent = formatAggregatedUnitSum(colTotals[ddl] || 0);
-      trTotal.appendChild(td);
-    }
-    const tdGrandTotal = document.createElement("td");
-    tdGrandTotal.textContent = formatAggregatedUnitSum(grandTotal);
-    trTotal.appendChild(tdGrandTotal);
-    tbody.appendChild(trTotal);
+    const trTot = document.createElement("tr");
+    const tdTL = document.createElement("td");
+    tdTL.textContent = "합계";
+    trTot.appendChild(tdTL);
+    const tdT0 = document.createElement("td");
+    tdT0.className = "merge-time-status-summary-deadline";
+    tdT0.textContent = formatReplenishWindowSummaryCell(t00);
+    trTot.appendChild(tdT0);
+    const tdT4 = document.createElement("td");
+    tdT4.className = "merge-time-status-summary-deadline";
+    tdT4.textContent = formatReplenishWindowSummaryCell(t40);
+    trTot.appendChild(tdT4);
+    const tdTP = document.createElement("td");
+    tdTP.textContent = formatReplenishWindowSummaryCell(tPre);
+    trTot.appendChild(tdTP);
+    tbody.appendChild(trTot);
   }
 
   function copyTextToClipboard(text) {
@@ -1133,13 +1394,36 @@
       .replace(/"/g, "&quot;");
   }
 
+  function mergeDeadlineKeyFromCellRowCells(cells) {
+    const labels = MERGE_TABLE_HEADERS.filter(function (h) {
+      return !MERGE_TABLE_HEADERS_DASHBOARD_ONLY.has(h);
+    });
+    const idxDl = labels.indexOf("보충기한");
+    if (idxDl < 0 || !cells || cells.length <= idxDl) return "__EMPTY__";
+    const s = String(cells[idxDl] != null ? cells[idxDl] : "").trim();
+    return s ? s : "__EMPTY__";
+  }
+
+  function mergeDeadlineKeyFromTrForExport(tr) {
+    const idxDl = MERGE_TABLE_HEADERS.indexOf("보충기한");
+    const col1 = idxDl >= 0 ? idxDl + 1 : 0;
+    if (!col1) return "__EMPTY__";
+    const td = tr.querySelector("td:nth-child(" + col1 + ")");
+    const s = td ? mergePreviewCellTextForSheetsTsv(td) : "";
+    return String(s || "").trim() ? String(s || "").trim() : "__EMPTY__";
+  }
+
+  function mergeDeadlineLabelFromKey(key) {
+    return key === "__EMPTY__" ? "(미지정)" : key;
+  }
+
   /**
-   * 팀즈 복사 공통: 한 표에서 (완료 열 제외·GC 빈 행 제외) 헤더·데이터 셀 문자열.
+   * 팀즈 복사 공통: 한 표에서 (초록 완료 행 제외·GC 빈 행 제외) 헤더·데이터 셀 문자열.
+   * @param {Set<string>|null} [enabledDeadlineKeys] null = 기한 필터 없음. 빈 Set = 포함 행 없음.
    * @returns {{ headerCells: string[]|null, dataRows: string[][] }|null}
    */
-  function getMergeTableCopyData(table) {
+  function getMergeTableCopyData(table, enabledDeadlineKeys) {
     if (!table) return null;
-    const idxDoneCol = MERGE_TABLE_HEADERS.indexOf("완료");
     const idxGc = MERGE_TABLE_HEADERS.indexOf("GC");
     const tbody = table.querySelector("tbody");
     const dataRows = [];
@@ -1148,8 +1432,7 @@
       for (let i = 0; i < trs.length; i++) {
         const tr = trs[i];
         if (tr.style.display === "none") continue;
-        const doneCb = tr.querySelector('input[type="checkbox"]');
-        if (doneCb && doneCb.checked) continue;
+        if (tr.classList.contains("merge-row-done")) continue;
         const tds = tr.querySelectorAll("td");
         if (idxGc >= 0) {
           if (tds.length <= idxGc) continue;
@@ -1158,8 +1441,14 @@
         }
         const cells = [];
         for (let j = 0; j < tds.length; j++) {
-          if (idxDoneCol >= 0 && j === idxDoneCol) continue;
+          if (tds[j].classList.contains("merge-col-dashboard-only")) continue;
           cells.push(mergePreviewCellTextForSheetsTsv(tds[j]));
+        }
+        if (
+          enabledDeadlineKeys != null &&
+          !enabledDeadlineKeys.has(mergeDeadlineKeyFromCellRowCells(cells))
+        ) {
+          continue;
         }
         dataRows.push(cells);
       }
@@ -1171,7 +1460,7 @@
       const headers = [];
       const ths = thRow.querySelectorAll("th");
       for (let h = 0; h < ths.length; h++) {
-        if (idxDoneCol >= 0 && h === idxDoneCol) continue;
+        if (ths[h].classList.contains("merge-col-dashboard-only")) continue;
         let t = ths[h].textContent != null ? String(ths[h].textContent) : "";
         t = t.replace(/\t/g, " ").replace(/\r?\n/g, " ").trim();
         headers.push(t);
@@ -1181,28 +1470,28 @@
     return { headerCells: headerCells, dataRows: dataRows };
   }
 
-  function gatherMergeCopySectionsList() {
+  function gatherMergeCopySectionsList(enabledDeadlineKeys) {
     const sections = [];
     const grid = document.getElementById("mergeDashboardsGrid");
     if (grid) {
       for (let d = 1; d <= 9; d++) {
         const table = document.getElementById("mergePreviewTable" + d);
         const title = getMergeDashboardSectionTitle(d);
-        const dat = getMergeTableCopyData(table);
+        const dat = getMergeTableCopyData(table, enabledDeadlineKeys);
         if (dat) sections.push({ title: title, headerCells: dat.headerCells, dataRows: dat.dataRows });
       }
     } else {
       const table = document.getElementById("mergePreviewTable");
-      const dat = getMergeTableCopyData(table);
+      const dat = getMergeTableCopyData(table, enabledDeadlineKeys);
       if (dat) sections.push({ title: "", headerCells: dat.headerCells, dataRows: dat.dataRows });
     }
     return sections;
   }
 
   /** 대시보드 번호 1~9 중 지정한 패널만(팀즈 분할 복사). 레거시 단일 표면 전체와 동일. */
-  function gatherMergeCopySectionsListForDashboardIds(dashboardIds) {
+  function gatherMergeCopySectionsListForDashboardIds(dashboardIds, enabledDeadlineKeys) {
     const grid = document.getElementById("mergeDashboardsGrid");
-    if (!grid) return gatherMergeCopySectionsList();
+    if (!grid) return gatherMergeCopySectionsList(enabledDeadlineKeys);
     const want = {};
     for (let i = 0; i < dashboardIds.length; i++) want[dashboardIds[i]] = true;
     const sections = [];
@@ -1210,7 +1499,7 @@
       if (!want[d]) continue;
       const table = document.getElementById("mergePreviewTable" + d);
       const title = getMergeDashboardSectionTitle(d);
-      const dat = getMergeTableCopyData(table);
+      const dat = getMergeTableCopyData(table, enabledDeadlineKeys);
       if (dat) sections.push({ title: title, headerCells: dat.headerCells, dataRows: dat.dataRows });
     }
     return sections;
@@ -1228,6 +1517,135 @@
       if (sec.title) lines.push("");
     }
     return lines;
+  }
+
+  function compareMergeDeadlineGroupKeys(a, b) {
+    if (a === "__EMPTY__" && b === "__EMPTY__") return 0;
+    if (a === "__EMPTY__") return 1;
+    if (b === "__EMPTY__") return -1;
+    const ba = mergeStatusSummaryBucketFromDeadlineRaw(a);
+    const bb = mergeStatusSummaryBucketFromDeadlineRaw(b);
+    if (ba.sortRank !== bb.sortRank) return ba.sortRank - bb.sortRank;
+    if (ba.sortValue !== bb.sortValue) return ba.sortValue - bb.sortValue;
+    return String(ba.label || a).localeCompare(String(bb.label || b), undefined, { numeric: true });
+  }
+
+  /** 통합표 보충기한 칩 ON/OFF (로컬). true = 복사·인쇄에 포함 */
+  const MERGE_DEADLINE_CHIP_STATE_KEY = "yna4_merge_deadline_chip_on_v1";
+
+  function loadMergeDeadlineChipStateMap() {
+    try {
+      const raw = localStorage.getItem(MERGE_DEADLINE_CHIP_STATE_KEY);
+      if (!raw) return {};
+      const j = JSON.parse(raw);
+      return j && typeof j === "object" ? j : {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function saveMergeDeadlineChipStateMap(map) {
+    try {
+      localStorage.setItem(MERGE_DEADLINE_CHIP_STATE_KEY, JSON.stringify(map || {}));
+    } catch (e2) {}
+  }
+
+  function collectUniqueMergePreviewDeadlinesFromDom() {
+    const grid = document.getElementById("mergeDashboardsGrid");
+    if (!grid) return [];
+    const idxGc = MERGE_TABLE_HEADERS.indexOf("GC");
+    const seen = Object.create(null);
+    const keys = [];
+    for (let d = 1; d <= 9; d++) {
+      const table = document.getElementById("mergePreviewTable" + d);
+      if (!table) continue;
+      const tbody = table.querySelector("tbody");
+      if (!tbody) continue;
+      const trs = tbody.querySelectorAll("tr");
+      for (let i = 0; i < trs.length; i++) {
+        const tr = trs[i];
+        if (tr.style.display === "none") continue;
+        if (tr.classList.contains("merge-row-done")) continue;
+        const tds = tr.querySelectorAll("td");
+        if (idxGc >= 0) {
+          if (tds.length <= idxGc) continue;
+          if (!mergePreviewCellTextForSheetsTsv(tds[idxGc])) continue;
+        }
+        const k = mergeDeadlineKeyFromTrForExport(tr);
+        if (!seen[k]) {
+          seen[k] = true;
+          keys.push(k);
+        }
+      }
+    }
+    keys.sort(compareMergeDeadlineGroupKeys);
+    return keys.map(function (k) {
+      return { key: k, label: mergeDeadlineLabelFromKey(k) };
+    });
+  }
+
+  /** null = 칩 없음·기한 필터 없음. 빈 Set = 모두 꺼짐 */
+  function getMergeDeadlineExportEnabledKeysSet() {
+    const host = document.getElementById("mergeDeadlineExportChips");
+    if (!host) return null;
+    const btns = host.querySelectorAll("button.merge-deadline-chip[data-deadline-key]");
+    if (!btns.length) return null;
+    const s = new Set();
+    for (let i = 0; i < btns.length; i++) {
+      const b = btns[i];
+      if (b.getAttribute("aria-pressed") === "true") {
+        s.add(String(b.getAttribute("data-deadline-key") || "__EMPTY__"));
+      }
+    }
+    return s;
+  }
+
+  function syncMergeDeadlineExportChips() {
+    const host = document.getElementById("mergeDeadlineExportChips");
+    if (!host) return;
+    const list = collectUniqueMergePreviewDeadlinesFromDom();
+    if (!list.length) {
+      host.innerHTML =
+        "<span class=\"merge-deadline-chips-hint\">워크플로 반영 후 보충기한별 버튼이 표시됩니다</span>";
+      return;
+    }
+    const prev = loadMergeDeadlineChipStateMap();
+    const pruned = {};
+    for (let i = 0; i < list.length; i++) {
+      const kk = list[i].key;
+      if (Object.prototype.hasOwnProperty.call(prev, kk)) {
+        pruned[kk] = prev[kk];
+      } else {
+        pruned[kk] = true;
+      }
+    }
+    saveMergeDeadlineChipStateMap(pruned);
+    host.innerHTML = "";
+    const lab = document.createElement("span");
+    lab.className = "merge-deadline-chips-label";
+    lab.textContent = "보충기한:";
+    host.appendChild(lab);
+    for (let j = 0; j < list.length; j++) {
+      const item = list[j];
+      const on = pruned[item.key] !== false;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn-merge-teams-copy btn-merge-teams-copy--compact merge-deadline-chip";
+      if (on) btn.classList.add("merge-deadline-chip--on");
+      btn.textContent = item.label;
+      btn.setAttribute("data-deadline-key", item.key);
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+      btn.title = "켜짐: 팀즈 복사·인쇄에 포함 · 꺼짐: 제외";
+      btn.addEventListener("click", function () {
+        const cur = loadMergeDeadlineChipStateMap();
+        const k = btn.getAttribute("data-deadline-key");
+        const curOn = cur[k] !== false;
+        cur[k] = !curOn;
+        saveMergeDeadlineChipStateMap(cur);
+        syncMergeDeadlineExportChips();
+      });
+      host.appendChild(btn);
+    }
   }
 
   function buildTeamsHtmlFromSections(sections) {
@@ -1272,14 +1690,13 @@
     return parts.join("");
   }
 
-  /** 대시보드 표 → TSV 한 셀(탭/줄바꿈 제거). 구글 시트용 복사에서는 완료 열 제외. */
+  /** 대시보드 표 → TSV 한 셀(탭/줄바꿈 제거). */
   function mergePreviewCellTextForSheetsTsv(td) {
-    const cb = td.querySelector && td.querySelector('input[type="checkbox"]');
-    if (cb) return cb.checked ? "TRUE" : "FALSE";
     let s = td.textContent != null ? String(td.textContent) : "";
     s = s.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
     s = s.replace(/\t/g, " ");
     s = s.replace(/\n/g, " ");
+    s = s.replace(/\u00a0/g, " ");
     return s.trim();
   }
 
@@ -1289,25 +1706,26 @@
   const MERGE_PRINT_HIDE_ORIGINAL_TABLE_CLASS = "yna4-merge-hidden-for-print-pages";
 
   /**
-   * 인쇄 청크 표 <colgroup> 너비 (14개 열, MERGE_TABLE_HEADERS 순서와 일치).
+   * 인쇄 청크 표 <colgroup> 너비 (12열: 상차시간·SKU ID 제거 후 순서).
+   * 각 데이터 행 td 순서(1→12):
+   *   Barcode, 보충수량, GC재고, 상품명, GC, CT, 우선순위, 온도대, 차량번호, 하차시간, 상태, 보충기한
+   * 보충기한(12번째)은 보충데이터입력.html @media print 에서 display:none (폭 0) — PDF에는 안 보임.
+   * 청크 표에는 열 제목 thead 행 없음. 구역 제목만 tbody 첫 줄(yna4-merge-print-title-row)에 표시.
    * table-layout: fixed 에서 첫 행이 제목(colspan) 일 때도 열 폭을 균일하게 고정.
-   * 인쇄에서 숨기는 열(보충기한=13, 완료=14)은 0 으로 둔다(CSS display:none 과 함께).
    */
   const MERGE_PRINT_COL_WIDTHS = [
-    "5%",    // 1 SKU ID
-    "10%",   // 2 Barcode
-    "3%",    // 3 보충수량
-    "3%",    // 4 GC재고
-    "24%",   // 5 상품명
-    "9%",    // 6 GC
-    "16%",   // 7 CT
-    "6%",    // 8 우선순위
-    "4.2%",  // 9 온도대
-    "5%",    // 10 차량번호
-    "6%",    // 11 하차시간
-    "4%",    // 12 상태
-    "0",     // 13 보충기한 (인쇄 숨김)
-    "0"      // 14 완료 (인쇄 숨김)
+    "11%",   // 1 Barcode
+    "3%",    // 2 보충수량
+    "3%",    // 3 GC재고
+    "29%",   // 4 상품명 (인쇄에서 SKU 열 제거분 반영)
+    "9%",    // 5 GC
+    "16%",   // 6 CT
+    "6%",    // 7 우선순위
+    "4.2%",  // 8 온도대
+    "5%",    // 9 차량번호
+    "6%",    // 10 하차시간
+    "4%",    // 11 상태
+    "0"      // 12 보충기한 (인쇄 숨김)
   ];
 
   function ensureMergePrintChunkHostElement(anchorEl) {
@@ -1347,7 +1765,17 @@
     return String(MERGE_DASHBOARD_PRINT_TITLES[dashboardIndex1 - 1] || "").trim();
   }
 
-  function collectMergePrintRowsFromTbody(tbody) {
+  /** 인쇄 청크용: 상차시간·SKU ID 등 복제 시 제거 → MERGE_PRINT_COL_WIDTHS 열 수와 맞춤. */
+  function stripMergeCellsExcludedFromPrintClone(tr) {
+    if (!tr || !tr.querySelectorAll) return;
+    const nodes = tr.querySelectorAll(".merge-col-dashboard-only, .merge-col-print-exclude");
+    let i;
+    for (i = 0; i < nodes.length; i++) {
+      nodes[i].remove();
+    }
+  }
+
+  function collectMergePrintRowsFromTbody(tbody, enabledDeadlineKeys) {
     const rows = [];
     if (!tbody) return rows;
     const gcCol = MERGE_TABLE_HEADERS.indexOf("GC") + 1;
@@ -1355,12 +1783,19 @@
     for (let i = 0; i < trs.length; i++) {
       const tr = trs[i];
       if (tr.style.display === "none") continue;
-      const doneCb = tr.querySelector('input[type="checkbox"]');
-      if (doneCb && doneCb.checked) continue;
+      if (tr.classList.contains("merge-row-done")) continue;
       if (gcCol > 0) {
         const td = tr.querySelector("td:nth-child(" + gcCol + ")");
         const gcText = td ? mergePreviewCellTextForSheetsTsv(td) : "";
         if (!String(gcText || "").trim()) continue;
+      }
+      const dk = mergeDeadlineKeyFromTrForExport(tr);
+      if (
+        enabledDeadlineKeys != null &&
+        enabledDeadlineKeys.size > 0 &&
+        !enabledDeadlineKeys.has(dk)
+      ) {
+        continue;
       }
       rows.push(tr);
     }
@@ -1374,6 +1809,7 @@
     const host = ensureMergePrintChunkHostElement(anchor);
     if (!host) return;
     host.innerHTML = "";
+    const enabledPrint = getMergeDeadlineExportEnabledKeysSet();
 
     /**
      * 인쇄: 페이지당 행 슬롯 MERGE_PRINT_ROWS_PER_PAGE 고정.
@@ -1384,10 +1820,7 @@
       const mount = parentEl || host;
       const titleText = sectionTitleText != null ? String(sectionTitleText).trim() : "";
       const slot = MERGE_PRINT_ROWS_PER_PAGE;
-      const colCount =
-        rows.length && rows[0].querySelectorAll
-          ? rows[0].querySelectorAll("td").length
-          : MERGE_TABLE_HEADERS.length;
+      const colCount = MERGE_PRINT_COL_WIDTHS.length;
       let start = 0;
       let chunkIndex = 0;
       while (start < rows.length) {
@@ -1416,7 +1849,9 @@
         }
         const end = Math.min(start + dataSlots, rows.length);
         for (let j = start; j < end; j++) {
-          tb.appendChild(rows[j].cloneNode(true));
+          const rowClone = rows[j].cloneNode(true);
+          stripMergeCellsExcludedFromPrintClone(rowClone);
+          tb.appendChild(rowClone);
         }
         start = end;
         tbl.appendChild(tb);
@@ -1431,13 +1866,14 @@
       for (let d = 1; d <= 9; d++) {
         const table = document.getElementById("mergePreviewTable" + d);
         const tbody = table ? table.querySelector("tbody") : null;
-        const rows = collectMergePrintRowsFromTbody(tbody);
+        const rows = collectMergePrintRowsFromTbody(tbody, enabledPrint);
         if (!rows.length) continue;
         any = true;
         const dashBlock = document.createElement("div");
         dashBlock.className = "yna4-merge-print-dash-block";
         host.appendChild(dashBlock);
-        const printTitle = String(MERGE_DASHBOARD_PRINT_TITLES[d - 1] || "").trim() || "대시보드 " + d;
+        let printTitle = String(getMergeDashboardSectionTitle(d) || "").trim();
+        if (!printTitle) printTitle = String(MERGE_DASHBOARD_PRINT_TITLES[d - 1] || "").trim() || "대시보드 " + d;
         appendChunksForRows(rows, table ? table.className : "merge-table", dashBlock, printTitle);
       }
     } else {
@@ -1447,7 +1883,7 @@
         if (table) table.classList.remove(MERGE_PRINT_HIDE_ORIGINAL_TABLE_CLASS);
         return;
       }
-      const rows = collectMergePrintRowsFromTbody(tbody);
+      const rows = collectMergePrintRowsFromTbody(tbody, enabledPrint);
       if (!rows.length) {
         if (table) table.classList.remove(MERGE_PRINT_HIDE_ORIGINAL_TABLE_CLASS);
         return;
@@ -1499,7 +1935,13 @@
       }, empty ? 2200 : 1600);
     }
 
-    const sections = gatherMergeCopySectionsListForDashboardIds(dashboardIds);
+    const ek = getMergeDeadlineExportEnabledKeysSet();
+    if (ek && ek.size === 0) {
+      alert("보충기한 버튼을 하나 이상 켜 주세요.");
+      flashButton(false, true);
+      return;
+    }
+    const sections = gatherMergeCopySectionsListForDashboardIds(dashboardIds, ek);
     if (!sections.length) {
       flashButton(false, true);
       return;
@@ -1517,9 +1959,8 @@
 
   /** 통합 상태 시트 K열 차량번호 — SLA 대표(gc) 기준 (다른 호출 호환용). */
   function resolveVehicleForMergeRow(row, slaLookup, stateGcLookup) {
-    const skuKey = normalizeSkuJoinKey(row.sku);
-    const slaGrp = skuKey && slaLookup.has(skuKey) ? slaLookup.get(skuKey) : null;
-    return resolveVehicleForMergeSlaEnt(slaGrp, stateGcLookup);
+    const resolved = resolveSlaLookupGroupForWorkflowRow(row, slaLookup);
+    return resolveVehicleForMergeSlaEnt(resolved.group, stateGcLookup);
   }
 
   /** 해당 표시 줄의 SLA GC → 통합 상태 K열 차량번호(정렬 보조키). SLA 없음이면 빈 문자열. */
@@ -1594,6 +2035,8 @@
     MERGE_TABLE_HEADERS.forEach(function (h) {
       const th = document.createElement("th");
       th.textContent = h;
+      if (MERGE_TABLE_HEADERS_DASHBOARD_ONLY.has(h)) th.classList.add("merge-col-dashboard-only");
+      if (MERGE_TABLE_HEADER_PRINT_STRIP.has(h)) th.classList.add("merge-col-print-exclude");
       trh.appendChild(th);
     });
     thead.appendChild(trh);
@@ -1603,10 +2046,19 @@
     return tbody;
   }
 
-  function buildMergePreviewTr(row, slaLookup, stateGcLookup, emptyTail, slaEntOverride) {
+  function buildMergePreviewTr(
+    row,
+    slaLookup,
+    stateGcLookup,
+    emptyTail,
+    slaEntOverride,
+    dashboardSlot1,
+    unitDisplayOverride
+  ) {
     const tr = document.createElement("tr");
     const tdSku = document.createElement("td");
     tdSku.textContent = row.sku;
+    tdSku.classList.add("merge-col-print-exclude");
     if (!String(row.sku || "").trim()) tdSku.classList.add("merge-cell-empty");
     attachMergeCellCopy(tdSku, row.sku);
     tr.appendChild(tdSku);
@@ -1615,14 +2067,17 @@
     if (!String(row.barcode || "").trim()) tdBc.classList.add("merge-cell-empty");
     attachMergeCellCopy(tdBc, row.barcode);
     tr.appendChild(tdBc);
-    const skuKey = normalizeSkuJoinKey(row.sku);
-    const slaGroup = skuKey && slaLookup.has(skuKey) ? slaLookup.get(skuKey) : null;
+    const slaResolved = resolveSlaLookupGroupForWorkflowRow(row, slaLookup);
+    const slaGroup = slaResolved.group;
     const slaEnt = slaEntOverride || slaGroup;
     const pname = slaEnt ? slaEnt.productName : "";
     const gcVal = slaEnt ? slaEnt.gc : "";
     const tempVal = slaEnt ? slaEnt.tempZone : "";
     const tdUnit = document.createElement("td");
-    const unitText = String(row.unit != null ? row.unit : "");
+    const unitText =
+      unitDisplayOverride != null && unitDisplayOverride !== ""
+        ? String(unitDisplayOverride)
+        : String(row.unit != null ? row.unit : "");
     tdUnit.textContent = unitText;
     if (!unitText) tdUnit.classList.add("merge-cell-empty");
     tr.appendChild(tdUnit);
@@ -1646,10 +2101,21 @@
     const gck = normalizeMergeGcKey(gcVal);
     if (gck && stateGcLookup.has(gck)) pendEnt = stateGcLookup.get(gck);
     const ctVal = pendEnt ? pendEnt.ct : "";
-    const priVal = pendEnt ? pendEnt.priority : "";
-    const statusVal = resolveMergeTableStatusDisplay(
+    const priValRaw = pendEnt ? pendEnt.priority : "";
+    const statusValResolved = resolveMergeTableStatusDisplay(
       pendEnt ? pendEnt.status : "",
       row.workflowStatus
+    );
+    const statusVal = applyDirectVendor1007StockStatusOverride(
+      gcVal,
+      statusValResolved,
+      dashboardSlot1
+    );
+    const priVal = applyDirectVendor1007PriorityOverride(
+      gcVal,
+      priValRaw,
+      statusValResolved,
+      dashboardSlot1
     );
     const tdCt = document.createElement("td");
     tdCt.textContent = ctVal;
@@ -1677,6 +2143,18 @@
     tdVeh.textContent = vehVal;
     if (!vehVal) tdVeh.className = "merge-cell-empty";
     tr.appendChild(tdVeh);
+    const showBoardingTime = MERGE_STATUS_TRANSFER_STATE_RE.test(String(statusVal || "").trim());
+    let boardingTimeText = "";
+    if (showBoardingTime && pendEnt && pendEnt.loadTimeRaw != null && pendEnt.loadTimeRaw !== "") {
+      const loadDisp = formatUnloadTimeDisplay(pendEnt.loadTimeRaw);
+      if (loadDisp.parsed) boardingTimeText = loadDisp.text;
+      else boardingTimeText = extractTimePartFromDateTimeCell(String(pendEnt.loadTimeRaw).trim());
+    }
+    const tdBoarding = document.createElement("td");
+    tdBoarding.textContent = boardingTimeText;
+    if (!boardingTimeText) tdBoarding.classList.add("merge-cell-empty");
+    tdBoarding.classList.add("merge-col-dashboard-only");
+    tr.appendChild(tdBoarding);
     const tdUnload = document.createElement("td");
     tdUnload.textContent = unloadDisp.text;
     if (!unloadDisp.text) tdUnload.className = "merge-cell-empty";
@@ -1685,43 +2163,24 @@
     tdStatus.textContent = statusVal;
     if (!statusVal) tdStatus.className = "merge-cell-empty";
     tr.appendChild(tdStatus);
-    const deadlineDisp = formatUnloadTimeDisplay(
-      workflowDeadlineRawIsLikelyStatusNotTime(row.deadlineRaw) ? "" : row.deadlineRaw
-    );
+    const deadlineDisp = formatReplenishDeadlineDisplay(row.deadlineRaw);
     const tdDeadline = document.createElement("td");
     tdDeadline.textContent = deadlineDisp.text;
     if (!deadlineDisp.text) tdDeadline.className = "merge-cell-empty";
     tr.appendChild(tdDeadline);
-    const doneKey = mergeReplenishDoneKey(row.sku);
-    const isDone = mergeReplenishDoneBySku.has(doneKey);
-    if (isDone) tr.classList.add("merge-row-done");
-    const tdDone = document.createElement("td");
-    tdDone.className = "merge-cell-done";
-    const cb = document.createElement("input");
-    cb.type = "checkbox";
-    cb.checked = isDone;
-    cb.title = "보충 완료";
-    cb.setAttribute("aria-label", "보충 완료");
-    cb.addEventListener("change", function () {
-      if (cb.checked) {
-        mergeReplenishDoneBySku.add(doneKey);
-        tr.classList.add("merge-row-done");
-      } else {
-        mergeReplenishDoneBySku.delete(doneKey);
-        tr.classList.remove("merge-row-done");
-      }
-      saveMergeReplenishDoneToStorage();
-    });
-    tdDone.appendChild(cb);
-    tr.appendChild(tdDone);
-    // 행 더블클릭으로 완료 토글: 체크박스 자체/입력·선택 요소 위 더블클릭은 네이티브 동작에 맡김.
+    const doneKey = mergeReplenishDoneKey(row.sku, gcVal);
+    if (mergeReplenishDoneKeys.has(doneKey)) tr.classList.add("merge-row-done");
+    tr.setAttribute("data-merge-done-key", doneKey);
     tr.addEventListener("dblclick", function (e) {
-      if (e.target === cb) return;
       const tag = String((e.target && e.target.tagName) || "").toUpperCase();
       if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || tag === "BUTTON" || tag === "A") return;
       const sel = window.getSelection && window.getSelection();
       if (sel && sel.removeAllRanges) sel.removeAllRanges();
-      cb.click();
+
+      if (mergeReplenishDoneKeys.has(doneKey)) mergeReplenishDoneKeys.delete(doneKey);
+      else mergeReplenishDoneKeys.add(doneKey);
+      saveMergeReplenishDoneToStorage();
+      refreshMergePreview();
     });
     for (let j = 0; j < emptyTail; j++) {
       const td = document.createElement("td");
@@ -1733,6 +2192,7 @@
   }
 
   function refreshMergePreview() {
+    resetMergeReplenishDoneIfWorkflowChanged();
     const raw = getWorkflowTsvText();
     const lines = workflowTsvNonEmptyLines(raw);
     const parsed = parseWorkflowRowObjects(lines);
@@ -1740,33 +2200,6 @@
     const slaLookup = buildSlaSkuLookupMap();
     const stateGcLookup = buildPendingGcLookupMap();
     const mergedForDisplay = merged.slice();
-    const hintEl = document.getElementById("mergeJoinHint");
-    if (hintEl) {
-      const wbSla = workbooks[SLA_WB_INDEX];
-      const wbState = workbooks[PENDING_WB_INDEX];
-      let nSku = 0;
-      let slaHit = 0;
-      let stateHit = 0;
-      for (let hi = 0; hi < mergedForDisplay.length; hi++) {
-        const row = mergedForDisplay[hi];
-        const skuKey = normalizeSkuJoinKey(row.sku);
-        if (!skuKey) continue;
-        nSku += 1;
-        if (slaLookup.has(skuKey)) {
-          slaHit += 1;
-          const ent = slaLookup.get(skuKey);
-          const gck = normalizeMergeGcKey(ent && ent.gc ? ent.gc : "");
-          if (gck && stateGcLookup.has(gck)) stateHit += 1;
-        }
-      }
-      const parts = [];
-      if (!wbSla) parts.push("① SLA 가 비어 있음");
-      if (!wbState) parts.push("② 이관현황 이 비어 있음");
-      if (nSku === 0) parts.push("워크플로에 SKU(F열)가 있는 행이 없음");
-      else if (wbSla && slaHit < nSku) parts.push("SLA와 워크플로 SKU 일치가 부족합니다");
-      else if (wbState && slaHit > 0 && stateHit < slaHit) parts.push("이관현황 GC 일치가 부족합니다");
-      hintEl.textContent = parts.join(" · ");
-    }
 
     const grid = document.getElementById("mergeDashboardsGrid");
     const tbodies = [];
@@ -1784,78 +2217,40 @@
       tbodies.push(renderMergePreviewTableShell(legacy));
     }
 
-    const emptyTail = MERGE_TABLE_HEADERS.length - 14;
+    const emptyTail = Math.max(0, MERGE_TABLE_HEADERS.length - MERGE_PREVIEW_BODY_TD_COUNT);
     const counts = [0, 0, 0, 0, 0, 0, 0, 0, 0];
     const stagedByDash = [[], [], [], [], [], [], [], [], []];
     const stagedLegacy = [];
-    const statusSummaryRowsByKey = {};
-    const statusSummaryDeadlines = {};
 
-    function accumulateStatusSummaryForWorkflowRow(workflowRow, slaEntries) {
-      for (let i = 0; i < slaEntries.length; i++) {
-        const slaEnt = slaEntries[i] || null;
-        const gcVal = String(slaEnt && slaEnt.gc != null ? slaEnt.gc : "").trim();
-        const tempKey = slaEnt ? formatTempZoneCell(slaEnt.tempZone).filterKey : "";
-        const pname = slaEnt ? String(slaEnt.productName || "") : "";
-        const slot = mergeDashboardSlotIndexForRow(tempKey, pname, gcVal);
-        if (slot === 9) continue;
-        const gck = normalizeMergeGcKey(gcVal);
-        const pendEnt = gck && stateGcLookup.has(gck) ? stateGcLookup.get(gck) : null;
-        const statusVal = resolveMergeTableStatusDisplay(
-          pendEnt ? pendEnt.status : "",
-          workflowRow.workflowStatus
-        );
-        let statusKey = mergeStatusSummaryKey(statusVal);
-        const isRcrtGc = gcVal.toUpperCase().indexOf("RCRT") !== -1;
-        // 9번(ETC) 제외 상태에서 RCRT GC는 상태 문구가 달라도 집계에 포함한다.
-        if (!statusKey && isRcrtGc) statusKey = "waiting";
-        if (!statusKey) continue;
-        const tempInfo = mergeStatusSummaryTempInfoFromSlaEntry(slaEnt);
-        const statusLabel = statusKey === "waiting" ? "진열대기" : "이동중";
-        const rowKey = tempInfo.label + "\x1f" + statusKey;
-        if (!statusSummaryRowsByKey[rowKey]) {
-          statusSummaryRowsByKey[rowKey] = {
-            label: tempInfo.label + " · " + statusLabel,
-            tempOrder: tempInfo.order,
-            statusOrder: statusKey === "waiting" ? 1 : 2,
-            byDeadline: {}
-          };
-        }
-        const bucketInfo = mergeStatusSummaryBucketFromDeadlineRaw(workflowRow.deadlineRaw);
-        const bucket = bucketInfo.label;
-        if (!statusSummaryDeadlines[bucket]) {
-          statusSummaryDeadlines[bucket] = {
-            sortRank: bucketInfo.sortRank,
-            sortValue: bucketInfo.sortValue
-          };
-        };
-        const unitVal = Number.isFinite(workflowRow.unitNumeric)
-          ? Number(workflowRow.unitNumeric)
-          : Number.parseFloat(String(workflowRow.unit != null ? workflowRow.unit : "").replace(/,/g, ""));
-        const increment = Number.isFinite(unitVal) ? unitVal : 0;
-        if (!statusSummaryRowsByKey[rowKey].byDeadline[bucket]) {
-          statusSummaryRowsByKey[rowKey].byDeadline[bucket] = 0;
-        }
-        statusSummaryRowsByKey[rowKey].byDeadline[bucket] += increment;
-      }
-    }
-
-    function appendDashboardRow(workflowRow, skuKeySort, slaEnt) {
+    function appendDashboardRow(workflowRow, skuKeySort, slaEnt, unitDisplayOverride) {
       const pname = slaEnt ? slaEnt.productName : "";
       const gcVal = slaEnt ? String(slaEnt.gc != null ? slaEnt.gc : "").trim() : "";
       let tempKey = "";
       if (slaEnt) tempKey = formatTempZoneCell(slaEnt.tempZone).filterKey;
       const slot = mergeDashboardSlotIndexForRow(tempKey, pname, gcVal);
-      const tr = buildMergePreviewTr(workflowRow, slaLookup, stateGcLookup, emptyTail, slaEnt);
+      const tr = buildMergePreviewTr(
+        workflowRow,
+        slaLookup,
+        stateGcLookup,
+        emptyTail,
+        slaEnt,
+        slot,
+        unitDisplayOverride
+      );
       const tKey = resolveMergeRowReplenishDeadlineSortKey(workflowRow);
       const vKey = resolveVehicleForMergeSlaEnt(slaEnt, stateGcLookup);
       const gcValForSort = slaEnt ? String(slaEnt.gc != null ? slaEnt.gc : "").trim() : "";
       const gckForSort = gcValForSort ? normalizeMergeGcKey(gcValForSort) : "";
       const pendForSort =
         gckForSort && stateGcLookup.has(gckForSort) ? stateGcLookup.get(gckForSort) : null;
-      const statusForSort = resolveMergeTableStatusDisplay(
+      const statusResolved = resolveMergeTableStatusDisplay(
         pendForSort ? pendForSort.status : "",
         workflowRow.workflowStatus
+      );
+      const statusForSort = applyDirectVendor1007StockStatusOverride(
+        gcValForSort,
+        statusResolved,
+        slot
       );
       const hasGcForSort = gcValForSort.length > 0;
       const shortageBottom =
@@ -1879,15 +2274,20 @@
 
     for (let i = 0; i < mergedForDisplay.length; i++) {
       const row = mergedForDisplay[i];
-      const skuKey = normalizeSkuJoinKey(row.sku);
-      const slaGroup = skuKey && slaLookup.has(skuKey) ? slaLookup.get(skuKey) : null;
+      const slaResolved = resolveSlaLookupGroupForWorkflowRow(row, slaLookup);
+      const slaGroup = slaResolved.group;
+      const sortKey = slaResolved.sortKey;
       const slaEntries = resolveSlaEntriesForUnit(slaGroup, row.unitNumeric);
-      accumulateStatusSummaryForWorkflowRow(row, slaEntries.length ? slaEntries : [null]);
+      const unitAllocs = allocateUnitDisplayAcrossSlaEntries(
+        slaEntries,
+        row.unitNumeric,
+        row.unit
+      );
       if (!slaEntries.length) {
-        appendDashboardRow(row, skuKey, null);
+        appendDashboardRow(row, sortKey, null, row.unit);
       } else {
         for (let k = 0; k < slaEntries.length; k++) {
-          appendDashboardRow(row, skuKey, slaEntries[k]);
+          appendDashboardRow(row, sortKey, slaEntries[k], unitAllocs[k]);
         }
       }
     }
@@ -1911,8 +2311,17 @@
         if (meta) meta.textContent = counts[d] ? counts[d] + "건" : "0건";
       }
     }
-    renderMergeTimeStatusSummary(statusSummaryRowsByKey, statusSummaryDeadlines);
+    renderMergeReplenishWindowSummary();
+    syncMergeDeadlineExportChips();
+  }
 
+  let workflowMergePreviewTimer = null;
+  function scheduleWorkflowMergePreviewRefresh() {
+    if (workflowMergePreviewTimer) clearTimeout(workflowMergePreviewTimer);
+    workflowMergePreviewTimer = setTimeout(function () {
+      workflowMergePreviewTimer = null;
+      refreshMergePreview();
+    }, 110);
   }
 
   function refreshPasteMeta() {
@@ -1932,7 +2341,13 @@
   if (pasteTsv) {
     pasteTsv.addEventListener("input", function () {
       persistWorkflowTsvFromDataPage();
-      refreshPasteMeta();
+      scheduleWorkflowMergePreviewRefresh();
+    });
+    pasteTsv.addEventListener("paste", function () {
+      window.setTimeout(function () {
+        persistWorkflowTsvFromDataPage();
+        scheduleWorkflowMergePreviewRefresh();
+      }, 0);
     });
   }
 
@@ -1942,8 +2357,7 @@
     { id: "btnCopyMergeTeamsChilled4", label: "냉장", dashboards: [4] },
     { id: "btnCopyMergeTeamsAmbient", label: "상온", dashboards: [5, 6] },
     { id: "btnCopyMergeTeamsFrozen", label: "냉동", dashboards: [7] },
-    { id: "btnCopyMergeTeamsRm", label: "RM", dashboards: [8] },
-    { id: "btnCopyMergeTeamsRcrtEtc", label: "ETC", dashboards: [9] }
+    { id: "btnCopyMergeTeamsRm", label: "RM", dashboards: [8] }
   ];
   MERGE_TEAMS_COPY_BUTTONS.forEach(function (spec) {
     const el = document.getElementById(spec.id);
@@ -1960,7 +2374,40 @@
       const anchor = document.getElementById("yna4-preview-anchor");
       if (anchor) anchor.scrollIntoView({ block: "start", behavior: "auto" });
       window.setTimeout(function () {
-        window.print();
+        try {
+          prepareMergePrintPagedTables();
+        } catch (ePrep) {
+          if (typeof console !== "undefined" && console.warn) {
+            console.warn("[yna4 print prepare]", ePrep);
+          }
+        }
+        window.requestAnimationFrame(function () {
+          window.requestAnimationFrame(function () {
+            const desk = window.yna4Desktop;
+            if (desk && typeof desk.printMergeToPdf === "function") {
+              desk
+                .printMergeToPdf({
+                  landscape: true,
+                  defaultFileName: "YNA4보충.pdf",
+                })
+                .then(function (r) {
+                  if (r && !r.ok && !r.canceled && r.error) {
+                    alert("PDF 저장 실패: " + r.error);
+                  }
+                })
+                .catch(function (ePdf) {
+                  alert(String(ePdf && ePdf.message ? ePdf.message : ePdf));
+                })
+                .finally(function () {
+                  try {
+                    restoreMergePrintPagedTables();
+                  } catch (eR) {}
+                });
+            } else {
+              window.print();
+            }
+          });
+        });
       }, 50);
     });
   }
@@ -1996,13 +2443,13 @@
     if (IS_COMBINED_PAGE) {
       window.addEventListener("beforeunload", function () {
         persistWorkflowTsvFromDataPage();
-        persistWorkbooksToStorage();
+        flushPersistWorkbooksToStorage();
         flushPersistedPageState();
       });
       document.addEventListener("visibilitychange", function () {
         if (document.visibilityState === "hidden") {
           persistWorkflowTsvFromDataPage();
-          persistWorkbooksToStorage();
+          flushPersistWorkbooksToStorage();
           flushPersistedPageState();
         }
       });
@@ -2016,12 +2463,12 @@
     } else {
       window.addEventListener("beforeunload", function () {
         persistWorkflowTsvFromDataPage();
-        persistWorkbooksToStorage();
+        flushPersistWorkbooksToStorage();
       });
       document.addEventListener("visibilitychange", function () {
         if (document.visibilityState === "hidden") {
           persistWorkflowTsvFromDataPage();
-          persistWorkbooksToStorage();
+          flushPersistWorkbooksToStorage();
         }
       });
     }
@@ -2045,6 +2492,109 @@
     } catch (e) {}
     if (!ta0.value && s) ta0.value = s;
   }
+
+  /**
+   * Electron 등 네이티브 래퍼에서 로컬 .xlsx 바이너리를 ① SLA(0)·② 이관(1) 슬롯에 넣을 때 사용.
+   * @param {number} slotIndex 0 또는 1
+   * @param {ArrayBuffer} arrayBuffer
+   * @param {string} [fileName]
+   * @returns {{ ok: boolean, error?: string }}
+   */
+  function loadWorkbookIntoSlotFromBinary(slotIndex, arrayBuffer, fileName) {
+    const idx = slotIndex === 1 ? 1 : 0;
+    let buf = arrayBuffer;
+    if (!buf) {
+      setSummary(idx, "파일 데이터가 비어 있습니다.", true);
+      refreshMergePreview();
+      return { ok: false, error: "empty" };
+    }
+    if (!(buf instanceof ArrayBuffer)) {
+      if (buf.buffer instanceof ArrayBuffer) {
+        const u8 = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+        buf = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength);
+      } else {
+        setSummary(idx, "파일 데이터 형식 오류(ArrayBuffer 필요).", true);
+        refreshMergePreview();
+        return { ok: false, error: "bad buffer" };
+      }
+    }
+    try {
+      const wb = XLSX.read(buf, { type: "array", cellDates: true });
+      workbooks[idx] = wb;
+      currentSheet[idx] = "";
+      populateSheetSelect(idx, wb);
+      updateExcelSummary(idx);
+      syncPasteTextareaFromWorkbook(idx);
+      persistWorkbooksToStorage();
+      refreshMergePreview();
+      const fn = String(fileName || "").trim() || "workbook.xlsx";
+      setSummary(idx, "로드됨 · 「" + fn + "」", false);
+      return { ok: true };
+    } catch (err) {
+      workbooks[idx] = null;
+      currentSheet[idx] = "";
+      setSummary(idx, "엑셀 파싱 실패: " + (err.message || String(err)), true);
+      persistWorkbooksToStorage();
+      refreshMergePreview();
+      return { ok: false, error: String(err && err.message ? err.message : err) };
+    }
+  }
+
+  window.YNA4_REPLENISH_LOAD_WORKBOOK = loadWorkbookIntoSlotFromBinary;
+
+  /**
+   * Electron 보충조회: 재고 없음 GC에 해당하는 SKU+GC 행만 완료(초록).
+   * @param {string[]} doneKeyList mergeReplenishDoneKey(sku, gc) 목록
+   * @returns {{ ok: boolean, marked?: number }}
+   */
+  function mergeReplenishMarkDoneKeysFromList(doneKeyList) {
+    if (!Array.isArray(doneKeyList)) return { ok: false };
+    let marked = 0;
+    for (let i = 0; i < doneKeyList.length; i++) {
+      const k = String(doneKeyList[i] || "").trim();
+      if (!k || k.indexOf("|") < 0) continue;
+      if (k.indexOf("__EMPTY_SKU__|") === 0) continue;
+      if (!mergeReplenishDoneKeys.has(k)) marked += 1;
+      mergeReplenishDoneKeys.add(k);
+    }
+    saveMergeReplenishDoneToStorage();
+    refreshMergePreview();
+    return { ok: true, marked: marked };
+  }
+  window.YNA4_REPLENISH_MARK_DONE_KEYS = mergeReplenishMarkDoneKeysFromList;
+  /** @deprecated 보충조회 v2 — SKU 전체 초록(구버전). 호환용 no-op에 가깝게 키만 SKU|__NO_GC__ */
+  window.YNA4_REPLENISH_MARK_SKUS_DONE = function (skuList) {
+    if (!Array.isArray(skuList)) return { ok: false };
+    const keys = [];
+    for (let i = 0; i < skuList.length; i++) {
+      keys.push(mergeReplenishDoneKey(skuList[i], ""));
+    }
+    return mergeReplenishMarkDoneKeysFromList(keys);
+  };
+  window.YNA4_REPLENISH_DONE_KEY = mergeReplenishDoneKey;
+
+  /**
+   * ①·② 붙여넣기와 동일하게 TSV 문자열을 슬롯에 반영(내부적으로 aoa_to_sheet 워크북 생성).
+   * @param {number} slotIndex 0 또는 1
+   */
+  function applyTsvToSlotFromExternal(slotIndex, rawText) {
+    const idx = slotIndex === 1 ? 1 : 0;
+    applyPasteTextToSlot(idx, String(rawText || ""), {});
+    return { ok: true };
+  }
+  window.YNA4_REPLENISH_APPLY_TSV_TO_SLOT = applyTsvToSlotFromExternal;
+
+  function clearReplenishWorkbookSlot(slotIndex) {
+    const idx = slotIndex === 1 ? 1 : 0;
+    workbooks[idx] = null;
+    currentSheet[idx] = "";
+    setSummary(idx, "", false);
+    syncPasteTextareaFromWorkbook(idx);
+    persistWorkbooksToStorage();
+    refreshMergePreview();
+    return { ok: true };
+  }
+  window.YNA4_REPLENISH_CLEAR_SLOT = clearReplenishWorkbookSlot;
 
   clearYna4ReplenishLocalStorage();
   loadWorkbooksFromStorage();

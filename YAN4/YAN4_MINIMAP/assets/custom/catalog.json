@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "basePath": "assets/custom",
+  "cellPx": 32,
+  "assets": {
+    "bg": {
+      "file": "BG.png",
+      "label": "바닥 배경 패턴"
+    },
+    "chamber-base": {
+      "file": "chamber-base.png",
+      "label": "전체 도면 (한 장)"
+    }
+  }
+}

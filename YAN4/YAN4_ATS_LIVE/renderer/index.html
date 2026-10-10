@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>YAN4 ATS Live</title>
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      font-family: "Segoe UI", "Malgun Gothic", sans-serif;
+      background: #f1f5f9;
+      color: #0f172a;
+    }
+    #banner {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      padding: 8px 12px;
+      background: #0f172a;
+      color: #e2e8f0;
+      font-size: 12px;
+    }
+    #banner strong { color: #fbbf24; }
+    #banner .ok { color: #86efac; }
+    #banner .bad { color: #fca5a5; }
+    #banner .hint { color: #94a3b8; }
+    #banner button {
+      border: 0;
+      border-radius: 4px;
+      padding: 4px 10px;
+      background: #fbbf24;
+      color: #0f172a;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    #banner button:hover { filter: brightness(1.05); }
+    #banner button:disabled { opacity: 0.6; cursor: wait; }
+    #host {
+      height: calc(100% - 40px);
+      box-sizing: border-box;
+      overflow: auto;
+      padding: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div id="banner">
+    <strong>YAN4 ATS Live</strong>
+    <span id="sessStatus" class="bad">로그인 필요</span>
+    <button type="button" id="btnLogin">Coupang 로그인</button>
+    <span class="hint">확장 대체용 단독 EXE · Chrome과 같은 계정 동시 로그인은 SSO가 풀릴 수 있음</span>
+  </div>
+  <div id="host"></div>
+  <script src="./ats-desktop-shim.js"></script>
+  <script src="./vendor/yan4-ats-page.js"></script>
+  <script src="./boot.js"></script>
+</body>
+</html>

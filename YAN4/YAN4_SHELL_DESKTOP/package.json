@@ -1,0 +1,42 @@
+{
+  "name": "yan4-shell-desktop",
+  "version": "1.0.105",
+  "private": true,
+  "description": "YAN4 IB LIVE_by Pepe",
+  "author": {
+    "name": "YAN4 IB Pepe"
+  },
+  "main": "main.js",
+  "scripts": {
+    "prestart": "node copy-shell-assets.js",
+    "start": "electron .",
+    "predist": "node copy-shell-assets.js",
+    "obfuscate": "node obfuscate-pack.js",
+    "dist": "node build-portable.js"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "javascript-obfuscator": "^4.2.2"
+  },
+  "build": {
+    "appId": "com.yan4.ib.live.pepe",
+    "productName": "YAN4 IB LIVE_by Pepe",
+    "copyright": "YAN4 IB Pepe",
+    "directories": {
+      "output": "release"
+    },
+    "icon": "build/icon.ico",
+    "files": [
+      "**/*",
+      "!**/*.map"
+    ],
+    "win": {
+      "target": [
+        "portable"
+      ],
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": false
+    }
+  }
+}

@@ -1,16 +1,16 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>YNA4 IB 보충 현황 대시보드</title>
-  <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+  <title>YNA4 IB 보충 현황</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
     * { box-sizing: border-box; }
     body {
       margin: 0;
       font-family: "Segoe UI", "Malgun Gothic", sans-serif;
-      background: #eef4fb;
+      background: #f1f5f9;
       color: #0f172a;
       overflow-x: clip;
     }
@@ -21,32 +21,34 @@
       padding: clamp(14px, 1.75vw, 24px) clamp(14px, 2vw, 28px) clamp(18px, 2.25vw, 30px);
     }
     h1 {
-      margin: 0 0 20px;
-      font-size: 26px;
-      font-weight: 800;
-      color: #123a7a;
+      margin: 0 0 16px;
+      font-size: 22px;
+      font-weight: 700;
+      color: #0f172a;
+      letter-spacing: -0.02em;
     }
     .card {
       background: #fff;
-      border-radius: 16px;
-      box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
-      padding: 20px;
-      margin-bottom: 18px;
-      border-top: 4px solid #2563eb;
+      border-radius: 12px;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+      padding: 16px 18px;
+      margin-bottom: 14px;
+      border: 1px solid #e2e8f0;
     }
     .card-title {
-      margin: 0 0 14px;
-      font-size: 18px;
-      font-weight: 800;
-      color: #123a7a;
+      margin: 0 0 12px;
+      font-size: 15px;
+      font-weight: 700;
+      color: #1e293b;
     }
     .card.card-upload {
-      padding: 14px 16px;
-      margin-bottom: 14px;
+      padding: 12px 14px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
     }
     .card.card-upload .card-title {
-      margin: 0 0 10px;
-      font-size: 16px;
+      margin: 0 0 8px;
+      font-size: 15px;
     }
     .upload-shell {
       position: relative;
@@ -172,9 +174,9 @@
     }
     .upload-label {
       margin: 0 0 6px;
-      font-size: 13px;
-      font-weight: 800;
-      color: #123a7a;
+      font-size: 12px;
+      font-weight: 700;
+      color: #334155;
     }
     .sheet-strip {
       display: none;
@@ -235,7 +237,7 @@
     textarea.paste-tsv:focus {
       outline: none;
       border-color: #3b82f6;
-      box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.12);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
     }
     .paste-source-hint {
       margin: 0 0 10px;
@@ -283,12 +285,67 @@
       line-height: 1.35;
       border-radius: 10px;
     }
+    .paste-workflow-only-wrap {
+      margin-top: 0;
+    }
+    .paste-workflow-only-wrap textarea.paste-tsv {
+      width: 100%;
+      box-sizing: border-box;
+      min-height: 64px;
+      max-height: 200px;
+    }
+    .yna4-excel-load-summary {
+      margin-top: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .yna4-excel-load-summary .load-summary {
+      font-size: 11px;
+    }
+    #yna4DesktopFileBar.card.card-upload {
+      padding: 10px 12px;
+      margin-bottom: 10px;
+    }
+    #yna4DesktopFileBar .card-title {
+      margin: 0 0 6px;
+      font-size: 14px;
+    }
+    .yna4-desktop-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+    }
+    .yna4-desktop-actions .btn-merge-teams-copy {
+      padding: 6px 12px;
+      font-size: 12px;
+      border-radius: 8px;
+    }
+    .yna4-desktop-status {
+      margin: 8px 0 0;
+      font-size: 12px;
+      line-height: 1.35;
+      color: #64748b;
+      min-height: 1.25em;
+    }
+    .yna4-desktop-status.ok {
+      color: #15803d;
+    }
+    .yna4-desktop-status.err {
+      color: #b91c1c;
+    }
+    .yna4-excel-load-summary .load-summary:empty {
+      display: none;
+    }
     .merge-preview-toolbar {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 12px 18px;
-      margin-bottom: 10px;
+      gap: 10px 14px;
+      margin-bottom: 12px;
+      padding-bottom: 2px;
+      border-bottom: 1px solid #e2e8f0;
     }
     .merge-temp-filter {
       display: flex;
@@ -300,19 +357,21 @@
       color: #334155;
     }
     button.btn-merge-teams-copy {
-      border: 1px solid #5b5fc7;
-      border-radius: 10px;
-      padding: 8px 14px;
-      font-size: 13px;
-      font-weight: 700;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      padding: 7px 12px;
+      font-size: 12px;
+      font-weight: 600;
       cursor: pointer;
-      color: #444791;
-      background: #edebe9;
+      color: #334155;
+      background: #fff;
       font-family: inherit;
       white-space: nowrap;
     }
     button.btn-merge-teams-copy:hover {
-      background: #e1dfdd;
+      background: #f8fafc;
+      border-color: #94a3b8;
+      color: #0f172a;
     }
     .merge-teams-btn-group {
       display: inline-flex;
@@ -321,9 +380,65 @@
       gap: 6px;
       margin-right: 4px;
     }
+    .merge-deadline-export-chips {
+      display: inline-flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      flex: 1 1 180px;
+      min-width: 0;
+    }
+    .merge-deadline-chips-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: #475569;
+      flex-shrink: 0;
+    }
+    .merge-deadline-chips-hint {
+      font-size: 12px;
+      color: #64748b;
+    }
+    .merge-deadline-chip--on {
+      background: #dcfce7 !important;
+      border-color: #22c55e !important;
+      color: #14532d !important;
+    }
     button.btn-merge-teams-copy.btn-merge-teams-copy--compact {
       padding: 6px 10px;
       font-size: 12px;
+    }
+    /* Electron 전용 · EGG·SR 왼쪽 (html.yna4-electron 일 때만 표시) */
+    button.btn-merge-gloc-lookup {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      border: 1px solid #93c5fd;
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      white-space: nowrap;
+      color: #1e3a5f;
+      background: linear-gradient(180deg, #f0f9ff 0%, #dbeafe 100%);
+    }
+    html.yna4-electron button.btn-merge-gloc-lookup {
+      display: inline-flex;
+    }
+    button.btn-merge-gloc-lookup:hover {
+      background: linear-gradient(180deg, #dbeafe 0%, #bfdbfe 100%);
+      border-color: #60a5fa;
+      color: #0f172a;
+    }
+    button.btn-merge-gloc-lookup:focus-visible {
+      outline: 2px solid #3b82f6;
+      outline-offset: 2px;
+    }
+    button.btn-merge-gloc-lookup:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
     }
     .merge-temp-filter label { font-weight: 600; color: #0f172a; }
     .merge-temp-filter select {
@@ -340,24 +455,24 @@
       outline: 2px solid #3b82f6;
       outline-offset: 1px;
     }
-    /* 대시보드 8개: 세로 스택(⑧ ETC는 컴팩트) */
+    /* 구역별 표: 세로 스택 */
     .merge-dashboards-grid {
       display: flex;
       flex-direction: column;
-      gap: 18px;
+      gap: 14px;
       width: 100%;
     }
     .merge-dashboard-panel {
       border: 1px solid #e2e8f0;
-      border-radius: 12px;
+      border-radius: 10px;
       padding: 12px 14px 14px;
-      background: #fafbfc;
+      background: #fff;
       scroll-margin-top: 12px;
       min-width: 0;
     }
     .merge-dashboard-panel-title {
       margin: 0 0 6px;
-      font-size: 15px;
+      font-size: 14px;
       font-weight: 700;
       color: #0f172a;
       line-height: 1.4;
@@ -388,22 +503,12 @@
     .merge-dashboard-panel--etc .merge-table-wrap {
       max-height: min(240px, 32vh);
     }
-    .merge-join-hint {
-      margin: 0 0 10px;
-      font-size: 12px;
-      line-height: 1.45;
-      color: #475569;
-      padding: 8px 10px;
-      background: #f8fafc;
-      border-radius: 8px;
-      border: 1px solid #e2e8f0;
-    }
     .merge-time-status-summary {
       margin: 0 0 12px;
       border: 1px solid #e2e8f0;
       border-radius: 10px;
-      background: #f8fafc;
-      padding: 10px;
+      background: #fff;
+      padding: 10px 12px;
     }
     .merge-time-status-summary-title {
       margin: 0 0 8px;
@@ -443,6 +548,14 @@
       border-bottom: 0;
       font-weight: 700;
       background: #f8fafc;
+    }
+    .merge-time-status-summary-table th.merge-time-status-summary-deadline,
+    .merge-time-status-summary-table td.merge-time-status-summary-deadline {
+      background: #dcfce7;
+      color: #14532d;
+    }
+    .merge-time-status-summary-table tbody tr:last-child td.merge-time-status-summary-deadline {
+      background: #bbf7d0;
     }
     .merge-table-wrap {
       overflow: auto;
@@ -496,7 +609,7 @@
       z-index: 1;
       background: #f1f5f9;
       font-weight: 700;
-      color: #123a7a;
+      color: #1e293b;
       box-shadow: 0 1px 0 #e2e8f0;
     }
     .merge-table tbody tr:nth-child(odd) { background-color: #fff; }
@@ -605,7 +718,9 @@
     .merge-table th:nth-child(11),
     .merge-table td:nth-child(11),
     .merge-table th:nth-child(12),
-    .merge-table td:nth-child(12) {
+    .merge-table td:nth-child(12),
+    .merge-table th:nth-child(13),
+    .merge-table td:nth-child(13) {
       box-sizing: border-box;
       width: 1%;
       min-width: min-content;
@@ -618,13 +733,20 @@
       text-overflow: clip;
     }
     .merge-table th:nth-child(11),
+    .merge-table td:nth-child(11) {
+      max-width: 4.75rem;
+      min-width: 3.75rem;
+    }
+    .merge-table th:nth-child(11),
     .merge-table td:nth-child(11),
     .merge-table th:nth-child(12),
-    .merge-table td:nth-child(12) {
-      padding: 4px 2px;
-    }
+    .merge-table td:nth-child(12),
     .merge-table th:nth-child(13),
     .merge-table td:nth-child(13) {
+      padding: 4px 2px;
+    }
+    .merge-table th:nth-child(14),
+    .merge-table td:nth-child(14) {
       box-sizing: border-box;
       width: 1%;
       min-width: min-content;
@@ -636,24 +758,6 @@
       overflow: visible;
       text-overflow: clip;
     }
-    .merge-table th:nth-child(14),
-    .merge-table td:nth-child(14) {
-      box-sizing: border-box;
-      width: 100%;
-      min-width: 3.5rem;
-      max-width: none;
-      padding: 4px 10px;
-      text-align: center;
-      vertical-align: middle;
-    }
-    .merge-table td.merge-cell-done input[type="checkbox"] {
-      width: 1.15rem;
-      height: 1.15rem;
-      margin: 0;
-      cursor: pointer;
-      accent-color: #15803d;
-    }
-    .card.card-merge-preview { border-top-color: #0d9488; }
     @media (max-width: 900px) {
       .container { max-width: 100%; padding: 14px 12px 20px; }
       .upload-row {
@@ -667,19 +771,20 @@
     }
 
     button.btn-merge-pdf-print {
-      border: 1px solid #1e40af;
-      border-radius: 10px;
-      padding: 8px 14px;
-      font-size: 13px;
-      font-weight: 700;
+      border: 1px solid #64748b;
+      border-radius: 8px;
+      padding: 7px 12px;
+      font-size: 12px;
+      font-weight: 600;
       cursor: pointer;
-      color: #1e3a8a;
-      background: #eff6ff;
+      color: #1e293b;
+      background: #f8fafc;
       font-family: inherit;
       white-space: nowrap;
     }
     button.btn-merge-pdf-print:hover {
-      background: #dbeafe;
+      background: #f1f5f9;
+      border-color: #475569;
     }
 
     .yna4-print-doc-title {
@@ -712,9 +817,6 @@
       .yna4-print-doc-title {
         display: none !important;
       }
-      .yna4-printable-block .card-merge-preview > .card-title {
-        display: none !important;
-      }
       .yna4-printable-block .card {
         break-inside: auto;
         page-break-inside: auto;
@@ -741,7 +843,7 @@
       .yna4-merge-print-dash-block {
         margin-bottom: 0;
       }
-      /* 인쇄만: ②번째 대시보드부터는 첫 인쇄 청크 앞에서 무조건 새 페이지 */
+      /* 인쇄만: ②번째 구역 블록부터 첫 인쇄 청크 앞에서 새 페이지 */
       .yna4-merge-print-dash-block:not(:first-child) > .yna4-merge-print-page-chunk:first-child {
         page-break-before: always !important;
         break-before: page !important;
@@ -753,6 +855,7 @@
         width: auto !important;
         max-width: none !important;
         text-align: left !important;
+        font-size: 8.75pt !important;
         font-weight: 700 !important;
         background: #e2e8f0 !important;
         white-space: normal !important;
@@ -775,12 +878,13 @@
         border: 0 !important;
         border-radius: 0 !important;
       }
+      /* 인쇄용 merge-table(청크) — 화면용 대시보드 표와 nth-child 규칙이 다름 */
       .merge-table {
         width: 100% !important;
         max-width: 100% !important;
         min-width: 0 !important;
-        font-size: 6.5pt !important;
-        line-height: 1.2 !important;
+        font-size: 7.75pt !important;
+        line-height: 1.18 !important;
         border-collapse: collapse !important;
         table-layout: fixed !important;
       }
@@ -792,7 +896,7 @@
         max-width: none !important;
         min-width: 0 !important;
         width: auto !important;
-        padding: 2px 3px !important;
+        padding: 1px 2px !important;
         word-break: break-word !important;
         overflow-wrap: anywhere !important;
         vertical-align: top !important;
@@ -807,20 +911,19 @@
       .merge-table thead {
         display: none !important;
       }
-      .merge-table th:nth-child(13),
-      .merge-table td:nth-child(13),
-      .merge-table th:nth-child(14),
-      .merge-table td:nth-child(14) {
+      /* 인쇄 청크 12열: Barcode…보충기한(12숨김) — SKU·상차시간은 복제 시 제거 */
+      .merge-table th:nth-child(12),
+      .merge-table td:nth-child(12) {
         display: none !important;
       }
       .merge-table th:nth-child(1),
       .merge-table td:nth-child(1) {
-        width: 5% !important; 
+        width: 11% !important;
+        min-width: 12ch !important;
       }
       .merge-table th:nth-child(2),
       .merge-table td:nth-child(2) {
-        width: 10% !important;
-        min-width: 12ch !important;
+        width: 3% !important;
       }
       .merge-table th:nth-child(3),
       .merge-table td:nth-child(3) {
@@ -828,57 +931,45 @@
       }
       .merge-table th:nth-child(4),
       .merge-table td:nth-child(4) {
-        width: 3% !important;
+        width: 29% !important;
+        padding: 2px 2px !important;
       }
       .merge-table th:nth-child(5),
       .merge-table td:nth-child(5) {
-        width: 24% !important;
-        padding: 2px 2px !important;
+        width: 9% !important;
       }
       .merge-table th:nth-child(6),
       .merge-table td:nth-child(6) {
-        width: 9% !important;
-      }
-      .merge-table th:nth-child(7),
-      .merge-table td:nth-child(7) {
         width: 16% !important;
         min-width: 14ch !important;
       }
-      .merge-table th:nth-child(8),
-      .merge-table td:nth-child(8) {
+      .merge-table th:nth-child(7),
+      .merge-table td:nth-child(7) {
         width: 6% !important;
         min-width: 4.25em !important;
       }
+      .merge-table th:nth-child(8),
+      .merge-table td:nth-child(8) {
+        width: 4.2% !important;
+      }
       .merge-table th:nth-child(9),
       .merge-table td:nth-child(9) {
-        width: 4.2% !important;
+        width: 5% !important;
       }
       .merge-table th:nth-child(10),
       .merge-table td:nth-child(10) {
-        width: 5% !important;
-      }
-      .merge-table th:nth-child(11),
-      .merge-table td:nth-child(11) {
         width: 6% !important;
         padding: 2px 1px !important;
       }
-      .merge-table th:nth-child(12),
-      .merge-table td:nth-child(12) {
+      .merge-table th:nth-child(11),
+      .merge-table td:nth-child(11) {
         width: 4% !important;
         padding: 2px 1px !important;
         white-space: nowrap !important;
         overflow: hidden !important;
         text-overflow: ellipsis !important;
       }
-      .merge-table th:nth-child(14),
-      .merge-table td:nth-child(14) {
-        width: 4.8% !important;
-        max-width: none !important;
-        white-space: nowrap !important;
-        overflow: hidden !important;
-        text-overflow: ellipsis !important;
-      }
-      .merge-table tbody tr:not(.yna4-merge-print-title-row) td:not(:nth-child(5)) {
+      .merge-table tbody tr:not(.yna4-merge-print-title-row) td:not(:nth-child(4)) {
         white-space: nowrap !important;
         overflow: hidden !important;
         text-overflow: ellipsis !important;
@@ -886,16 +977,16 @@
       }
       .merge-table thead tr,
       .merge-table tbody tr {
-        height: 40pt !important;
+        height: 36pt !important;
       }
       .merge-table th,
       .merge-table td {
-        height: 40pt !important;
-        min-height: 40pt !important;
-        max-height: 40pt !important;
+        height: 36pt !important;
+        min-height: 36pt !important;
+        max-height: 36pt !important;
         box-sizing: border-box !important;
       }
-      .merge-table tbody td:nth-child(5) {
+      .merge-table tbody td:nth-child(4) {
         vertical-align: middle !important;
         overflow: hidden !important;
       }
@@ -907,61 +998,64 @@
 </head>
 <body>
   <div class="container">
-    <h1 class="yna4-no-print">YNA4 IB 보충 현황 대시보드</h1>
+    <h1 class="yna4-no-print">YNA4 IB 보충 현황</h1>
 
     <div class="card card-upload yna4-no-print">
-      <h2 class="card-title">표·워크플로 붙여넣기</h2>
-      <p class="paste-source-hint">엑셀에서 영역 선택 후 <strong>Ctrl+C</strong> → <strong>Ctrl+V</strong>. ② 이관현황 date 한 칸에 진열중·이동중 등을 이어 붙여도 됩니다 (탭 구분, 동일 열 배치).</p>
-
-      <div class="paste-data-row">
-        <div class="upload-col">
-          <label class="upload-label" for="pasteSourceTsv0">① SLA</label>
-          <textarea id="pasteSourceTsv0" class="paste-source-grid" rows="3" spellcheck="false" wrap="off" aria-label="① SLA 표 붙여넣기"></textarea>
-          <div class="load-summary" id="summary0" aria-live="polite"></div>
-        </div>
-
-        <div class="upload-col">
-          <label class="upload-label" for="pasteSourceTsv1">② 이관현황 date</label>
-          <textarea id="pasteSourceTsv1" class="paste-source-grid" rows="3" spellcheck="false" wrap="off" aria-label="② 이관현황 date 통합 붙여넣기"></textarea>
-          <div class="load-summary" id="summary1" aria-live="polite"></div>
-        </div>
-
-        <div class="upload-col paste-workflow-col">
-          <label class="upload-label" for="pasteTsv" id="yna4-paste-section-title">③ 워크플로우</label>
-          <textarea id="pasteTsv" class="paste-tsv paste-tsv-compact" rows="3" spellcheck="false" wrap="off" placeholder="워크플로우에서 복사 후 Ctrl+V" aria-labelledby="yna4-paste-section-title"></textarea>
-        </div>
+      <h2 class="card-title" id="yna4-paste-section-title">워크플로우</h2>
+      <div class="paste-workflow-only-wrap">
+        <textarea id="pasteTsv" class="paste-tsv paste-tsv-compact" rows="4" spellcheck="false" wrap="off" aria-labelledby="yna4-paste-section-title"></textarea>
+      </div>
+      <div class="yna4-excel-load-summary" aria-live="polite">
+        <div class="load-summary" id="summary0"></div>
+        <div class="load-summary" id="summary1"></div>
       </div>
     </div>
 
+    <div class="card card-upload yna4-no-print" id="yna4DesktopFileBar" style="display: none">
+      <h2 class="card-title">로컬 엑셀</h2>
+      <div class="yna4-desktop-actions">
+        <button type="button" class="btn-merge-teams-copy" id="yna4DesktopRefreshDisk">새로고침</button>
+        <button type="button" class="btn-merge-teams-copy" id="yna4DesktopPickScanDir">폴더 선택…</button>
+        <button type="button" class="btn-merge-teams-copy" id="yna4DesktopInventoryLogin" title="inventory.coupang.com 재고 목록을 열어 로그인합니다(쿠키는 persist:yna4-coupang-inventory). 이후 보충조회 API가 같은 세션으로 /async/inventory/search 를 호출합니다.">재고 로그인…</button>
+      </div>
+      <p class="yna4-desktop-status" id="yna4DesktopRefreshStatus" role="status" aria-live="polite"></p>
+    </div>
+
     <div class="yna4-printable-block">
-      <p class="yna4-print-doc-title">YNA4 IB 보충 현황 대시보드</p>
+      <p class="yna4-print-doc-title">YNA4 IB 보충 현황</p>
       <div class="card card-merge-preview" id="yna4-preview-anchor">
-        <h2 class="card-title">대시보드</h2>
         <div class="merge-preview-toolbar">
-          <span class="merge-teams-btn-group" role="group" aria-label="구간별 표 복사(온도대·ETC)">
+          <button
+            type="button"
+            class="btn-merge-gloc-lookup"
+            id="yna4DesktopGlocLookup"
+            title="통합표 GC(로케이션 바코드)로 inventory async/search 조회. result.content 가 비면 초록. EXE는 session.fetch+partition 쿠키(재고 로그인… 후 보충조회). lookupEngine=coupang_inventory_dom 은 DOM 방식. 완료 행·⑨·빈 GC 제외"
+          >
+            보충조회
+          </button>
+          <span class="merge-teams-btn-group" role="group" aria-label="구간별 표 복사(온도대)">
             <button type="button" class="btn-merge-teams-copy btn-merge-teams-copy--compact" id="btnCopyMergeTeamsChilled12" title="①② CHILLED 10·15구 · [SR] 표(HTML)+TSV 복사">EGG·SR</button>
             <button type="button" class="btn-merge-teams-copy btn-merge-teams-copy--compact" id="btnCopyMergeTeamsChilled3" title="③ CHILLED 20·25·30구 표(HTML)+TSV 복사">EGG20·30</button>
             <button type="button" class="btn-merge-teams-copy btn-merge-teams-copy--compact" id="btnCopyMergeTeamsChilled4" title="④ CHILLED 나머지 표(HTML)+TSV 복사">냉장</button>
             <button type="button" class="btn-merge-teams-copy btn-merge-teams-copy--compact" id="btnCopyMergeTeamsAmbient" title="⑤⑥ AMBIENT만 표(HTML)+TSV 복사">상온</button>
             <button type="button" class="btn-merge-teams-copy btn-merge-teams-copy--compact" id="btnCopyMergeTeamsFrozen" title="⑦ FROZEN만 표(HTML)+TSV 복사">냉동</button>
             <button type="button" class="btn-merge-teams-copy btn-merge-teams-copy--compact" id="btnCopyMergeTeamsRm" title="⑧ RM(GC 있음 · 온도대 미지정) 표(HTML)+TSV 복사">RM</button>
-            <button type="button" class="btn-merge-teams-copy btn-merge-teams-copy--compact" id="btnCopyMergeTeamsRcrtEtc" title="⑨ GC 없음 · RCRT1 표(HTML)+TSV 복사">ETC</button>
           </span>
-          <button type="button" class="btn-merge-pdf-print" id="btnPrintMergePdf" title="보충지출력(PDF). 완료 체크한 행·GC 빈 행은 출력에서 제외. 대시보드만 저장(완료 열 제외). 인쇄에서 PDF·A4 가로를 확인하세요.">
+          <div id="mergeDeadlineExportChips" class="merge-deadline-export-chips" role="group" aria-label="보충기한별 복사·인쇄 필터"></div>
+          <button type="button" class="btn-merge-pdf-print" id="btnPrintMergePdf" title="보충지출력(PDF). 초록(완료) 행·GC 빈 행은 출력에서 제외. 데스크톱(EXE)은 PDF 저장 대화상자로 저장(webContents.printToPDF). 브라우저만 window.print() 인쇄 대화상자.">
             보충지출력(PDF)
           </button>
         </div>
-        <p class="merge-join-hint yna4-no-print" id="mergeJoinHint" aria-live="polite"></p>
         <section class="merge-time-status-summary yna4-no-print" aria-labelledby="mergeTimeStatusSummaryTitle">
-          <h3 class="merge-time-status-summary-title" id="mergeTimeStatusSummaryTitle">온도대별 상태 집계 (보충기한 열)</h3>
+          <h3 class="merge-time-status-summary-title" id="mergeTimeStatusSummaryTitle">온도대별 진열가능 보충건 (00:50·01:30 마감)</h3>
           <div class="merge-time-status-summary-wrap">
-            <table class="merge-time-status-summary-table" id="mergeTimeStatusSummaryTable" aria-label="온도대별 진열대기 이동중 유닛수 집계">
+            <table class="merge-time-status-summary-table" id="mergeTimeStatusSummaryTable" aria-label="온도대별 진열가능 보충건 0:00 0:40 PREPACK">
               <thead id="mergeTimeStatusSummaryThead"></thead>
               <tbody id="mergeTimeStatusSummaryTbody"></tbody>
             </table>
           </div>
         </section>
-        <div id="mergeDashboardsGrid" class="merge-dashboards-grid" role="region" aria-label="대시보드 9분할">
+        <div id="mergeDashboardsGrid" class="merge-dashboards-grid" role="region" aria-label="온도대별 보충 표 (9구역)">
           <section class="merge-dashboard-panel" aria-labelledby="mergeDashTitle1">
             <h3 class="merge-dashboard-panel-title" id="mergeDashTitle1">① CHILLED — 10·15구 (프리팩)</h3>
             <p class="merge-dashboard-panel-meta yna4-no-print" id="mergeDashMeta1" aria-live="polite"></p>
@@ -984,7 +1078,7 @@
             </div>
           </section>
           <section class="merge-dashboard-panel" aria-labelledby="mergeDashTitle4">
-            <h3 class="merge-dashboard-panel-title" id="mergeDashTitle4">④ CHILLED</h3>
+            <h3 class="merge-dashboard-panel-title" id="mergeDashTitle4">④ CHILLED — ①②③ 제외 나머지</h3>
             <p class="merge-dashboard-panel-meta yna4-no-print" id="mergeDashMeta4" aria-live="polite"></p>
             <div class="merge-table-wrap">
               <table class="merge-table" id="mergePreviewTable4" aria-labelledby="mergeDashTitle4"></table>
@@ -1032,6 +1126,7 @@
   </div>
 
 <script>window.YNA4_PAGE_ROLE = "combined";</script>
-<script src="yna4-replenish-core.js?v=79"></script>
+<script src="yna4-replenish-core.js?v=91"></script>
+<script src="yna4-replenish-electron-bridge.js?v=11"></script>
 </body>
 </html>

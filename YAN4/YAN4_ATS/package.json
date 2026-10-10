@@ -1,0 +1,57 @@
+{
+  "name": "yna4-replenish-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "YNA4 보충 대시보드 — 로컬 엑셀 자동 로드용 Electron 래퍼",
+  "main": "main.js",
+  "scripts": {
+    "postinstall": "node copy-vendor-xlsx.js",
+    "start": "electron .",
+    "dist": "electron-builder --win portable"
+  },
+  "dependencies": {
+    "xlsx": "0.18.5"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.yan4.replenish.desktop",
+    "productName": "YNA4보충대시보드",
+    "directories": {
+      "output": "release"
+    },
+    "icon": "build/icon.ico",
+    "files": [
+      "main.js",
+      "preload.js",
+      "download-excel-pick.js",
+      "gloc-lookup.js",
+      "coupang-inventory-dom-lookup.js",
+      "package.json",
+      "build/icon.ico"
+    ],
+    "extraResources": [
+      {
+        "from": "..",
+        "to": "yan4-app",
+        "filter": [
+          "보충데이터입력.html",
+          "yna4-replenish-core.js",
+          "yna4-replenish-electron-bridge.js",
+          "vendor/xlsx.full.min.js"
+        ]
+      },
+      {
+        "from": "packaged",
+        "to": "yan4-app",
+        "filter": ["gloc-lookup.json"]
+      }
+    ],
+    "win": {
+      "target": ["portable"],
+      "signAndEditExecutable": false
+    }
+  }
+}
