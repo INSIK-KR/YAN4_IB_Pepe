@@ -5141,11 +5141,9 @@
 
   var DRILL_DOM_CHUNK_SIZE = 60;
   var DRILL_SCAN_YIELD_EVERY = 250;
-  /* 직납 드릴 실시간 재고조회 — inventory 부하 줄이기: 동시 2 · 요청 뒤 200ms · SKU 5분 캐시 */
+  /* 직납 드릴 실시간 재고조회 — 드릴 열 때마다 새로 조회. inventory 부하 줄이기: 동시 2 · 요청 뒤 200ms */
   var DIRECT_DRILL_RCRT_CONCURRENCY = 2;
   var DIRECT_DRILL_LIVE_GAP_MS = 200;
-  var DIRECT_DRILL_LIVE_CACHE_MS = 5 * 60 * 1000;
-  var directDrillLiveCache = Object.create(null);
 
   function slaDrillNextFrame() {
     return new Promise(function (resolve) {
@@ -9814,15 +9812,9 @@
       .toUpperCase();
   }
 
-  /** inventory 실시간 재고 { ok, entries } — 성공 결과만 5분 캐시, 실제 요청 뒤 200ms 쉼 */
+  /** inventory 실시간 재고 { ok, entries } — 캐시 없음, 요청 뒤 200ms 쉼 */
   async function fetchDirectDrillLiveStock(bridge, sku) {
-    var key = normalizeDirectSkuJoinKey(sku) || sku;
-    var hit = directDrillLiveCache[key];
-    if (hit && Date.now() - hit.at < DIRECT_DRILL_LIVE_CACHE_MS) return hit.result;
     var result = await bridge.rcrtLiveForSku(sku);
-    if (result && result.ok) {
-      directDrillLiveCache[key] = { at: Date.now(), result: result };
-    }
     await sleep(DIRECT_DRILL_LIVE_GAP_MS);
     return result;
   }
