@@ -908,6 +908,7 @@
         accept: "application/json, text/javascript, */*; q=0.01",
       });
       var parsed = unloadGapParseRcrtFromInventoryJson(jsonText);
+      if (parsed.valid) merged.valid = true;
       unloadGapMergeRcrtLocations(merged, parsed.locations, parsed.qtyByLoc);
       if (page + 1 >= (parsed.totalPages || 1)) break;
     }
@@ -946,7 +947,8 @@
     }
     var totalPages = result && result.totalPages != null ? Number(result.totalPages) : 1;
     if (!Number.isFinite(totalPages) || totalPages < 1) totalPages = 1;
-    return { locations: out, qtyByLoc: qtyByLoc, totalPages: totalPages };
+    // valid: 응답이 정상 JSON(content 배열) — 로그인 만료 HTML 등은 false
+    return { locations: out, qtyByLoc: qtyByLoc, totalPages: totalPages, valid: true };
   }
 
   function unloadGapNewRcrtMerged() {
@@ -954,6 +956,7 @@
       seen: Object.create(null),
       list: [],
       qtyByLoc: Object.create(null),
+      valid: false,
     };
   }
 
@@ -1235,13 +1238,13 @@
     var i, k, partial = -1;
     for (i = 0; i < ths.length; i++) {
       k = unloadGapNormKey(String(ths[i].textContent || ""));
-      if (k === "\uc218\ub7c9") return i;
-      if (partial < 0 && k.indexOf("\uc218\ub7c9") >= 0) partial = i;
+      if (k === "수량") return i;
+      if (partial < 0 && k.indexOf("수량") >= 0) partial = i;
     }
     return partial;
   }
 
-  /** inventory \ubaa9\ub85d HTML \u2192 [{ loc, qty }] (\uc218\ub7c9 \uc5f4 \uc5c6\uc73c\uba74 qty null) */
+  /** inventory 목록 HTML → [{ loc, qty }] (수량 열 없으면 qty null) */
   function unloadGapParseInventoryRcrtEntries(html) {
     var doc = new DOMParser().parseFromString(String(html || ""), "text/html");
     var table = doc.querySelector('table[is="w-table"]') || doc.querySelector("table");
@@ -1284,7 +1287,31 @@
       .join(", ");
   }
 
-  /** \uc9c1\ub0a9 \ub4dc\ub9b4\uc6a9 \u2014 inventory \uc7ac\uace0\uc870\ud68c RCRT \ub85c\ucf00\uc774\uc158 + \ub85c\ucf00\uc774\uc158\ubcc4 quantity */
+  /**
+   * 직납 드릴 실시간 재고 — inventory API 만 조회(skuid → 없으면 externalid).
+   * { ok, entries:[{ loc, qty }] } · ok=false 면 조회 실패(로그인 만료·네트워크 등)
+   */
+  async function unloadGapFetchRcrtLiveForSku(sku) {
+    var id = unloadGapNormalizeInventorySkuId(sku);
+    if (!id) return { ok: false, entries: [] };
+    try {
+      var merged = await unloadGapFetchRcrtMergedFromApi(function (page) {
+        return unloadGapBuildInventorySearchUrl(id, page);
+      });
+      if (!merged.list.length) {
+        var byExt = await unloadGapFetchRcrtMergedFromApi(function (page) {
+          return unloadGapBuildInventoryExternalSkuSearchUrl(id, page);
+        });
+        if (byExt.list.length || !merged.valid) merged = byExt;
+      }
+      return { ok: merged.valid, entries: unloadGapRcrtMergedToEntries(merged) };
+    } catch (eApi) {
+      console.warn("[YAN4] inventory live API", id, eApi);
+      return { ok: false, entries: [] };
+    }
+  }
+
+  /** 직납 드릴용 — inventory 재고조회 RCRT 로케이션 + 로케이션별 quantity */
   async function unloadGapFetchRcrtEntriesForSku(sku) {
     var id = unloadGapNormalizeInventorySkuId(sku);
     if (!id) return [];
@@ -2063,6 +2090,7 @@
     gapSkusForDetailUrl: unloadGapCollectSkusFromDetailUrl,
     rcrtListForSku: unloadGapRcrtListForSku,
     rcrtEntriesForSku: unloadGapFetchRcrtEntriesForSku,
+    rcrtLiveForSku: unloadGapFetchRcrtLiveForSku,
   };
 
   function unloadSlaRunAnalysisFromText(tsvText, htmlText) {
