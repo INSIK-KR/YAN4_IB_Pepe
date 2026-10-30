@@ -9794,20 +9794,104 @@
   }
 
   /**
-   * SLA 전체 조회 때 — 직납 피벗 숫자를 하차 미진열 대신 SLA 파일 RCRT 유닛 합계로.
-   * SLA 에 직납 RCRT 가 없는 SKU 행은 하차 미진열 그대로.
+   * SLA 파일에 직납 RCRT 가 없는 SKU — inventory 를 SKU 로 조회해 직납 RCRT 실시간 재고.
+   * 반환 { units:{skuKey: 수량}, checked, failed, login } · 실패·로그인 풀림 SKU 는 units 에 없음
    */
-  function applySlaRcrtUnitsToDirectBundle(bundle, slaLookup) {
+  async function checkNonSlaSkusLive(skus, statusEl, prefix) {
+    var out = { units: Object.create(null), checked: 0, failed: 0, login: false };
+    var bridge = window.__YAN4_UNLOAD_GAP_BRIDGE__;
+    if (!skus.length || !bridge || typeof bridge.rcrtLiveForSku !== "function") {
+      out.failed = skus.length;
+      return out;
+    }
+    var next = 0;
+    var done = 0;
+
+    async function one(sku) {
+      var res = null;
+      try {
+        res = await bridge.rcrtLiveForSku(sku);
+      } catch (eLive) {
+        res = null;
+      }
+      await sleep(DIRECT_DRILL_LIVE_GAP_MS);
+      if (res && res.login) {
+        out.login = true;
+        return;
+      }
+      if (!res || !res.ok) {
+        out.failed++;
+        return;
+      }
+      var total = 0;
+      var i, q;
+      for (i = 0; i < res.entries.length; i++) {
+        q = Number(res.entries[i].qty);
+        if (q > 0) total += q;
+      }
+      out.units[normalizeDirectSkuJoinKey(sku)] = total;
+      out.checked++;
+    }
+
+    async function worker() {
+      var i;
+      while (true) {
+        if (stopRequested || out.login) return;
+        i = next++;
+        if (i >= skus.length) return;
+        await one(skus[i]);
+        done++;
+        if (statusEl) {
+          statusEl.textContent =
+            (prefix || "") + "직납 RCRT 재고 확인 " + done + " / " + skus.length + "…";
+        }
+      }
+    }
+
+    var jobs = [];
+    var wi;
+    for (wi = 0; wi < Math.min(DIRECT_DRILL_RCRT_CONCURRENCY, skus.length); wi++) {
+      jobs.push(worker());
+    }
+    await Promise.all(jobs);
+    return out;
+  }
+
+  /**
+   * SLA 전체 조회 때 — 직납 피벗 숫자를 RCRT 유닛으로.
+   * SLA 파일에 직납 RCRT 가 있는 SKU 는 SLA 유닛, 없는 SKU 는 inventory 직납 RCRT 실시간 재고(없으면 0).
+   * inventory 조회 실패·로그인 풀림 SKU 만 하차 미진열 그대로.
+   */
+  async function applyDirectRcrtUnitsToBundle(bundle, slaLookup, statusEl, prefix) {
     var ctx = bundle && bundle.stats && bundle.stats.drillCtx;
     if (!ctx || !ctx.allRows || !bundle.matrix || !slaLookup) return;
     var groups = groupDirectRowsByCell(ctx.allRows);
+    var nonSla = [];
+    var seen = Object.create(null);
+    var k, g, i, row, key;
+    for (k in groups) {
+      g = groups[k];
+      for (i = 0; i < g.rows.length; i++) {
+        row = g.rows[i];
+        key = normalizeDirectSkuJoinKey(row.skuSeq);
+        if (!key || seen[key] || row.source === "unload_pending_po") continue;
+        seen[key] = 1;
+        if (slaRcrtUnitsForSku(slaLookup, row.skuSeq) == null) nonSla.push(row.skuSeq);
+      }
+    }
+    var t0 = Date.now();
+    var live = await checkNonSlaSkusLive(nonSla, statusEl, prefix);
+    var secs = Math.round((Date.now() - t0) / 1000);
     var matrix = bundle.matrix;
     var total = 0;
-    var k, g, v;
+    var v;
     for (k in groups) {
       g = groups[k];
       v = directPivotCellValue(g.rows, function (sku) {
-        return slaRcrtUnitsForSku(slaLookup, sku);
+        var sla = slaRcrtUnitsForSku(slaLookup, sku);
+        if (sla != null) return sla;
+        var lk = normalizeDirectSkuJoinKey(sku);
+        return lk && live.units[lk] !== undefined ? live.units[lk] : null;
       });
       if (!matrix[g.rowKey]) matrix[g.rowKey] = Object.create(null);
       matrix[g.rowKey][g.timeCol] = v;
@@ -9817,7 +9901,16 @@
     ctx.matrixPending = bundle.stats.matrixPending || null;
     ctx.slaUnitsAt = new Date();
     if (bundle.summary) {
-      bundle.summary += " · RCRT 유닛 " + Math.round(total).toLocaleString("en-US");
+      bundle.summary +=
+        " · RCRT 유닛 " +
+        Math.round(total).toLocaleString("en-US") +
+        " · SLA없는 SKU " +
+        nonSla.length +
+        "개 확인 " +
+        secs +
+        "초" +
+        (live.failed ? " (실패 " + live.failed + "개 하차잔량)" : "") +
+        (live.login ? " (로그인 필요 — 확인 못한 SKU 하차잔량)" : "");
     }
   }
 
@@ -10087,16 +10180,14 @@
       }
       // RCRT 목록은 SLA 파일 FULLNAME → 로케이션 바코드로 실시간 재고조회 (비었으면 숨김)
       var slaEntries = slaDirectLocEntriesForSku(slaLookup, sku);
-      // SLA 에 없는 SKU 는 피벗에서 하차 미진열 그대로 — 조회 결과와 상관없음
-      if (!slaEntries.length) results[mi] = { units: null, failed: false };
       if (!hasLive) {
         paint(slaEntries);
-        if (slaEntries.length) results[mi] = FAILED;
+        results[mi] = FAILED;
         return;
       }
       if (loginLost) {
         markDirectDrillLoginNeeded(td, unitsTd);
-        if (slaEntries.length) results[mi] = FAILED;
+        results[mi] = FAILED;
         return;
       }
       td.textContent = "RCRT 조회…";
@@ -10136,19 +10227,27 @@
       if (live && live.login) {
         loginLost = true;
         markDirectDrillLoginNeeded(td, unitsTd);
+        results[mi] = FAILED;
         return;
       }
       if (!live || !live.ok) {
         paint([]);
         td.textContent = "조회 실패";
         markDirectDrillLookupFailed(td, unitsTd);
+        results[mi] = FAILED;
         return;
       }
-      paint(
-        live.entries.filter(function (e) {
-          return e.qty == null || e.qty > 0;
-        })
-      );
+      var liveEntries = live.entries.filter(function (e) {
+        return e.qty == null || e.qty > 0;
+      });
+      paint(liveEntries);
+      // SLA 에 없는 SKU 도 직납 RCRT 실시간 재고로 (없으면 0)
+      var nonSlaUnits = 0;
+      var ni;
+      for (ni = 0; ni < liveEntries.length; ni++) {
+        nonSlaUnits += Number(liveEntries[ni].qty) || 0;
+      }
+      results[mi] = { units: nonSlaUnits, failed: false };
     }
 
     async function worker() {
@@ -12103,9 +12202,18 @@
       if (directBundle && directBundle.stats && directBundle.stats.drillCtx) {
         directBundle.stats.drillCtx.shrinkSkuMaps = lastShrinkSkuMaps;
       }
-      // 직납 피벗 = SLA 파일 RCRT 유닛 (SLA 파일은 [3/3] 이관 단계에서 받음)
+      // 직납 피벗 = RCRT 유닛 (SLA 파일은 [3/3] 이관 단계에서 받음)
       if (directBundle && !directBundle.empty && lastShrinkSlaLookup) {
-        applySlaRcrtUnitsToDirectBundle(directBundle, lastShrinkSlaLookup);
+        await applyDirectRcrtUnitsToBundle(
+          directBundle,
+          lastShrinkSlaLookup,
+          statusEl,
+          skipDirect ? "" : "[3/3] "
+        );
+        if (stopRequested) {
+          statusEl.textContent = "중지됨";
+          return;
+        }
       }
 
       var combined = buildCombinedPivotBundle(transferBundle, directBundle);
