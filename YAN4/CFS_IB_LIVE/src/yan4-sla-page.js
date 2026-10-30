@@ -2197,8 +2197,8 @@
         if (!prevRcrt || slaRecordIsNewer(rec, prevRcrt)) {
           rcrtAgingByKey[rcrtKey] = rec;
         }
-      } else if (gcKey) {
-        // 직납 로케이션(1007-RCRT2 등): SKU 별로 FULLNAME 전부 + quantity 합계 유지
+      } else if (gcKey && isSlaDirectRcrtLoc(gcKey)) {
+        // 직납 로케이션(1007-RCRT2/3/4/22/44): SKU 별로 FULLNAME 전부 + quantity 합계 유지
         pushSlaDirectLoc(directLocBySkuId, skuId, gcKey, qty);
         pushSlaDirectLoc(
           directLocByExtId,
@@ -2230,6 +2230,13 @@
       directLocBySkuId: directLocBySkuId,
       directLocByExtId: directLocByExtId,
     };
+  }
+
+  /** 직납 RCRT 로케이션 — 1007-RCRT2/3/4/22/44 (뒤는 - 또는 끝). RCRT1·RCRT18·RCRT88 등 제외 */
+  var SLA_DIRECT_RCRT_RE = /^1007-RCRT(2|3|4|22|44)(-|$)/i;
+
+  function isSlaDirectRcrtLoc(loc) {
+    return SLA_DIRECT_RCRT_RE.test(String(loc || "").trim());
   }
 
   function pushSlaDirectLoc(bucket, key, loc, qty) {

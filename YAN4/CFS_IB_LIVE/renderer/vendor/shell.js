@@ -897,6 +897,13 @@
     return UNLOAD_GAP_INVENTORY_SEARCH_URL + "?" + p.toString();
   }
 
+  /** 직납 RCRT 로케이션 — 1007-RCRT2/3/4/22/44 (뒤는 - 또는 끝). RCRT1·RCRT18·RCRT88 등 제외 */
+  var UNLOAD_GAP_DIRECT_RCRT_RE = /^1007-RCRT(2|3|4|22|44)(-|$)/i;
+
+  function unloadGapIsDirectRcrtLoc(loc) {
+    return UNLOAD_GAP_DIRECT_RCRT_RE.test(String(loc || "").trim());
+  }
+
   function unloadGapBuildInventoryLocationSearchUrl(locationBarcode, page) {
     var p = new URLSearchParams();
     p.set("searched", "true");
@@ -923,7 +930,7 @@
    */
   async function unloadGapFetchLocationStock(loc) {
     var want = String(loc || "").replace(/ /g, " ").trim().toUpperCase();
-    if (!want) return { ok: false, qty: 0 };
+    if (!want || !unloadGapIsDirectRcrtLoc(want)) return { ok: false, qty: 0 };
     var qty = 0;
     var page, j, content, i, row, rowLoc, q, totalPages;
     try {
@@ -998,7 +1005,7 @@
     for (i = 0; i < content.length; i++) {
       var row = content[i];
       var loc = String((row && row.locationBarcode) || "").trim();
-      if (!loc || !/1007-RCRT[234]/.test(loc)) continue;
+      if (!loc || !unloadGapIsDirectRcrtLoc(loc)) continue;
       // 같은 로케이션 여러 행(LPN 등)은 quantity 합계
       var q = Number(row.quantity);
       if (Number.isFinite(q)) qtyByLoc[loc] = (qtyByLoc[loc] || 0) + q;
@@ -1319,7 +1326,7 @@
       if (tds.length <= idx) return;
       var loc = String(tds[idx].textContent || "").replace(/\u00a0/g, " ").trim();
       if (!loc) return;
-      if (!/1007-RCRT[234]/.test(loc)) return;
+      if (!unloadGapIsDirectRcrtLoc(loc)) return;
       var qtyMap = null;
       if (qtyIdx >= 0 && tds.length > qtyIdx) {
         var q = Number(String(tds[qtyIdx].textContent || "").replace(/[^\d.\-]/g, ""));
@@ -1514,7 +1521,7 @@
   }
 
   function unloadGapBuildTeamsClipboard(rows) {
-    var cols = ["발주ID", "SKU", "상품명", "상태", "입고", "진열완료", "진열오류", "미달", "로케이션 (RCRT2~4)"];
+    var cols = ["발주ID", "SKU", "상품명", "상태", "입고", "진열완료", "진열오류", "미달", "로케이션 (RCRT2·3·4·22·44)"];
     var tsv = [cols.join("\t")];
     var html =
       '<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;font-family:Segoe UI,Malgun Gothic,sans-serif;font-size:12px;color:#0f172a">' +
