@@ -1063,6 +1063,11 @@
   line-height: 1.35;
 }
 
+/* 직납 드릴 inventory 조회 실패 — SLA 파일 값 표시 중 */
+.yna4-sla-pivot-drill-table--direct td.yna4-sla-pivot-drill-loc--failed {
+  color: #b45309;
+}
+
 .yna4-sla-pivot-drill-table--direct td.yna4-sla-pivot-drill-units .yna4-sla-pivot-drill-units-line {
   display: block;
   white-space: nowrap;

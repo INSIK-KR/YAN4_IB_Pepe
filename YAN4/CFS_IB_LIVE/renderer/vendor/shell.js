@@ -897,6 +897,67 @@
     return UNLOAD_GAP_INVENTORY_SEARCH_URL + "?" + p.toString();
   }
 
+  function unloadGapBuildInventoryLocationSearchUrl(locationBarcode, page) {
+    var p = new URLSearchParams();
+    p.set("searched", "true");
+    p.set("locationType", "");
+    p.set("zone", "");
+    p.set("fromLocation", "");
+    p.set("toLocation", "");
+    p.set("locationBarcode", String(locationBarcode || ""));
+    p.set("skuId", "");
+    p.set("externalSkuId", "");
+    p.set("skuBarcode", "");
+    p.set("lpnId", "");
+    p.set("inventoryId", "");
+    p.set("saleableChangeType", "");
+    p.set("availableInventory", "true");
+    p.set("page", String(page != null ? page : 0));
+    p.set("pageSize", "20");
+    return UNLOAD_GAP_INVENTORY_SEARCH_URL + "?" + p.toString();
+  }
+
+  /**
+   * 직납 드릴 — SLA RCRT 를 로케이션 바코드로 재고조회(SKU 조건 없음).
+   * { ok, qty } · qty 는 그 로케이션 전체 quantity 합계 · ok=false 면 조회 실패
+   */
+  async function unloadGapFetchLocationStock(loc) {
+    var want = String(loc || "").replace(/ /g, " ").trim().toUpperCase();
+    if (!want) return { ok: false, qty: 0 };
+    var qty = 0;
+    var page, j, content, i, row, rowLoc, q, totalPages;
+    try {
+      for (page = 0; page < UNLOAD_GAP_INVENTORY_PAGE_CAP; page++) {
+        var text = await unloadGapInventoryRequest({
+          url: unloadGapBuildInventoryLocationSearchUrl(want, page),
+          referer: UNLOAD_GAP_INVENTORY_REFERER,
+          accept: "application/json, text/javascript, */*; q=0.01",
+        });
+        try {
+          j = JSON.parse(String(text || ""));
+        } catch (eJ) {
+          return { ok: false, qty: 0 };
+        }
+        content = j && j.success !== false && j.result && j.result.content;
+        if (!Array.isArray(content)) return { ok: false, qty: 0 };
+        for (i = 0; i < content.length; i++) {
+          row = content[i];
+          rowLoc = String((row && row.locationBarcode) || "").trim().toUpperCase();
+          // 로케이션 검색이 앞부분 일치로 넓게 잡혀도 정확히 같은 로케이션만 합산
+          if (rowLoc !== want) continue;
+          q = Number(row.quantity);
+          if (Number.isFinite(q)) qty += q;
+        }
+        totalPages = Number(j.result.totalPages);
+        if (!Number.isFinite(totalPages) || page + 1 >= totalPages) break;
+      }
+      return { ok: true, qty: qty };
+    } catch (eLoc) {
+      console.warn("[YAN4] inventory location API", want, eLoc);
+      return { ok: false, qty: 0 };
+    }
+  }
+
   async function unloadGapFetchRcrtMergedFromApi(buildUrlFn) {
     var merged = unloadGapNewRcrtMerged();
     var page;
@@ -2091,6 +2152,7 @@
     rcrtListForSku: unloadGapRcrtListForSku,
     rcrtEntriesForSku: unloadGapFetchRcrtEntriesForSku,
     rcrtLiveForSku: unloadGapFetchRcrtLiveForSku,
+    locationStock: unloadGapFetchLocationStock,
   };
 
   function unloadSlaRunAnalysisFromText(tsvText, htmlText) {

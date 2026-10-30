@@ -5141,9 +5141,9 @@
 
   var DRILL_DOM_CHUNK_SIZE = 60;
   var DRILL_SCAN_YIELD_EVERY = 250;
-  /* 직납 드릴 실시간 재고조회 — 드릴 열 때마다 새로 조회. inventory 부하 줄이기: 동시 2 · 요청 뒤 200ms */
+  /* 직납 드릴 실시간 재고조회 — 드릴 열 때마다 새로 조회. inventory 부하 줄이기: 동시 2 · 요청 뒤 50ms */
   var DIRECT_DRILL_RCRT_CONCURRENCY = 2;
-  var DIRECT_DRILL_LIVE_GAP_MS = 200;
+  var DIRECT_DRILL_LIVE_GAP_MS = 50;
 
   function slaDrillNextFrame() {
     return new Promise(function (resolve) {
@@ -9805,41 +9805,52 @@
     }
   }
 
-  function normalizeDirectDrillLocKey(loc) {
-    return String(loc || "")
-      .replace(/ /g, " ")
-      .trim()
-      .toUpperCase();
-  }
-
-  /** inventory 실시간 재고 { ok, entries } — 캐시 없음, 요청 뒤 200ms 쉼 */
+  /** SLA 에 없는 SKU — SKU 로 inventory 실시간 조회 { ok, entries } · 요청 뒤 50ms 쉼 */
   async function fetchDirectDrillLiveStock(bridge, sku) {
     var result = await bridge.rcrtLiveForSku(sku);
     await sleep(DIRECT_DRILL_LIVE_GAP_MS);
     return result;
   }
 
-  /** SLA RCRT 중 지금 재고가 있는 것만, 유닛은 실시간 수량 */
-  function directDrillSlaLocsWithLiveQty(slaEntries, liveEntries) {
-    var qtyByLoc = Object.create(null);
-    var i, k, q;
-    for (i = 0; i < (liveEntries || []).length; i++) {
-      k = normalizeDirectDrillLocKey(liveEntries[i].loc);
-      q = Number(liveEntries[i].qty);
-      if (!k || !isFinite(q)) continue;
-      qtyByLoc[k] = (qtyByLoc[k] || 0) + q;
-    }
+  /**
+   * SLA RCRT 를 하나씩 로케이션 바코드로 재고조회(SKU 조건 없음).
+   * 재고 있는 RCRT 만 남기고 유닛은 그 로케이션 전체 수량.
+   * 하나라도 조회 실패면 { ok:false } — SLA 값 그대로 + 조회 실패 표시
+   */
+  async function checkDirectDrillSlaLocs(bridge, slaEntries, aliveFn) {
     var out = [];
+    var i, res;
     for (i = 0; i < slaEntries.length; i++) {
-      q = qtyByLoc[normalizeDirectDrillLocKey(slaEntries[i].loc)];
-      if (q > 0) out.push({ loc: slaEntries[i].loc, qty: q });
+      if (stopRequested || !aliveFn()) return null;
+      try {
+        res = await bridge.locationStock(slaEntries[i].loc);
+      } catch (eLoc) {
+        res = null;
+      }
+      await sleep(DIRECT_DRILL_LIVE_GAP_MS);
+      if (!res || !res.ok) return { ok: false, entries: slaEntries };
+      if (res.qty > 0) out.push({ loc: slaEntries[i].loc, qty: res.qty });
     }
-    return out;
+    return { ok: true, entries: out };
+  }
+
+  function markDirectDrillLookupFailed(td, unitsTd) {
+    var tip = "inventory 조회 실패 — SLA 파일 값";
+    td.classList.add("yna4-sla-pivot-drill-loc--failed");
+    td.title = tip;
+    if (unitsTd) {
+      unitsTd.classList.add("yna4-sla-pivot-drill-loc--failed");
+      unitsTd.title = tip;
+    }
   }
 
   async function loadDirectDrillRcrtLocations(itemLines, tbody) {
     var bridge = window.__YAN4_UNLOAD_GAP_BRIDGE__;
-    var hasLive = !!(bridge && typeof bridge.rcrtLiveForSku === "function");
+    var hasLive = !!(
+      bridge &&
+      typeof bridge.rcrtLiveForSku === "function" &&
+      typeof bridge.locationStock === "function"
+    );
     var slaLookup = lastShrinkSlaLookup;
     if (!tbody || !itemLines || !itemLines.length) return;
     var next = 0;
@@ -9871,38 +9882,43 @@
         );
         if (unitsTd) fillDirectDrillUnitsCell(unitsTd, entries);
       }
-      // RCRT 목록은 SLA 파일 FULLNAME, 재고·유닛은 inventory 실시간 (재고 0 인 RCRT 는 숨김)
-      var slaEntries = slaDirectLocEntriesForSku(slaLookup, sku);
-      var live = null;
-      if (hasLive) {
-        td.textContent = "RCRT 조회…";
-        try {
-          live = await fetchDirectDrillLiveStock(bridge, sku);
-        } catch (eRcrt) {
-          if (typeof console !== "undefined" && console.warn) {
-            console.warn("[YAN4 Direct SLA RCRT]", sku, eRcrt);
-          }
-          live = null;
-        }
-        if (!tbody.isConnected) return;
+      function alive() {
+        return tbody.isConnected;
       }
-      var liveOk = !!(live && live.ok);
-      if (slaEntries.length) {
-        // 실시간 조회 실패 시에는 SLA 파일 값 그대로
-        paint(
-          liveOk
-            ? directDrillSlaLocsWithLiveQty(slaEntries, live.entries)
-            : slaEntries
-        );
+      // RCRT 목록은 SLA 파일 FULLNAME → 로케이션 바코드로 실시간 재고조회 (비었으면 숨김)
+      var slaEntries = slaDirectLocEntriesForSku(slaLookup, sku);
+      if (!hasLive) {
+        paint(slaEntries);
         return;
       }
-      // SLA 파일에 없는 SKU — inventory 에서 찾은 RCRT(재고 있는 것만)
+      td.textContent = "RCRT 조회…";
+      if (slaEntries.length) {
+        var checked = await checkDirectDrillSlaLocs(bridge, slaEntries, alive);
+        if (!checked || !alive()) return;
+        paint(checked.entries);
+        if (!checked.ok) markDirectDrillLookupFailed(td, unitsTd);
+        return;
+      }
+      // SLA 파일에 없는 SKU — SKU 로 inventory 조회해서 재고 있는 RCRT
+      var live = null;
+      try {
+        live = await fetchDirectDrillLiveStock(bridge, sku);
+      } catch (eRcrt) {
+        if (typeof console !== "undefined" && console.warn) {
+          console.warn("[YAN4 Direct SLA RCRT]", sku, eRcrt);
+        }
+      }
+      if (!alive()) return;
+      if (!live || !live.ok) {
+        paint([]);
+        td.textContent = "조회 실패";
+        markDirectDrillLookupFailed(td, unitsTd);
+        return;
+      }
       paint(
-        liveOk
-          ? live.entries.filter(function (e) {
-              return e.qty == null || e.qty > 0;
-            })
-          : []
+        live.entries.filter(function (e) {
+          return e.qty == null || e.qty > 0;
+        })
       );
     }
 
@@ -12009,6 +12025,7 @@
       ".yna4-sla-pivot-drill-table--direct th.yna4-sla-pivot-drill-col-qty,.yna4-sla-pivot-drill-table--direct td.yna4-sla-pivot-drill-col-qty{width:58px;min-width:58px;max-width:58px;text-align:right;padding-left:4px;padding-right:6px;box-sizing:border-box;font-variant-numeric:tabular-nums}" +
       ".yna4-sla-pivot-drill-table--direct th.yna4-sla-pivot-drill-units,.yna4-sla-pivot-drill-table--direct td.yna4-sla-pivot-drill-units{width:64px;min-width:64px;max-width:64px;text-align:right;padding-left:4px;padding-right:6px;box-sizing:border-box;vertical-align:middle;font-variant-numeric:tabular-nums}" +
       ".yna4-sla-pivot-drill-table--direct td.yna4-sla-pivot-drill-units{font-size:11px;line-height:1.35}" +
+      ".yna4-sla-pivot-drill-table--direct td.yna4-sla-pivot-drill-loc--failed{color:#b45309}" +
       ".yna4-sla-pivot-drill-table--direct td.yna4-sla-pivot-drill-units .yna4-sla-pivot-drill-units-line{display:block;white-space:nowrap}" +
       ".yna4-sla-pivot-drill-table--direct th.yna4-sla-pivot-drill-col-status,.yna4-sla-pivot-drill-table--direct td.yna4-sla-pivot-drill-col-status{width:80px;min-width:80px;max-width:96px}" +
       ".yna4-sla-pivot-drill-table .yna4-sla-pivot-drill-name{width:400px;max-width:400px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:middle;font-size:11px;line-height:1.35;color:#334155}" +
