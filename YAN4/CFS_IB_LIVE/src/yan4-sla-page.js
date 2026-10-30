@@ -9885,7 +9885,8 @@
   /**
    * SLA RCRT 를 하나씩 로케이션 바코드로 재고조회(SKU 조건 없음).
    * 재고 있는 RCRT 만 남기고 유닛은 그 로케이션 전체 수량.
-   * 하나라도 조회 실패면 { ok:false } — SLA 값 그대로 + 조회 실패 표시
+   * 하나라도 조회 실패면 { ok:false } — SLA 값 그대로 + 조회 실패 표시.
+   * 로그인 풀림이면 { ok:false, login:true }
    */
   async function checkDirectDrillSlaLocs(bridge, slaEntries, aliveFn) {
     var out = [];
@@ -9898,20 +9899,34 @@
         res = null;
       }
       await sleep(DIRECT_DRILL_LIVE_GAP_MS);
-      if (!res || !res.ok) return { ok: false, entries: slaEntries };
+      if (!res || !res.ok) {
+        return { ok: false, login: !!(res && res.login), entries: slaEntries };
+      }
       if (res.qty > 0) out.push({ loc: slaEntries[i].loc, qty: res.qty });
     }
-    return { ok: true, entries: out };
+    return { ok: true, login: false, entries: out };
   }
 
-  function markDirectDrillLookupFailed(td, unitsTd) {
-    var tip = "inventory 조회 실패 — SLA 파일 값";
+  function markDirectDrillLookupFailed(td, unitsTd, tip) {
+    tip = tip || "inventory 조회 실패 — SLA 파일 값";
     td.classList.add("yna4-sla-pivot-drill-loc--failed");
     td.title = tip;
     if (unitsTd) {
       unitsTd.classList.add("yna4-sla-pivot-drill-loc--failed");
       unitsTd.title = tip;
     }
+  }
+
+  /** 로그인 풀림 — 예전 SLA 값 대신 RCRT 칸에 "로그인 필요" */
+  function markDirectDrillLoginNeeded(td, unitsTd) {
+    fillDirectDrillLocationCell(td, []);
+    td.textContent = "로그인 필요";
+    if (unitsTd) fillDirectDrillUnitsCell(unitsTd, []);
+    markDirectDrillLookupFailed(
+      td,
+      unitsTd,
+      "WMS(inventory) 로그인이 풀렸어요 — 다시 로그인한 뒤 드릴을 다시 여세요"
+    );
   }
 
   async function loadDirectDrillRcrtLocations(itemLines, tbody) {
@@ -9929,6 +9944,8 @@
       itemLines.length
     );
     var wi;
+    // 한 번 로그인 풀림이 확인되면 남은 행은 요청 없이 "로그인 필요"
+    var loginLost = false;
 
     async function fillOne(mi) {
       var tr = tbody.children[mi];
@@ -9961,10 +9978,19 @@
         paint(slaEntries);
         return;
       }
+      if (loginLost) {
+        markDirectDrillLoginNeeded(td, unitsTd);
+        return;
+      }
       td.textContent = "RCRT 조회…";
       if (slaEntries.length) {
         var checked = await checkDirectDrillSlaLocs(bridge, slaEntries, alive);
         if (!checked || !alive()) return;
+        if (checked.login) {
+          loginLost = true;
+          markDirectDrillLoginNeeded(td, unitsTd);
+          return;
+        }
         paint(checked.entries);
         if (!checked.ok) markDirectDrillLookupFailed(td, unitsTd);
         return;
@@ -9979,6 +10005,11 @@
         }
       }
       if (!alive()) return;
+      if (live && live.login) {
+        loginLost = true;
+        markDirectDrillLoginNeeded(td, unitsTd);
+        return;
+      }
       if (!live || !live.ok) {
         paint([]);
         td.textContent = "조회 실패";

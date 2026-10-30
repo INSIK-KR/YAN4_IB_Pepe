@@ -906,6 +906,17 @@
     return UNLOAD_GAP_DIRECT_RCRT_RE.test(String(loc || "").trim());
   }
 
+  /** 로그인 풀림 — HTTP 401/403 오류 */
+  function unloadGapIsLoginError(e) {
+    return /^HTTP (401|403)\b/.test(String((e && e.message) || ""));
+  }
+
+  /** 로그인 풀림 — JSON 대신 로그인 화면 HTML 이 온 경우 */
+  function unloadGapLooksLikeLoginPage(text) {
+    var s = String(text || "").slice(0, 2000).toLowerCase();
+    return s.indexOf("<html") >= 0 || s.indexOf("<!doctype") >= 0;
+  }
+
   function unloadGapBuildInventoryLocationSearchUrl(locationBarcode, page) {
     var p = new URLSearchParams();
     p.set("searched", "true");
@@ -928,11 +939,12 @@
 
   /**
    * 직납 드릴 — SLA RCRT 를 로케이션 바코드로 재고조회(SKU 조건 없음).
-   * { ok, qty } · qty 는 그 로케이션 전체 quantity 합계 · ok=false 면 조회 실패
+   * { ok, qty, login } · qty 는 그 로케이션 전체 quantity 합계 · ok=false 면 조회 실패
+   * login=true 면 로그인 풀림(401·로그인 화면)
    */
   async function unloadGapFetchLocationStock(loc) {
     var want = String(loc || "").replace(/ /g, " ").trim().toUpperCase();
-    if (!want || !unloadGapIsDirectRcrtLoc(want)) return { ok: false, qty: 0 };
+    if (!want || !unloadGapIsDirectRcrtLoc(want)) return { ok: false, qty: 0, login: false };
     var qty = 0;
     var page, j, content, i, row, rowLoc, q, totalPages;
     try {
@@ -945,10 +957,10 @@
         try {
           j = JSON.parse(String(text || ""));
         } catch (eJ) {
-          return { ok: false, qty: 0 };
+          return { ok: false, qty: 0, login: unloadGapLooksLikeLoginPage(text) };
         }
         content = j && j.success !== false && j.result && j.result.content;
-        if (!Array.isArray(content)) return { ok: false, qty: 0 };
+        if (!Array.isArray(content)) return { ok: false, qty: 0, login: false };
         for (i = 0; i < content.length; i++) {
           row = content[i];
           rowLoc = String((row && row.locationBarcode) || "").trim().toUpperCase();
@@ -960,10 +972,10 @@
         totalPages = Number(j.result.totalPages);
         if (!Number.isFinite(totalPages) || page + 1 >= totalPages) break;
       }
-      return { ok: true, qty: qty };
+      return { ok: true, qty: qty, login: false };
     } catch (eLoc) {
       console.warn("[YAN4] inventory location API", want, eLoc);
-      return { ok: false, qty: 0 };
+      return { ok: false, qty: 0, login: unloadGapIsLoginError(eLoc) };
     }
   }
 
@@ -979,6 +991,7 @@
       });
       var parsed = unloadGapParseRcrtFromInventoryJson(jsonText);
       if (parsed.valid) merged.valid = true;
+      else if (unloadGapLooksLikeLoginPage(jsonText)) merged.loginPage = true;
       unloadGapMergeRcrtLocations(merged, parsed.locations, parsed.qtyByLoc);
       if (page + 1 >= (parsed.totalPages || 1)) break;
     }
@@ -1359,25 +1372,31 @@
 
   /**
    * 직납 드릴 실시간 재고 — inventory API 만 조회(skuid → 없으면 externalid).
-   * { ok, entries:[{ loc, qty }] } · ok=false 면 조회 실패(로그인 만료·네트워크 등)
+   * { ok, entries:[{ loc, qty }], login } · ok=false 면 조회 실패(로그인 만료·네트워크 등)
+   * login=true 면 로그인 풀림(401·로그인 화면)
    */
   async function unloadGapFetchRcrtLiveForSku(sku) {
     var id = unloadGapNormalizeInventorySkuId(sku);
-    if (!id) return { ok: false, entries: [] };
+    if (!id) return { ok: false, entries: [], login: false };
     try {
       var merged = await unloadGapFetchRcrtMergedFromApi(function (page) {
         return unloadGapBuildInventorySearchUrl(id, page);
       });
+      if (merged.loginPage) return { ok: false, entries: [], login: true };
       if (!merged.list.length) {
         var byExt = await unloadGapFetchRcrtMergedFromApi(function (page) {
           return unloadGapBuildInventoryExternalSkuSearchUrl(id, page);
         });
         if (byExt.list.length || !merged.valid) merged = byExt;
       }
-      return { ok: merged.valid, entries: unloadGapRcrtMergedToEntries(merged) };
+      return {
+        ok: merged.valid,
+        entries: unloadGapRcrtMergedToEntries(merged),
+        login: !merged.valid && !!merged.loginPage,
+      };
     } catch (eApi) {
       console.warn("[YAN4] inventory live API", id, eApi);
-      return { ok: false, entries: [] };
+      return { ok: false, entries: [], login: unloadGapIsLoginError(eApi) };
     }
   }
 
