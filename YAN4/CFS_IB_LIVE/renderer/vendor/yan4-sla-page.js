@@ -12401,9 +12401,7 @@
       ".yna4-sla-pivot-drill-table--direct th.yna4-sla-pivot-drill-col-qty,.yna4-sla-pivot-drill-table--direct td.yna4-sla-pivot-drill-col-qty{width:58px;min-width:58px;max-width:58px;text-align:right;padding-left:4px;padding-right:6px;box-sizing:border-box;font-variant-numeric:tabular-nums}" +
       ".yna4-sla-pivot-drill-table--direct th.yna4-sla-pivot-drill-units,.yna4-sla-pivot-drill-table--direct td.yna4-sla-pivot-drill-units{width:64px;min-width:64px;max-width:64px;text-align:right;padding-left:4px;padding-right:6px;box-sizing:border-box;vertical-align:middle;font-variant-numeric:tabular-nums}" +
       ".yna4-sla-pivot-drill-table--direct td.yna4-sla-pivot-drill-units{font-size:11px;line-height:1.35}" +
-      ".yna4-sla-pivot-drill-table--direct td.yna4-sla-pivot-drill-loc--failed{color:#b45309}" +
-      ".yna4-sla-pivot-num--live{text-decoration:underline dotted;text-underline-offset:2px}" +
-      ".yna4-sla-pivot-drill-table--direct td.yna4-sla-pivot-drill-units .yna4-sla-pivot-drill-units-line{display:block;white-space:nowrap}" +
+      ".yna4-sla-pivot-drill-table--direct td.yna4-sla-pivot-drill-loc--failed{color:#b45309}" +      ".yna4-sla-pivot-drill-table--direct td.yna4-sla-pivot-drill-units .yna4-sla-pivot-drill-units-line{display:block;white-space:nowrap}" +
       ".yna4-sla-pivot-drill-table--direct th.yna4-sla-pivot-drill-col-status,.yna4-sla-pivot-drill-table--direct td.yna4-sla-pivot-drill-col-status{width:80px;min-width:80px;max-width:96px}" +
       ".yna4-sla-pivot-drill-table .yna4-sla-pivot-drill-name{width:400px;max-width:400px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:middle;font-size:11px;line-height:1.35;color:#334155}" +
       ".yna4-sla-pivot-drill-warn{color:#b45309;font-weight:700}" +

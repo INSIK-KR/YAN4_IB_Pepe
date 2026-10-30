@@ -1063,12 +1063,6 @@
   line-height: 1.35;
 }
 
-/* 직납 피벗 — 드릴 후 RCRT 실시간 유닛으로 바뀐 셀 */
-.yna4-sla-pivot-num--live {
-  text-decoration: underline dotted;
-  text-underline-offset: 2px;
-}
-
 /* 직납 드릴 inventory 조회 실패 — SLA 파일 값 표시 중 */
 .yna4-sla-pivot-drill-table--direct td.yna4-sla-pivot-drill-loc--failed {
   color: #b45309;
