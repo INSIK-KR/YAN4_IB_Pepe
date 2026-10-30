@@ -4374,7 +4374,16 @@
     for (i = 0; i < old.length; i++) {
       old[i].classList.remove("yna4-sla-pivot-num--selected");
     }
+    // 직납 드릴로 바뀐 칸 배경색 — 다른 피벗 칸을 누르면 원래대로
+    var live = tableShell.querySelectorAll(".yna4-sla-pivot-num--live");
+    for (i = 0; i < live.length; i++) {
+      live[i].classList.remove("yna4-sla-pivot-num--live");
+      live[i].style.removeProperty("background");
+    }
   }
+
+  /** 직납 드릴로 유닛이 바뀐 피벗 칸 배경색 (SLA 경고색보다 위에 보이도록 inline !important) */
+  var DIRECT_PIVOT_LIVE_BG = "#fef08a";
 
   var PIVOT_DRILL_COLS = [
     {
@@ -10362,7 +10371,10 @@
     );
     if (td) {
       td.textContent = formatPivotNum(newVal);
-      td.classList.add("yna4-sla-pivot-num--live");
+      if (delta) {
+        td.classList.add("yna4-sla-pivot-num--live");
+        td.style.setProperty("background", DIRECT_PIVOT_LIVE_BG, "important");
+      }
       td.title =
         "RCRT 실시간 반영 " +
         stamp +
