@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Inbound SOP</title>
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: #1e293b;
+      font-family: "Segoe UI", "Malgun Gothic", sans-serif;
+    }
+    #bar {
+      height: 48px;
+      box-sizing: border-box;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 10px;
+      background: #0f172a;
+      border-bottom: 1px solid #334155;
+      color: #e2e8f0;
+      flex-shrink: 0;
+    }
+    #bar strong {
+      color: #fbbf24;
+      font-size: 12px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    #q {
+      flex: 1 1 auto;
+      min-width: 8em;
+      height: 30px;
+      box-sizing: border-box;
+      border: 1px solid #475569;
+      border-radius: 6px;
+      background: #1e293b;
+      color: #f8fafc;
+      padding: 0 10px;
+      font-size: 13px;
+    }
+    #q:focus {
+      outline: none;
+      border-color: #38bdf8;
+    }
+    #bar button {
+      height: 30px;
+      border: 0;
+      border-radius: 6px;
+      padding: 0 12px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      background: #334155;
+      color: #e2e8f0;
+      flex-shrink: 0;
+    }
+    #bar button.primary {
+      background: #38bdf8;
+      color: #0f172a;
+    }
+    #bar button:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
+    #hit {
+      font-size: 12px;
+      color: #94a3b8;
+      min-width: 7em;
+      text-align: right;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    #stage {
+      height: calc(100% - 48px);
+      overflow: auto;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 12px;
+      box-sizing: border-box;
+      background: #334155;
+    }
+    #pageWrap {
+      position: relative;
+      background: #fff;
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+      line-height: 0;
+    }
+    #pageCanvas {
+      display: block;
+      max-width: 100%;
+    }
+    #linkLayer {
+      position: absolute;
+      left: 0;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      overflow: hidden;
+    }
+    #linkLayer a {
+      position: absolute;
+      display: block;
+      box-sizing: border-box;
+      background: transparent;
+      cursor: pointer;
+      border-radius: 2px;
+    }
+    #linkLayer a:hover {
+      background: rgba(56, 189, 248, 0.18);
+      outline: 1px solid rgba(56, 189, 248, 0.55);
+    }
+    #status {
+      position: absolute;
+      left: 50%;
+      top: 56%;
+      transform: translate(-50%, -50%);
+      color: #cbd5e1;
+      font-size: 13px;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="bar">
+    <strong>SOP</strong>
+    <input id="q" type="search" placeholder="검색 · 예: 하차, RCRT, 라벨" autocomplete="off" />
+    <button type="button" id="btnPrev" title="이전 결과">이전</button>
+    <button type="button" class="primary" id="btnNext" title="다음 결과">다음</button>
+    <span id="hit"></span>
+  </div>
+  <div id="stage">
+    <div id="pageWrap">
+      <canvas id="pageCanvas"></canvas>
+      <div id="linkLayer"></div>
+    </div>
+  </div>
+  <div id="status">SOP 불러오는 중…</div>
+  <script type="module">
+    import * as pdfjsLib from "./vendor/pdfjs/pdf.min.mjs";
+
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "./vendor/pdfjs/pdf.worker.min.mjs";
+
+    var q = document.getElementById("q");
+    var hit = document.getElementById("hit");
+    var btnPrev = document.getElementById("btnPrev");
+    var btnNext = document.getElementById("btnNext");
+    var canvas = document.getElementById("pageCanvas");
+    var linkLayer = document.getElementById("linkLayer");
+    var stage = document.getElementById("stage");
+    var statusEl = document.getElementById("status");
+    var ctx = canvas.getContext("2d", { alpha: false });
+
+    var pdfDoc = null;
+    var currentPage = 1;
+    var renderToken = 0;
+    var hits = [];
+    var cursor = -1;
+    var lastQuery = "";
+    var searchTimer = null;
+    var rendering = false;
+    var pendingPage = 0;
+    var pendingQuery = "";
+    var pdfReady = false;
+
+    function setStatus(text) {
+      if (!text) {
+        statusEl.style.display = "none";
+        statusEl.textContent = "";
+        return;
+      }
+      statusEl.style.display = "block";
+      statusEl.textContent = text;
+    }
+
+    function setHit(text) {
+      hit.textContent = text || "";
+    }
+
+    function clearLinks() {
+      while (linkLayer.firstChild) linkLayer.removeChild(linkLayer.firstChild);
+    }
+
+    async function resolveDestPage(dest) {
+      if (!pdfDoc || dest == null) return null;
+      var explicit = dest;
+      try {
+        if (typeof dest === "string") {
+          explicit = await pdfDoc.getDestination(dest);
+        }
+      } catch (eDest) {
+        return null;
+      }
+      if (!Array.isArray(explicit) || !explicit.length) return null;
+      try {
+        var ref = explicit[0];
+        var pageIndex = await pdfDoc.getPageIndex(ref);
+        return pageIndex + 1;
+      } catch (eIdx) {
+        return null;
+      }
+    }
+
+    async function paintLinks(page, viewport, token) {
+      clearLinks();
+      var anns;
+      try {
+        anns = await page.getAnnotations({ intent: "display" });
+      } catch (eAnn) {
+        return;
+      }
+      if (token !== renderToken) return;
+      for (var i = 0; i < anns.length; i++) {
+        var ann = anns[i];
+        if (!ann || ann.subtype !== "Link" || !ann.rect) continue;
+        var targetPage = null;
+        if (ann.dest != null) {
+          targetPage = await resolveDestPage(ann.dest);
+          if (token !== renderToken) return;
+        }
+        if (!targetPage && !ann.url) continue;
+
+        var rect = viewport.convertToViewportRectangle(ann.rect);
+        var left = Math.min(rect[0], rect[2]);
+        var top = Math.min(rect[1], rect[3]);
+        var width = Math.abs(rect[2] - rect[0]);
+        var height = Math.abs(rect[3] - rect[1]);
+        if (width < 2 || height < 2) continue;
+
+        var a = document.createElement("a");
+        a.href = "#";
+        a.title = targetPage
+          ? targetPage + "페이지로 이동"
+          : String(ann.url || "링크");
+        a.style.left = left + "px";
+        a.style.top = top + "px";
+        a.style.width = width + "px";
+        a.style.height = height + "px";
+        a.dataset.page = targetPage ? String(targetPage) : "";
+        a.dataset.url = ann.url ? String(ann.url) : "";
+        a.addEventListener("click", function (ev) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          var go = parseInt(a.dataset.page || "", 10);
+          if (go) {
+            setHit("");
+            hits = [];
+            cursor = -1;
+            lastQuery = "";
+            renderPage(go);
+          }
+        });
+        linkLayer.appendChild(a);
+      }
+    }
+
+    async function renderPage(pageNum) {
+      if (!pdfDoc) return;
+      pageNum = Math.max(1, Math.min(pdfDoc.numPages, pageNum | 0));
+      if (rendering) {
+        pendingPage = pageNum;
+        return;
+      }
+      rendering = true;
+      var myToken = ++renderToken;
+      try {
+        var page = await pdfDoc.getPage(pageNum);
+        if (myToken !== renderToken) return;
+        var base = page.getViewport({ scale: 1 });
+        var avail = Math.max(320, stage.clientWidth - 24);
+        var scale = Math.min(2.2, avail / base.width);
+        var viewport = page.getViewport({ scale: scale });
+        canvas.width = Math.floor(viewport.width);
+        canvas.height = Math.floor(viewport.height);
+        clearLinks();
+        await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+        if (myToken !== renderToken) return;
+        currentPage = pageNum;
+        setStatus("");
+        stage.scrollTop = 0;
+        await paintLinks(page, viewport, myToken);
+      } catch (e) {
+        setStatus("페이지 표시 실패");
+        console.warn("[sop] render", e);
+      } finally {
+        rendering = false;
+        if (pendingPage && pendingPage !== currentPage) {
+          var next = pendingPage;
+          pendingPage = 0;
+          renderPage(next);
+        }
+      }
+    }
+
+    function gotoHit(index) {
+      if (!hits.length) return;
+      cursor = ((index % hits.length) + hits.length) % hits.length;
+      var page = hits[cursor].page;
+      setHit(page + "p · " + (cursor + 1) + "/" + hits.length);
+      renderPage(page);
+    }
+
+    function applyHits(list, query) {
+      hits = list || [];
+      lastQuery = query || "";
+      if (!hits.length) {
+        cursor = -1;
+        setHit(query ? "없음" : "");
+        return;
+      }
+      gotoHit(0);
+    }
+
+    function runSearch(query) {
+      if (!window.yan4Sop) return;
+      var text = String(query != null ? query : q.value || "").trim();
+      if (!text) {
+        hits = [];
+        cursor = -1;
+        lastQuery = "";
+        setHit("");
+        return;
+      }
+      q.value = text;
+      window.yan4Sop.search(text).then(function (res) {
+        if (String(q.value || "").trim() !== text) return;
+        applyHits((res && res.hits) || [], text);
+      });
+    }
+
+    function applyLaunchQuery(query) {
+      var text = String(query || "").trim();
+      if (!text) return;
+      if (!pdfReady) {
+        pendingQuery = text;
+        return;
+      }
+      pendingQuery = "";
+      runSearch(text);
+      q.focus();
+    }
+
+    function step(delta) {
+      var text = String(q.value || "").trim();
+      if (!text) return;
+      if (!hits.length || text !== lastQuery) {
+        runSearch(text);
+        return;
+      }
+      gotoHit(cursor + delta);
+    }
+
+    async function boot() {
+      if (!window.yan4Sop || typeof window.yan4Sop.getPdf !== "function") {
+        setStatus("SOP API 없음");
+        return;
+      }
+      var res = await window.yan4Sop.getPdf();
+      if (!res || !res.ok || !res.data) {
+        setStatus((res && res.error) || "PDF 로드 실패");
+        return;
+      }
+      var data =
+        res.data instanceof Uint8Array
+          ? res.data
+          : new Uint8Array(res.data);
+      pdfDoc = await pdfjsLib.getDocument({ data: data }).promise;
+      setStatus("");
+      await renderPage(1);
+      pdfReady = true;
+      var launch =
+        typeof window.yan4Sop.consumeLaunchQuery === "function"
+          ? await window.yan4Sop.consumeLaunchQuery()
+          : null;
+      var launchQ =
+        (launch && launch.query) || pendingQuery || "";
+      if (launchQ) applyLaunchQuery(launchQ);
+      else q.focus();
+    }
+
+    if (window.yan4Sop && typeof window.yan4Sop.onApplyQuery === "function") {
+      window.yan4Sop.onApplyQuery(function (payload) {
+        applyLaunchQuery(payload && payload.query);
+      });
+    }
+
+    q.addEventListener("input", function () {
+      if (searchTimer) clearTimeout(searchTimer);
+      searchTimer = setTimeout(function () {
+        runSearch(q.value);
+      }, 100);
+    });
+    q.addEventListener("keydown", function (ev) {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        if (ev.shiftKey) step(-1);
+        else if (hits.length && String(q.value || "").trim() === lastQuery) step(1);
+        else runSearch(q.value);
+      } else if (ev.key === "Escape") {
+        q.value = "";
+        runSearch("");
+      }
+    });
+    btnNext.addEventListener("click", function () {
+      step(1);
+    });
+    btnPrev.addEventListener("click", function () {
+      step(-1);
+    });
+    window.addEventListener("resize", function () {
+      if (pdfDoc) renderPage(currentPage);
+    });
+
+    boot().catch(function (e) {
+      setStatus("SOP 열기 실패");
+      console.warn("[sop] boot", e);
+    });
+  </script>
+</body>
+</html>
