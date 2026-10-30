@@ -2199,12 +2199,13 @@
         }
       } else if (gcKey && isSlaDirectRcrtLoc(gcKey)) {
         // 직납 로케이션(1007-RCRT2/3/4/22/44): SKU 별로 FULLNAME 전부 + quantity 합계 유지
-        pushSlaDirectLoc(directLocBySkuId, skuId, gcKey, qty);
+        pushSlaDirectLoc(directLocBySkuId, skuId, gcKey, qty, skuId);
         pushSlaDirectLoc(
           directLocByExtId,
           normalizeDirectSkuJoinKey(extId),
           gcKey,
-          qty
+          qty,
+          skuId
         );
       }
     }
@@ -2302,7 +2303,8 @@
   /* shell.js(inventory RCRT 조회)도 같은 기준을 쓰도록 공개 */
   window.__YAN4_DIRECT_RCRT__ = { isDirect: isSlaDirectRcrtLoc };
 
-  function pushSlaDirectLoc(bucket, key, loc, qty) {
+  /** skuId: SLA 행의 내부 skuid — inventory 로케이션 조회 결과에서 이 SKU 수량만 고를 때 씀 */
+  function pushSlaDirectLoc(bucket, key, loc, qty, skuId) {
     if (!key || !loc) return;
     var list = bucket[key];
     if (!list) list = bucket[key] = [];
@@ -2310,15 +2312,16 @@
     for (i = 0; i < list.length; i++) {
       if (list[i].loc === loc) {
         list[i].qty += Number(qty) || 0;
+        if (!list[i].skuId && skuId) list[i].skuId = skuId;
         return;
       }
     }
-    list.push({ loc: loc, qty: Number(qty) || 0 });
+    list.push({ loc: loc, qty: Number(qty) || 0, skuId: skuId || "" });
   }
 
   /**
    * 직납 드릴 RCRT·유닛 — SLA FULLNAME(skuid 우선, 없으면 externalid). GC-·에이징 제외.
-   * [{ loc, qty }] · qty 는 같은 SKU + 같은 FULLNAME 행의 quantity 합계
+   * [{ loc, qty, skuId }] · qty 는 같은 SKU + 같은 FULLNAME 행의 quantity 합계
    */
   function slaDirectLocEntriesForSku(lookup, sku) {
     if (!lookup || !sku) return [];
@@ -2334,8 +2337,18 @@
     }
     if (!list || !list.length) return [];
     return list.map(function (e) {
-      return { loc: e.loc, qty: e.qty };
+      return { loc: e.loc, qty: e.qty, skuId: e.skuId || "" };
     });
+  }
+
+  /** SLA 파일 RCRT 유닛 합계 — SLA 에 직납 RCRT 가 없으면 null */
+  function slaRcrtUnitsForSku(lookup, sku) {
+    var entries = slaDirectLocEntriesForSku(lookup, sku);
+    if (!entries.length) return null;
+    var total = 0;
+    var i;
+    for (i = 0; i < entries.length; i++) total += Number(entries[i].qty) || 0;
+    return total;
   }
 
   function pickSlaRecordForGc(lookup, gc) {
@@ -9728,6 +9741,86 @@
     };
   }
 
+  function directRowGapQty(row) {
+    return (
+      Number(row.topSkuGap) ||
+      Number(row.pivotQty) ||
+      Number(row.remainQty) ||
+      0
+    );
+  }
+
+  /**
+   * 직납 피벗 셀 값 (RCRT 유닛 기준).
+   * unitsForSku(sku) 가 숫자면 그 SKU 를 셀당 1번만 더하고, null 이면 그 행은 하차 미진열.
+   * 레거시 PO대기(unload_pending_po) 행은 항상 하차 미진열.
+   */
+  function directPivotCellValue(rows, unitsForSku) {
+    var total = 0;
+    var seen = Object.create(null);
+    var i, row, gap, key, u;
+    for (i = 0; i < rows.length; i++) {
+      row = rows[i];
+      gap = directRowGapQty(row);
+      if (gap <= 0) continue;
+      key = normalizeDirectSkuJoinKey(row.skuSeq);
+      u =
+        key && row.source !== "unload_pending_po" ? unitsForSku(row.skuSeq) : null;
+      if (u == null) {
+        total += gap;
+        continue;
+      }
+      if (seen[key]) continue;
+      seen[key] = 1;
+      total += Number(u) || 0;
+    }
+    return total;
+  }
+
+  /** 직납 행을 피벗 셀(rowKey·timeCol)별로 묶기 — 하차 미진열 > 0 인 행만 (피벗과 같은 기준) */
+  function groupDirectRowsByCell(rows) {
+    var groups = Object.create(null);
+    var i, row, k;
+    for (i = 0; i < rows.length; i++) {
+      row = rows[i];
+      if (!row.rowKey || !row.timeCol || directRowGapQty(row) <= 0) continue;
+      k = row.rowKey + "\u0001" + row.timeCol;
+      if (!groups[k]) {
+        groups[k] = { rowKey: row.rowKey, timeCol: row.timeCol, rows: [] };
+      }
+      groups[k].rows.push(row);
+    }
+    return groups;
+  }
+
+  /**
+   * SLA 전체 조회 때 — 직납 피벗 숫자를 하차 미진열 대신 SLA 파일 RCRT 유닛 합계로.
+   * SLA 에 직납 RCRT 가 없는 SKU 행은 하차 미진열 그대로.
+   */
+  function applySlaRcrtUnitsToDirectBundle(bundle, slaLookup) {
+    var ctx = bundle && bundle.stats && bundle.stats.drillCtx;
+    if (!ctx || !ctx.allRows || !bundle.matrix || !slaLookup) return;
+    var groups = groupDirectRowsByCell(ctx.allRows);
+    var matrix = bundle.matrix;
+    var total = 0;
+    var k, g, v;
+    for (k in groups) {
+      g = groups[k];
+      v = directPivotCellValue(g.rows, function (sku) {
+        return slaRcrtUnitsForSku(slaLookup, sku);
+      });
+      if (!matrix[g.rowKey]) matrix[g.rowKey] = Object.create(null);
+      matrix[g.rowKey][g.timeCol] = v;
+      total += v;
+    }
+    ctx.matrix = matrix;
+    ctx.matrixPending = bundle.stats.matrixPending || null;
+    ctx.slaUnitsAt = new Date();
+    if (bundle.summary) {
+      bundle.summary += " · RCRT 유닛 " + Math.round(total).toLocaleString("en-US");
+    }
+  }
+
   function sortDirectPivotTimeCols(colSet, refYear) {
     var timeCols = Object.keys(colSet);
     timeCols.sort(function (a, b) {
@@ -9883,14 +9976,26 @@
   }
 
   /**
+   * 로케이션 조회 결과에서 이 SKU 수량 — 응답에 SKU ID 가 있고 SLA skuid 를 알면 그 SKU 줄만,
+   * 아니면 로케이션 전체 수량
+   */
+  function directDrillSkuQtyAtLoc(res, entry) {
+    var sid = normalizeShrinkInternalSkuKey(entry && entry.skuId);
+    if (sid && res.hasSkuIds && res.qtyBySku) {
+      return Number(res.qtyBySku[sid]) || 0;
+    }
+    return Number(res.qty) || 0;
+  }
+
+  /**
    * SLA RCRT 를 하나씩 로케이션 바코드로 재고조회(SKU 조건 없음).
-   * 재고 있는 RCRT 만 남기고 유닛은 그 로케이션 전체 수량.
+   * 그 SKU 재고가 남은 RCRT 만 남기고 유닛은 그 SKU 수량.
    * 하나라도 조회 실패면 { ok:false } — SLA 값 그대로 + 조회 실패 표시.
    * 로그인 풀림이면 { ok:false, login:true }
    */
   async function checkDirectDrillSlaLocs(bridge, slaEntries, aliveFn) {
     var out = [];
-    var i, res;
+    var i, res, q;
     for (i = 0; i < slaEntries.length; i++) {
       if (stopRequested || !aliveFn()) return null;
       try {
@@ -9902,7 +10007,8 @@
       if (!res || !res.ok) {
         return { ok: false, login: !!(res && res.login), entries: slaEntries };
       }
-      if (res.qty > 0) out.push({ loc: slaEntries[i].loc, qty: res.qty });
+      q = directDrillSkuQtyAtLoc(res, slaEntries[i]);
+      if (q > 0) out.push({ loc: slaEntries[i].loc, qty: q });
     }
     return { ok: true, login: false, entries: out };
   }
@@ -9929,7 +10035,11 @@
     );
   }
 
-  async function loadDirectDrillRcrtLocations(itemLines, tbody) {
+  /**
+   * 드릴 RCRT 조회 결과. onDone(results) — results[i] = { units, failed }
+   * units: SLA RCRT 의 지금 SKU 재고 합계 (SLA 에 없는 SKU 는 null), failed: 조회 실패·로그인 풀림
+   */
+  async function loadDirectDrillRcrtLocations(itemLines, tbody, onDone) {
     var bridge = window.__YAN4_UNLOAD_GAP_BRIDGE__;
     var hasLive = !!(
       bridge &&
@@ -9946,6 +10056,8 @@
     var wi;
     // 한 번 로그인 풀림이 확인되면 남은 행은 요청 없이 "로그인 필요"
     var loginLost = false;
+    var results = new Array(itemLines.length);
+    var FAILED = { units: null, failed: true };
 
     async function fillOne(mi) {
       var tr = tbody.children[mi];
@@ -9954,6 +10066,7 @@
       var sku = String(itemLines[mi].skuSeq || "").trim();
       if (!sku) {
         td.textContent = "-";
+        results[mi] = { units: null, failed: false };
         return;
       }
       var unitsTd =
@@ -9974,12 +10087,16 @@
       }
       // RCRT 목록은 SLA 파일 FULLNAME → 로케이션 바코드로 실시간 재고조회 (비었으면 숨김)
       var slaEntries = slaDirectLocEntriesForSku(slaLookup, sku);
+      // SLA 에 없는 SKU 는 피벗에서 하차 미진열 그대로 — 조회 결과와 상관없음
+      if (!slaEntries.length) results[mi] = { units: null, failed: false };
       if (!hasLive) {
         paint(slaEntries);
+        if (slaEntries.length) results[mi] = FAILED;
         return;
       }
       if (loginLost) {
         markDirectDrillLoginNeeded(td, unitsTd);
+        if (slaEntries.length) results[mi] = FAILED;
         return;
       }
       td.textContent = "RCRT 조회…";
@@ -9989,10 +10106,21 @@
         if (checked.login) {
           loginLost = true;
           markDirectDrillLoginNeeded(td, unitsTd);
+          results[mi] = FAILED;
           return;
         }
         paint(checked.entries);
-        if (!checked.ok) markDirectDrillLookupFailed(td, unitsTd);
+        if (!checked.ok) {
+          markDirectDrillLookupFailed(td, unitsTd);
+          results[mi] = FAILED;
+          return;
+        }
+        var liveUnits = 0;
+        var ei;
+        for (ei = 0; ei < checked.entries.length; ei++) {
+          liveUnits += Number(checked.entries[ei].qty) || 0;
+        }
+        results[mi] = { units: liveUnits, failed: false };
         return;
       }
       // SLA 파일에 없는 SKU — SKU 로 inventory 조회해서 재고 있는 RCRT
@@ -10038,6 +10166,129 @@
       jobs.push(worker());
     }
     await Promise.all(jobs);
+    if (typeof onDone === "function" && tbody.isConnected && !stopRequested) {
+      onDone(results);
+    }
+  }
+
+  function cssAttrValue(v) {
+    return String(v).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  }
+
+  function parsePivotCellNum(td) {
+    return Number(String((td && td.textContent) || "").replace(/[^\d.\-]/g, "")) || 0;
+  }
+
+  /**
+   * 드릴 끝난 뒤 — 드릴에 나온 셀의 직납 피벗 값을 RCRT 실시간 유닛으로 다시 계산.
+   * 셀 안에 조회 실패·로그인 풀림 행이 하나라도 있으면 그 셀은 그대로.
+   * 행 합계·총합계도 같은 차이만큼 고침. 반환: { cells, total, skipped }
+   */
+  function applyDirectDrillLiveToPivot(drillCtx, itemLines, results, anchorEl) {
+    var out = { cells: 0, total: 0, skipped: 0 };
+    if (!drillCtx || !drillCtx.allRows || !drillCtx.matrix) return out;
+    var liveBySku = Object.create(null);
+    var failedSku = Object.create(null);
+    var cellKeys = Object.create(null);
+    var i, line, r, key;
+    for (i = 0; i < itemLines.length; i++) {
+      line = itemLines[i];
+      r = results[i] || { units: null, failed: true };
+      key = normalizeDirectSkuJoinKey(line.skuSeq);
+      if (r.failed) {
+        if (key) failedSku[key] = 1;
+      } else if (r.units != null && key) {
+        liveBySku[key] = r.units;
+      }
+      if (line.rowKey && line.timeCol) {
+        cellKeys[line.rowKey + "\u0001" + line.timeCol] = {
+          rowKey: line.rowKey,
+          timeCol: line.timeCol,
+        };
+      }
+    }
+    var wrap = anchorEl && anchorEl.closest
+      ? anchorEl.closest(".yna4-sla-pivot-wrap")
+      : null;
+    var matrix = drillCtx.matrix;
+    var pending = drillCtx.matrixPending;
+    var now = new Date();
+    var stamp = pad2(now.getHours()) + ":" + pad2(now.getMinutes());
+    var ck, cell, rows, hasFail, ri, rk, oldVal, newVal, delta;
+    for (ck in cellKeys) {
+      cell = cellKeys[ck];
+      if (
+        pending &&
+        pending[cell.rowKey] &&
+        Number(pending[cell.rowKey][cell.timeCol]) > 0
+      ) {
+        out.skipped++;
+        continue;
+      }
+      rows = directLinesForPivotCell(drillCtx.allRows, cell.rowKey, cell.timeCol);
+      hasFail = false;
+      for (ri = 0; ri < rows.length; ri++) {
+        rk = normalizeDirectSkuJoinKey(rows[ri].skuSeq);
+        if (rk && failedSku[rk]) {
+          hasFail = true;
+          break;
+        }
+      }
+      if (hasFail) {
+        out.skipped++;
+        continue;
+      }
+      newVal = directPivotCellValue(rows, function (sku) {
+        var k = normalizeDirectSkuJoinKey(sku);
+        return k && liveBySku[k] !== undefined ? liveBySku[k] : null;
+      });
+      if (!matrix[cell.rowKey]) matrix[cell.rowKey] = Object.create(null);
+      oldVal = Number(matrix[cell.rowKey][cell.timeCol]) || 0;
+      matrix[cell.rowKey][cell.timeCol] = newVal;
+      out.cells++;
+      out.total += newVal;
+      delta = newVal - oldVal;
+      if (wrap) updateDirectPivotCellDom(wrap, matrix, cell, oldVal, newVal, delta, stamp);
+    }
+    return out;
+  }
+
+  function updateDirectPivotCellDom(wrap, matrix, cell, oldVal, newVal, delta, stamp) {
+    var tr = wrap.querySelector(
+      'tr[data-pivot-row-key="' + cssAttrValue(cell.rowKey) + '"]'
+    );
+    if (!tr) return;
+    var td = tr.querySelector(
+      'td[data-pivot-col="' + cssAttrValue(cell.timeCol) + '"]'
+    );
+    if (td) {
+      td.textContent = formatPivotNum(newVal);
+      td.classList.add("yna4-sla-pivot-num--live");
+      td.title =
+        "RCRT 실시간 반영 " +
+        stamp +
+        " (직전 " +
+        formatDrillQty(oldVal) +
+        ") · 더블클릭: SLA 상세";
+    }
+    var rowTotal = tr.querySelector('td[data-pivot-col="__TOTAL__"]');
+    if (rowTotal) {
+      var rowSum = 0;
+      var c;
+      for (c in matrix[cell.rowKey]) {
+        rowSum += Number(matrix[cell.rowKey][c]) || 0;
+      }
+      rowTotal.textContent = formatPivotNum(rowSum);
+    }
+    if (!delta) return;
+    var grand = wrap.querySelector('tr[data-pivot-row-key="__GRAND__"]');
+    if (!grand) return;
+    var gCol = grand.querySelector(
+      'td[data-pivot-col="' + cssAttrValue(cell.timeCol) + '"]'
+    );
+    if (gCol) gCol.textContent = formatPivotNum(parsePivotCellNum(gCol) + delta);
+    var gTot = grand.querySelector('td[data-pivot-col="__TOTAL__"]');
+    if (gTot) gTot.textContent = formatPivotNum(parsePivotCellNum(gTot) + delta);
   }
 
   async function buildDirectDrillItemLines(unloadMatches, drillCtx) {
@@ -10063,6 +10314,8 @@
         slaBaseAt: u.slaBaseAt,
         slaAt: u.slaAt,
         source: u.source || "po",
+        rowKey: u.rowKey || "",
+        timeCol: u.timeCol || "",
       };
       out.push(line);
     }
@@ -10206,19 +10459,18 @@
           ibcSeen[ibcKey] = 1;
           ibcCount++;
         }
-        fillDrillHeadTitle(
-          head,
+        var headText =
           rowLabel +
-            " · " +
-            colLabel +
-            " · 하차 " +
-            ibcCount +
-            " · 품목 " +
-            itemLines.length +
-            " · 미진열 " +
-            Math.round(gapSum).toLocaleString("en-US") +
-            " (IBC·하차)"
-        );
+          " · " +
+          colLabel +
+          " · 하차 " +
+          ibcCount +
+          " · 품목 " +
+          itemLines.length +
+          " · 미진열 " +
+          Math.round(gapSum).toLocaleString("en-US") +
+          " (IBC·하차)";
+        fillDrillHeadTitle(head, headText);
         if (!itemLines.length) {
           if (status.parentNode) status.parentNode.removeChild(status);
           var noItems = document.createElement("p");
@@ -10284,7 +10536,26 @@
               }
             });
           }
-          return loadDirectDrillRcrtLocations(itemLines, tbody);
+          return loadDirectDrillRcrtLocations(itemLines, tbody, function (results) {
+            // 드릴 끝 — 피벗 셀을 RCRT 실시간 유닛으로 (실패 셀은 그대로)
+            var applied = applyDirectDrillLiveToPivot(
+              drillCtx,
+              itemLines,
+              results,
+              wrap
+            );
+            if (!alive()) return;
+            var note = "";
+            if (applied.cells) {
+              note +=
+                " · RCRT 실시간 " +
+                Math.round(applied.total).toLocaleString("en-US");
+            }
+            if (applied.skipped) {
+              note += " · 조회 실패 " + applied.skipped + "칸 피벗 미반영";
+            }
+            if (note) fillDrillHeadTitle(head, headText + note);
+          });
         });
       })
       .catch(function (eDrill) {
@@ -11832,6 +12103,10 @@
       if (directBundle && directBundle.stats && directBundle.stats.drillCtx) {
         directBundle.stats.drillCtx.shrinkSkuMaps = lastShrinkSkuMaps;
       }
+      // 직납 피벗 = SLA 파일 RCRT 유닛 (SLA 파일은 [3/3] 이관 단계에서 받음)
+      if (directBundle && !directBundle.empty && lastShrinkSlaLookup) {
+        applySlaRcrtUnitsToDirectBundle(directBundle, lastShrinkSlaLookup);
+      }
 
       var combined = buildCombinedPivotBundle(transferBundle, directBundle);
       applyPivotBundle(pivotHost, combined);
@@ -12127,6 +12402,7 @@
       ".yna4-sla-pivot-drill-table--direct th.yna4-sla-pivot-drill-units,.yna4-sla-pivot-drill-table--direct td.yna4-sla-pivot-drill-units{width:64px;min-width:64px;max-width:64px;text-align:right;padding-left:4px;padding-right:6px;box-sizing:border-box;vertical-align:middle;font-variant-numeric:tabular-nums}" +
       ".yna4-sla-pivot-drill-table--direct td.yna4-sla-pivot-drill-units{font-size:11px;line-height:1.35}" +
       ".yna4-sla-pivot-drill-table--direct td.yna4-sla-pivot-drill-loc--failed{color:#b45309}" +
+      ".yna4-sla-pivot-num--live{text-decoration:underline dotted;text-underline-offset:2px}" +
       ".yna4-sla-pivot-drill-table--direct td.yna4-sla-pivot-drill-units .yna4-sla-pivot-drill-units-line{display:block;white-space:nowrap}" +
       ".yna4-sla-pivot-drill-table--direct th.yna4-sla-pivot-drill-col-status,.yna4-sla-pivot-drill-table--direct td.yna4-sla-pivot-drill-col-status{width:80px;min-width:80px;max-width:96px}" +
       ".yna4-sla-pivot-drill-table .yna4-sla-pivot-drill-name{width:400px;max-width:400px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:middle;font-size:11px;line-height:1.35;color:#334155}" +

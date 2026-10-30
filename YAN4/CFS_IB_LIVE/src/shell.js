@@ -939,14 +939,17 @@
 
   /**
    * 직납 드릴 — SLA RCRT 를 로케이션 바코드로 재고조회(SKU 조건 없음).
-   * { ok, qty, login } · qty 는 그 로케이션 전체 quantity 합계 · ok=false 면 조회 실패
-   * login=true 면 로그인 풀림(401·로그인 화면)
+   * { ok, qty, qtyBySku, hasSkuIds, login }
+   * qty 는 그 로케이션 전체 quantity 합계, qtyBySku 는 skuDto.skuId(숫자) 별 합계.
+   * ok=false 면 조회 실패, login=true 면 로그인 풀림(401·로그인 화면)
    */
   async function unloadGapFetchLocationStock(loc) {
     var want = String(loc || "").replace(/ /g, " ").trim().toUpperCase();
     if (!want || !unloadGapIsDirectRcrtLoc(want)) return { ok: false, qty: 0, login: false };
     var qty = 0;
-    var page, j, content, i, row, rowLoc, q, totalPages;
+    var qtyBySku = Object.create(null);
+    var hasSkuIds = false;
+    var page, j, content, i, row, rowLoc, q, totalPages, sid;
     try {
       for (page = 0; page < UNLOAD_GAP_INVENTORY_PAGE_CAP; page++) {
         var text = await unloadGapInventoryRequest({
@@ -967,12 +970,18 @@
           // 로케이션 검색이 앞부분 일치로 넓게 잡혀도 정확히 같은 로케이션만 합산
           if (rowLoc !== want) continue;
           q = Number(row.quantity);
-          if (Number.isFinite(q)) qty += q;
+          if (!Number.isFinite(q)) continue;
+          qty += q;
+          sid = unloadGapNormalizeInventorySkuId(row.skuDto && row.skuDto.skuId);
+          if (sid) {
+            hasSkuIds = true;
+            qtyBySku[sid] = (qtyBySku[sid] || 0) + q;
+          }
         }
         totalPages = Number(j.result.totalPages);
         if (!Number.isFinite(totalPages) || page + 1 >= totalPages) break;
       }
-      return { ok: true, qty: qty, login: false };
+      return { ok: true, qty: qty, qtyBySku: qtyBySku, hasSkuIds: hasSkuIds, login: false };
     } catch (eLoc) {
       console.warn("[YAN4] inventory location API", want, eLoc);
       return { ok: false, qty: 0, login: unloadGapIsLoginError(eLoc) };
