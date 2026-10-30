@@ -2232,12 +2232,75 @@
     };
   }
 
-  /** 직납 RCRT 로케이션 — 1007-RCRT2- / 3- / 4- / 22- / 44- 로 시작 (예: 1007-RCRT2-1-1). RCRT1·RCRT18·RCRT88 등 제외 */
-  var SLA_DIRECT_RCRT_RE = /^1007-RCRT(2|3|4|22|44)-/i;
+  /**
+   * 센터별 직납 RCRT 로케이션 접두어 (직납 드릴 RCRT·SLA FULLNAME·inventory 조회 공통).
+   * YAN4 는 사용자 지정, GWJ1·GWJ3·BUC2 는 ATS 화면(yan4-ats-page.js) 직납 목록과 같음.
+   * 에이징(YAN4 RCRT18/88, GWJ1 177-RCRT3-9-, GWJ3 140-RCRT3-5-)은 포함하지 않음. 목록 없는 센터는 없음.
+   */
+  var DIRECT_RCRT_PREFIXES_BY_CENTER = {
+    YAN4: [
+      "1007-RCRT2-",
+      "1007-RCRT3-",
+      "1007-RCRT4-",
+      "1007-RCRT22-",
+      "1007-RCRT44-",
+    ],
+    GWJ1: [
+      "177-RCRT3-1-",
+      "177-RCRT3-2-",
+      "177-RCRT3-3-",
+      "177-RCRT3-4-",
+      "177-RCRT3-5-",
+      "177-RCRT3-6-",
+      "177-RCRT3-7-",
+      "177-RCRT3-8-",
+    ],
+    GWJ3: [
+      "140-RCRT1-1-",
+      "140-RCRT1-2-",
+      "140-RCRT1-3-",
+      "140-RCRT1-4-",
+      "140-RCRT1-5-",
+      "140-RCRT1-6-",
+      "140-RCRT1-7-",
+    ],
+    BUC2: [
+      "81-RCRT31-",
+      "81-RCRT32-",
+      "81-RCRT33-",
+      "81-RCRT34-",
+      "81-RCRT41-",
+      "81-RCRT42-",
+      "81-RCRT43-",
+      "81-RCRT44-",
+      "81-RCRT51-",
+      "81-RCRT52-",
+      "81-RCRT53-",
+      "81-RCRT54-",
+      "81-RCRT61-",
+      "81-RCRT62-",
+      "81-RCRT63-",
+      "81-RCRT64-",
+      "81-RCRT71-",
+      "81-RCRT72-",
+      "81-RCRT73-",
+      "81-RCRT74-",
+    ],
+  };
 
   function isSlaDirectRcrtLoc(loc) {
-    return SLA_DIRECT_RCRT_RE.test(String(loc || "").trim());
+    var s = String(loc || "").trim().toUpperCase();
+    var prefixes = DIRECT_RCRT_PREFIXES_BY_CENTER[poFcCode()] || [];
+    var i;
+    if (!s) return false;
+    for (i = 0; i < prefixes.length; i++) {
+      if (s.indexOf(prefixes[i]) === 0) return true;
+    }
+    return false;
   }
+
+  /* shell.js(inventory RCRT 조회)도 같은 기준을 쓰도록 공개 */
+  window.__YAN4_DIRECT_RCRT__ = { isDirect: isSlaDirectRcrtLoc };
 
   function pushSlaDirectLoc(bucket, key, loc, qty) {
     if (!key || !loc) return;

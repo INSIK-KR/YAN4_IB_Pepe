@@ -897,10 +897,12 @@
     return UNLOAD_GAP_INVENTORY_SEARCH_URL + "?" + p.toString();
   }
 
-  /** 직납 RCRT 로케이션 — 1007-RCRT2- / 3- / 4- / 22- / 44- 로 시작 (예: 1007-RCRT2-1-1). RCRT1·RCRT18·RCRT88 등 제외 */
+  /** 직납 RCRT 로케이션 폴백 (YAN4) — 센터별 기준은 yan4-sla-page.js 의 __YAN4_DIRECT_RCRT__ */
   var UNLOAD_GAP_DIRECT_RCRT_RE = /^1007-RCRT(2|3|4|22|44)-/i;
 
   function unloadGapIsDirectRcrtLoc(loc) {
+    var api = window.__YAN4_DIRECT_RCRT__;
+    if (api && typeof api.isDirect === "function") return api.isDirect(loc);
     return UNLOAD_GAP_DIRECT_RCRT_RE.test(String(loc || "").trim());
   }
 
@@ -1521,7 +1523,7 @@
   }
 
   function unloadGapBuildTeamsClipboard(rows) {
-    var cols = ["발주ID", "SKU", "상품명", "상태", "입고", "진열완료", "진열오류", "미달", "로케이션 (RCRT2·3·4·22·44)"];
+    var cols = ["발주ID", "SKU", "상품명", "상태", "입고", "진열완료", "진열오류", "미달", "로케이션 (직납 RCRT)"];
     var tsv = [cols.join("\t")];
     var html =
       '<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;font-family:Segoe UI,Malgun Gothic,sans-serif;font-size:12px;color:#0f172a">' +
