@@ -897,8 +897,8 @@
     return UNLOAD_GAP_INVENTORY_SEARCH_URL + "?" + p.toString();
   }
 
-  /** 직납 RCRT 로케이션 — 1007-RCRT2/3/4/22/44 (뒤는 - 또는 끝). RCRT1·RCRT18·RCRT88 등 제외 */
-  var UNLOAD_GAP_DIRECT_RCRT_RE = /^1007-RCRT(2|3|4|22|44)(-|$)/i;
+  /** 직납 RCRT 로케이션 — 1007-RCRT2- / 3- / 4- / 22- / 44- 로 시작 (예: 1007-RCRT2-1-1). RCRT1·RCRT18·RCRT88 등 제외 */
+  var UNLOAD_GAP_DIRECT_RCRT_RE = /^1007-RCRT(2|3|4|22|44)-/i;
 
   function unloadGapIsDirectRcrtLoc(loc) {
     return UNLOAD_GAP_DIRECT_RCRT_RE.test(String(loc || "").trim());

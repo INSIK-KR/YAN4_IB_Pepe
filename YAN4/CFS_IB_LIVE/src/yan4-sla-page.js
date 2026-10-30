@@ -2232,8 +2232,8 @@
     };
   }
 
-  /** 직납 RCRT 로케이션 — 1007-RCRT2/3/4/22/44 (뒤는 - 또는 끝). RCRT1·RCRT18·RCRT88 등 제외 */
-  var SLA_DIRECT_RCRT_RE = /^1007-RCRT(2|3|4|22|44)(-|$)/i;
+  /** 직납 RCRT 로케이션 — 1007-RCRT2- / 3- / 4- / 22- / 44- 로 시작 (예: 1007-RCRT2-1-1). RCRT1·RCRT18·RCRT88 등 제외 */
+  var SLA_DIRECT_RCRT_RE = /^1007-RCRT(2|3|4|22|44)-/i;
 
   function isSlaDirectRcrtLoc(loc) {
     return SLA_DIRECT_RCRT_RE.test(String(loc || "").trim());
