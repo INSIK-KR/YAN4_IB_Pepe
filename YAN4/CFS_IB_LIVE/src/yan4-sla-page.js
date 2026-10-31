@@ -1780,7 +1780,7 @@
     }
     m = s.match(/(\d{2})\/(\d{2})[ T](\d{1,2}):(\d{2})/);
     if (m) {
-      var yr = new Date().getFullYear();
+      var yr = pivotYearForMonthDay(m[1], m[2]);
       var d2 = new Date(+yr, +m[1] - 1, +m[2], +m[3], +m[4], 0, 0);
       return isNaN(d2.getTime()) ? null : d2;
     }
@@ -3447,18 +3447,40 @@
     return "";
   }
 
+  /**
+   * 연도 없는 MM/DD 의 연도 — 기준연도 ±1 중 지금과 가장 가까운 해.
+   * 1월 초에 "12/30" 을 올해 12월(미래)로, 12월 말에 "01/02" 를 올해 1월(과거)로 보던 것 방지.
+   */
+  function pivotYearForMonthDay(mm, dd, refYear) {
+    var nowMs = Date.now();
+    var base = refYear || new Date().getFullYear();
+    var best = base;
+    var bestDiff = Infinity;
+    var y, t, diff;
+    for (y = base - 1; y <= base + 1; y++) {
+      t = new Date(y, +mm - 1, +dd).getTime();
+      diff = Math.abs(t - nowMs);
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        best = y;
+      }
+    }
+    return best;
+  }
+
   function parsePivotColSortKey(col, refYear) {
     if (col === PIVOT_COL_MOVING) return "z_moving";
     if (col === PIVOT_COL_ADHOC) return "z_adhoc";
     if (col === PIVOT_COL_EMPTY) return "z_empty";
-    var yr = refYear || new Date().getFullYear();
     var mDate = /^(\d{2})\/(\d{2})$/.exec(col);
     if (mDate) {
-      var dtDay = new Date(+yr, +mDate[1] - 1, +mDate[2], 0, 0, 0, 0);
+      var yrDay = pivotYearForMonthDay(mDate[1], mDate[2], refYear);
+      var dtDay = new Date(+yrDay, +mDate[1] - 1, +mDate[2], 0, 0, 0, 0);
       return String(dtDay.getTime() - 1).padStart(14, "0");
     }
     var m = /^(\d{2})\/(\d{2})\s+(\d{1,2})$/.exec(col);
     if (!m) return "z_" + col;
+    var yr = pivotYearForMonthDay(m[1], m[2], refYear);
     var dt = new Date(+yr, +m[1] - 1, +m[2], +m[3], 0, 0, 0);
     return String(dt.getTime()).padStart(14, "0");
   }
@@ -3494,7 +3516,7 @@
   function isPivotDayColPastOverdueFallback(colName, refYear, queryAt) {
     var m = /^(\d{2})\/(\d{2})$/.exec(String(colName || ""));
     if (!m) return false;
-    var yr = refYear || new Date().getFullYear();
+    var yr = pivotYearForMonthDay(m[1], m[2], refYear);
     var dayEnd = new Date(+yr, +m[1] - 1, +m[2], 23, 59, 59, 999);
     return isPastSlaPlusBucketHours(dayEnd, queryAt);
   }
@@ -3506,7 +3528,7 @@
   function isPivotDayColMissHeader(colName, refYear, queryAt) {
     var m = /^(\d{2})\/(\d{2})$/.exec(String(colName || ""));
     if (!m) return false;
-    var yr = refYear || new Date().getFullYear();
+    var yr = pivotYearForMonthDay(m[1], m[2], refYear);
     var q =
       queryAt instanceof Date && !isNaN(queryAt.getTime())
         ? queryAt
@@ -3846,7 +3868,7 @@
   }
 
   function pivotHeaderDateLabel(mm, dd, refYear) {
-    var yr = refYear || new Date().getFullYear();
+    var yr = pivotYearForMonthDay(mm, dd, refYear);
     return pad2(yr % 100) + "." + pad2(+mm) + "." + pad2(+dd);
   }
 
