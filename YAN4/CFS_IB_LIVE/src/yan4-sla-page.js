@@ -336,6 +336,8 @@
   var pivotDrillActivateLock = { at: 0, row: "", col: "" };
 
   var gcEnrichCache = Object.create(null);
+  /** 실시간 조회에서 재고 0(진열완료)으로 나온 토트 — 새 SLA 파일을 불러올 때까지 다시 조회 안 함 */
+  var stowedToteCache = Object.create(null);
   var skuTempCache = Object.create(null);
   var toteSkuEnrichCache = Object.create(null);
   /** SharePoint SLA에 GC가 없을 때 inventory 재고조회로 채우는 상세 상품정보 */
@@ -6581,6 +6583,17 @@
     }
     var liveByGc = Object.create(null);
     var out = { ok: true, login: false, failed: 0, liveByGc: liveByGc, stowedGcs: 0 };
+    // 앞서 0 으로 나온 토트는 조회 없이 0 — 남은 토트만 조회
+    var todo = [];
+    for (i = 0; i < gcs.length; i++) {
+      if (stowedToteCache[gcs[i]]) {
+        liveByGc[gcs[i]] = 0;
+        out.stowedGcs++;
+      } else {
+        todo.push(gcs[i]);
+      }
+    }
+    gcs = todo;
     var next = 0;
     var done = 0;
     async function worker() {
@@ -6598,7 +6611,10 @@
           if (res.login) out.login = true;
         } else {
           liveByGc[gcs[k]] = res.qty;
-          if (res.qty <= 0) out.stowedGcs++;
+          if (res.qty <= 0) {
+            out.stowedGcs++;
+            stowedToteCache[gcs[k]] = 1;
+          }
         }
         done++;
         if (onProgress && aliveFn()) onProgress(done, gcs.length);
@@ -11738,6 +11754,7 @@
     var prefix = phaseLabel ? phaseLabel + " " : "";
     gcEnrichCache = Object.create(null);
     inventoryGcFallbackCache = Object.create(null);
+    stowedToteCache = Object.create(null);
     var dr = defaultDateRange();
     var ts = formatPipelineTimestamp();
 
