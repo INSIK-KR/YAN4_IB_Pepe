@@ -5235,6 +5235,16 @@
   var DRILL_SCAN_YIELD_EVERY = 250;
   /* 직납 드릴 실시간 재고조회 — 드릴 열 때마다 새로 조회. inventory 부하 줄이기: 동시 2 · 요청 뒤 50ms */
   var DIRECT_DRILL_RCRT_CONCURRENCY = 2;
+
+  /** 이동중·임의상차·총합계 칸은 수량이 커서 드릴 실시간 조회를 안 함 */
+  function slaDrillSkipsLiveLookup(rowKey, colName) {
+    return (
+      rowKey === "__GRAND__" ||
+      colName === "__TOTAL__" ||
+      colName === PIVOT_COL_MOVING ||
+      colName === PIVOT_COL_ADHOC
+    );
+  }
   var DIRECT_DRILL_LIVE_GAP_MS = 50;
 
   function slaDrillNextFrame() {
@@ -6425,6 +6435,163 @@
     })();
   }
 
+  /** 토트(GC) 하나 실시간 재고 — 그 토트 로케이션의 유닛 합계 { ok, qty, login } */
+  async function fetchTransferToteLiveQty(gc) {
+    var cart = normalizeGcKey(gc);
+    var qty = 0;
+    var page = 0;
+    var totalPages = 1;
+    var text, j, content, i, q;
+    try {
+      while (page < totalPages && page < PAGING_PAGE_CAP) {
+        text = await inventoryGet(buildInventorySearchUrlForLocation(cart, page), {
+          referer: INVENTORY_REFERER,
+          accept: "application/json, text/plain, */*",
+        });
+        try {
+          j = JSON.parse(String(text || ""));
+        } catch (eJ) {
+          // JSON 이 아니면 로그인 페이지
+          return { ok: false, qty: 0, login: true };
+        }
+        content = j && j.success !== false && j.result && j.result.content;
+        if (!Array.isArray(content)) return { ok: false, qty: 0, login: false };
+        for (i = 0; i < content.length; i++) {
+          if (!content[i] || normalizeGcKey(content[i].locationBarcode) !== cart) continue;
+          q = Number(content[i].quantity);
+          if (isFinite(q)) qty += q;
+        }
+        totalPages = Number(j.result.totalPages);
+        if (!isFinite(totalPages) || totalPages < 1) totalPages = 1;
+        page++;
+      }
+      return { ok: true, qty: qty, login: false };
+    } catch (eTote) {
+      var msg = String((eTote && eTote.message) || eTote || "");
+      return { ok: false, qty: 0, login: /login|로그인|401|403/i.test(msg) };
+    }
+  }
+
+  /**
+   * 드릴 토트들을 실시간 재고조회. 하나라도 실패하면 ok:false (피벗 미반영).
+   * 반환 { ok, login, failed, liveByGc, stowedGcs }
+   */
+  async function loadTransferDrillToteLive(matches, aliveFn, onProgress) {
+    var gcs = [];
+    var seen = Object.create(null);
+    var i, gc;
+    for (i = 0; i < matches.length; i++) {
+      gc = normalizeGcKey(matches[i].gc);
+      // GC- 토트만 로케이션 조회 가능 — 나머지는 파일 수량 그대로
+      if (!isGcBarcodeKey(gc) || seen[gc]) continue;
+      seen[gc] = 1;
+      gcs.push(gc);
+    }
+    var liveByGc = Object.create(null);
+    var out = { ok: true, login: false, failed: 0, liveByGc: liveByGc, stowedGcs: 0 };
+    var next = 0;
+    var done = 0;
+    async function worker() {
+      var k, res;
+      while (true) {
+        // 로그인 풀림이 확인되면 남은 토트는 조회 안 함
+        if (stopRequested || !aliveFn() || out.login) return;
+        k = next++;
+        if (k >= gcs.length) return;
+        res = await fetchTransferToteLiveQty(gcs[k]);
+        await sleep(DIRECT_DRILL_LIVE_GAP_MS);
+        if (!res.ok) {
+          out.ok = false;
+          out.failed++;
+          if (res.login) out.login = true;
+        } else {
+          liveByGc[gcs[k]] = res.qty;
+          if (res.qty <= 0) out.stowedGcs++;
+        }
+        done++;
+        if (onProgress && aliveFn()) onProgress(done, gcs.length);
+      }
+    }
+    var jobs = [];
+    for (i = 0; i < Math.min(DIRECT_DRILL_RCRT_CONCURRENCY, gcs.length); i++) {
+      jobs.push(worker());
+    }
+    await Promise.all(jobs);
+    if (stopRequested || !aliveFn()) return null;
+    return out;
+  }
+
+  /** 칸 값 = 토트별 min(파일 수량, 지금 재고) 합계 */
+  function transferCellLiveValue(matches, liveByGc) {
+    var qtyByGc = Object.create(null);
+    var i, gc;
+    var sum = 0;
+    for (i = 0; i < matches.length; i++) {
+      gc = normalizeGcKey(matches[i].gc);
+      if (!gc) continue;
+      qtyByGc[gc] = (qtyByGc[gc] || 0) + (Number(matches[i].qty) || 0);
+    }
+    for (gc in qtyByGc) {
+      sum +=
+        liveByGc[gc] !== undefined
+          ? Math.min(qtyByGc[gc], liveByGc[gc])
+          : qtyByGc[gc];
+    }
+    return sum;
+  }
+
+  /** 재고 0 토트(진열완료) 행을 드릴 표에서 뺌. 뺀 행 수 */
+  function removeStowedTransferDrillRows(tbody, lines, liveByGc) {
+    var trs = Array.prototype.slice.call(tbody.rows);
+    var removed = 0;
+    var i, idx, line, gc;
+    for (i = 0; i < trs.length; i++) {
+      idx = Number(trs[i].getAttribute("data-drill-line-idx"));
+      line = lines[idx];
+      gc = normalizeGcKey(line && line.transfer && line.transfer.gc);
+      if (gc && liveByGc[gc] !== undefined && liveByGc[gc] <= 0) {
+        tbody.removeChild(trs[i]);
+        removed++;
+      }
+    }
+    return removed;
+  }
+
+  /** 이관 피벗 칸을 실시간 값으로 — 행 합계·총합계는 차이만큼 */
+  function updateTransferPivotCellDom(anchorEl, rowKey, colName, newVal) {
+    var wrap = anchorEl && anchorEl.closest
+      ? anchorEl.closest(".yna4-sla-pivot-wrap")
+      : null;
+    if (!wrap) return;
+    var tr = wrap.querySelector('tr[data-pivot-row-key="' + cssAttrValue(rowKey) + '"]');
+    if (!tr) return;
+    var td = tr.querySelector('td[data-pivot-col="' + cssAttrValue(colName) + '"]');
+    if (!td) return;
+    var oldVal = parsePivotCellNum(td);
+    var delta = newVal - oldVal;
+    var now = new Date();
+    td.textContent = formatPivotNum(newVal);
+    td.title =
+      "토트 실시간 반영 " +
+      pad2(now.getHours()) +
+      ":" +
+      pad2(now.getMinutes()) +
+      " (직전 " +
+      formatDrillQty(oldVal) +
+      ") · 더블클릭: SLA 상세";
+    if (!delta) return;
+    td.classList.add("yna4-sla-pivot-num--live");
+    td.style.setProperty("background", DIRECT_PIVOT_LIVE_BG, "important");
+    var rowTotal = tr.querySelector('td[data-pivot-col="__TOTAL__"]');
+    if (rowTotal) rowTotal.textContent = formatPivotNum(parsePivotCellNum(rowTotal) + delta);
+    var grand = wrap.querySelector('tr[data-pivot-row-key="__GRAND__"]');
+    if (!grand) return;
+    var gCol = grand.querySelector('td[data-pivot-col="' + cssAttrValue(colName) + '"]');
+    if (gCol) gCol.textContent = formatPivotNum(parsePivotCellNum(gCol) + delta);
+    var gTot = grand.querySelector('td[data-pivot-col="__TOTAL__"]');
+    if (gTot) gTot.textContent = formatPivotNum(parsePivotCellNum(gTot) + delta);
+  }
+
   function renderPivotDrillPanel(
     drillHost,
     drillCtx,
@@ -6579,20 +6746,19 @@
       for (gi = 0; gi < lines.length; gi++) {
         slaQtySum += Number(lines[gi].sla && lines[gi].sla.quantity) || 0;
       }
-      fillDrillHeadTitle(
-        head,
+      var transferHeadText =
         rowLabel +
-          " · " +
-          colLabel +
-          " · WMS " +
-          matches.length +
-          "행 · 집품 " +
-          Math.round(wmsQtySum).toLocaleString("en-US") +
-          " · SLA " +
-          lines.length +
-          "행 · 유닛 " +
-          Math.round(slaQtySum).toLocaleString("en-US")
-      );
+        " · " +
+        colLabel +
+        " · WMS " +
+        matches.length +
+        "행 · 집품 " +
+        Math.round(wmsQtySum).toLocaleString("en-US") +
+        " · SLA " +
+        lines.length +
+        "행 · 유닛 " +
+        Math.round(slaQtySum).toLocaleString("en-US");
+      fillDrillHeadTitle(head, transferHeadText);
 
       var scroll = document.createElement("div");
       scroll.className = "yna4-sla-pivot-drill-scroll";
@@ -6729,6 +6895,37 @@
         if (!table.isConnected) return;
         applyTransferDrillShrinkHighlights(table, lines, drillCtx, maps);
       });
+
+      if (!slaDrillSkipsLiveLookup(rowKey, colName)) {
+        var headBaseText = transferHeadText;
+        var setHeadNote = function (note) {
+          fillDrillHeadTitle(head, headBaseText + note);
+        };
+        setHeadNote(" · 토트 실시간 조회…");
+        var liveRes = await loadTransferDrillToteLive(matches, alive, function (done, total) {
+          setHeadNote(" · 토트 실시간 조회 " + done + "/" + total);
+        });
+        if (!alive() || !liveRes) return;
+        if (!liveRes.ok) {
+          setHeadNote(
+            liveRes.login
+              ? " · 로그인 필요 — 실시간 미반영"
+              : " · 토트 조회 실패 " + liveRes.failed + "개 — 피벗 미반영"
+          );
+          return;
+        }
+        var stowedRows = removeStowedTransferDrillRows(tbody, lines, liveRes.liveByGc);
+        var newVal = transferCellLiveValue(matches, liveRes.liveByGc);
+        updateTransferPivotCellDom(wrap, rowKey, colName, newVal);
+        setHeadNote(
+          " · 토트 실시간 " +
+            Math.round(newVal).toLocaleString("en-US") +
+            (liveRes.stowedGcs
+              ? " · 진열완료 토트 " + liveRes.stowedGcs + "개(" + stowedRows + "행) 제외"
+              : "")
+        );
+        applyDrillTableFilters(table, filterState, filterBtns, headFilterCount);
+      }
     })().catch(function (eDrill) {
       if (typeof console !== "undefined" && console.warn) {
         console.warn("[YAN4 Transfer SLA drill]", eDrill);
@@ -10156,9 +10353,9 @@
    * 드릴 RCRT 조회 결과. onDone(results) — results[i] = { units, failed }
    * units: SLA RCRT 의 지금 SKU 재고 합계 (SLA 에 없는 SKU 는 null), failed: 조회 실패·로그인 풀림
    */
-  async function loadDirectDrillRcrtLocations(itemLines, tbody, onDone) {
+  async function loadDirectDrillRcrtLocations(itemLines, tbody, onDone, noLive) {
     var bridge = window.__YAN4_UNLOAD_GAP_BRIDGE__;
-    var hasLive = !!(
+    var hasLive = !noLive && !!(
       bridge &&
       typeof bridge.rcrtLiveForSku === "function" &&
       typeof bridge.locationStock === "function"
@@ -10206,6 +10403,7 @@
       var slaEntries = slaDirectLocEntriesForSku(slaLookup, sku);
       if (!hasLive) {
         paint(slaEntries);
+        if (!slaEntries.length) td.textContent = "-";
         results[mi] = FAILED;
         return;
       }
@@ -10661,6 +10859,11 @@
                 }
               }
             });
+          }
+          if (slaDrillSkipsLiveLookup(rowKey, colName)) {
+            // 이동중·임의상차·총합계 — SLA 파일 RCRT 만 표시, 실시간 조회·피벗 반영 없음
+            fillDrillHeadTitle(head, headText + " · 실시간 조회 안 함(SLA 파일 값)");
+            return loadDirectDrillRcrtLocations(itemLines, tbody, null, true);
           }
           return loadDirectDrillRcrtLocations(itemLines, tbody, function (results) {
             // 드릴 끝 — 피벗 셀을 RCRT 실시간 유닛으로 (실패 셀은 그대로)
