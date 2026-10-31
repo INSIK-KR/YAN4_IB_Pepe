@@ -6354,18 +6354,17 @@
     for (i = 0; i < lines.length; i++) {
       qtySum += Number(lines[i].moveQuantity) || 0;
     }
-    fillDrillHeadTitle(
-      head,
+    var agHeadText =
       TOTE_STOW_ZONE_LABEL +
-        " · " +
-        rowLabel +
-        " · " +
-        colLabel +
-        " · " +
-        lines.length +
-        "행 · 유닛 " +
-        Math.round(qtySum).toLocaleString("en-US")
-    );
+      " · " +
+      rowLabel +
+      " · " +
+      colLabel +
+      " · " +
+      lines.length +
+      "행 · 유닛 " +
+      Math.round(qtySum).toLocaleString("en-US");
+    fillDrillHeadTitle(head, agHeadText);
     mountDrillHeadTeamsCopy(head, wrap);
     wrap.appendChild(head);
 
@@ -6433,6 +6432,62 @@
       if (!changed || !table.isConnected) return;
       paintToteBody(drillShrinkSkuMaps(drillCtx));
     })();
+
+    if (!slaDrillSkipsLiveLookup(rowKey, colName)) {
+      (async function agToteLive() {
+        // 이관과 같이 — 토트 실시간 재고조회, 다 끝나면 진열완료 토트 빼고 피벗 칸 반영
+        var toteMatches = lines.map(function (ln) {
+          return { gc: ln.toteBarcode, qty: ln.moveQuantity };
+        });
+        var agAlive = function () {
+          return table.isConnected;
+        };
+        fillDrillHeadTitle(head, agHeadText + " · 토트 실시간 조회…");
+        var liveRes = await loadTransferDrillToteLive(
+          toteMatches,
+          agAlive,
+          function (done, total) {
+            fillDrillHeadTitle(
+              head,
+              agHeadText + " · 토트 실시간 조회 " + done + "/" + total
+            );
+          },
+          true
+        );
+        if (!agAlive() || !liveRes) return;
+        if (!liveRes.ok) {
+          fillDrillHeadTitle(
+            head,
+            agHeadText +
+              (liveRes.login
+                ? " · 로그인 필요 — 실시간 미반영"
+                : " · 토트 조회 실패 " + liveRes.failed + "개 — 피벗 미반영")
+          );
+          return;
+        }
+        var stowedRows = 0;
+        var k, bc;
+        for (k = lines.length - 1; k >= 0; k--) {
+          bc = normalizeGcKey(lines[k].toteBarcode);
+          if (bc && liveRes.liveByGc[bc] !== undefined && liveRes.liveByGc[bc] <= 0) {
+            lines.splice(k, 1);
+            stowedRows++;
+          }
+        }
+        if (stowedRows) paintToteBody(drillShrinkSkuMaps(drillCtx));
+        var newVal = transferCellLiveValue(toteMatches, liveRes.liveByGc);
+        updateTransferPivotCellDom(wrap, rowKey, colName, newVal);
+        fillDrillHeadTitle(
+          head,
+          agHeadText +
+            " · 토트 실시간 " +
+            Math.round(newVal).toLocaleString("en-US") +
+            (liveRes.stowedGcs
+              ? " · 진열완료 토트 " + liveRes.stowedGcs + "개(" + stowedRows + "행) 제외"
+              : "")
+        );
+      })();
+    }
   }
 
   /** 토트(GC) 하나 실시간 재고 — 그 토트 로케이션의 유닛 합계 { ok, qty, login } */
@@ -6476,14 +6531,14 @@
    * 드릴 토트들을 실시간 재고조회. 하나라도 실패하면 ok:false (피벗 미반영).
    * 반환 { ok, login, failed, liveByGc, stowedGcs }
    */
-  async function loadTransferDrillToteLive(matches, aliveFn, onProgress) {
+  async function loadTransferDrillToteLive(matches, aliveFn, onProgress, anyBarcode) {
     var gcs = [];
     var seen = Object.create(null);
     var i, gc;
     for (i = 0; i < matches.length; i++) {
       gc = normalizeGcKey(matches[i].gc);
       // GC- 토트만 로케이션 조회 가능 — 나머지는 파일 수량 그대로
-      if (!isGcBarcodeKey(gc) || seen[gc]) continue;
+      if (!gc || (!anyBarcode && !isGcBarcodeKey(gc)) || seen[gc]) continue;
       seen[gc] = 1;
       gcs.push(gc);
     }
