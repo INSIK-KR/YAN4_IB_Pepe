@@ -11706,15 +11706,21 @@
     var hatchAdhoc = slaHatchTileUrl("rgba(124, 58, 237, 0.28)", SLA_PIVOT_HATCH_ADHOC);
     var hatchOverdue = slaHatchTileUrl("rgba(51, 65, 85, 0.38)", SLA_PIVOT_HATCH_OVERDUE);
     for (i = 0; i < moving.length; i++) {
-      moving[i].style.backgroundImage = hatchMoving;
+      slaSetHatch(moving[i], hatchMoving);
     }
     for (i = 0; i < adhoc.length; i++) {
-      adhoc[i].style.backgroundImage = hatchAdhoc;
+      slaSetHatch(adhoc[i], hatchAdhoc);
     }
     for (i = 0; i < overdue.length; i++) {
-      overdue[i].style.backgroundImage = hatchOverdue;
-      overdue[i].style.backgroundRepeat = "repeat";
+      slaSetHatch(overdue[i], hatchOverdue);
     }
+  }
+
+  /** 칸 CSS 의 background:... !important 가 인라인 빗금을 지우지 않도록 important 로 */
+  function slaSetHatch(td, url) {
+    td.style.setProperty("background-image", url, "important");
+    td.style.setProperty("background-repeat", "repeat", "important");
+    td.style.setProperty("background-size", "8px 8px", "important");
   }
 
   /** html2canvas 는 repeating-linear-gradient 빗금을 못 그려서 PNG 타일로 대체 */
