@@ -454,6 +454,19 @@
     return total;
   }
 
+  /**
+   * ATS 마감 "HH:MM" → 정렬용 분. 6시간 전 ~ 18시간 뒤를 시간순으로 —
+   * 자정 넘는 마감(00:30 컷 → 23:30 등)이 문자열 비교로 맨 뒤로 가던 것 방지.
+   */
+  function atsDeadlineRelMinutes(hm) {
+    var m = /^(\d{1,2}):(\d{2})$/.exec(String(hm || "").trim());
+    if (!m) return Infinity;
+    var mins = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+    var now = new Date();
+    var from = now.getHours() * 60 + now.getMinutes() - 360;
+    return (((mins - from) % 1440) + 1440) % 1440;
+  }
+
   /** outbound 동일 Barcode 중복 행 — 보충수량 합산(로컬 aggregateWorkflowRowsBySkuId Unit 합과 동일). */
   function mergeOutboundItemFields(into, item) {
     if (!into || !item) return into;
@@ -467,7 +480,9 @@
     }
     if (
       item.atsDeadline &&
-      (!into.atsDeadline || String(item.atsDeadline) < String(into.atsDeadline))
+      (!into.atsDeadline ||
+        atsDeadlineRelMinutes(item.atsDeadline) <
+          atsDeadlineRelMinutes(into.atsDeadline))
     ) {
       into.atsDeadline = item.atsDeadline;
     }
@@ -505,7 +520,10 @@
       return String(v).trim();
     }
     v = String(row.lpnId != null ? row.lpnId : row.lpnBarcode || "").trim();
-    if (v && /(\d{4}[-./]\d{1,2}[-./]\d{1,2}|\d{8})/.test(v)) return v;
+    // LPN 번호 속 아무 숫자 8자리를 날짜로 보지 않도록 — 실제 날짜(2000~2099년)일 때만
+    var mDt =
+      /((?:20)\d{2})[-./]?(0[1-9]|1[0-2])[-./]?(0[1-9]|[12]\d|3[01])/.exec(v);
+    if (mDt) return mDt[1] + "-" + mDt[2] + "-" + mDt[3];
     return "";
   }
 
@@ -2180,9 +2198,13 @@
   function extractOutboundDeadlineTime(raw) {
     var s = normalizeCellText(raw);
     if (!s) return "";
+    var isPm = /오후|\bPM\b/i.test(s);
+    var isAm = /오전|\bAM\b/i.test(s);
     var mKr = s.match(/(\d{1,2})\s*시(?:\s*(\d{1,2})\s*분)?/);
     if (mKr) {
       var h = parseInt(mKr[1], 10);
+      if (isPm && h < 12) h += 12;
+      if (isAm && h === 12) h = 0;
       var min = mKr[2] != null ? parseInt(mKr[2], 10) : 0;
       if (
         Number.isFinite(h) &&
@@ -2200,6 +2222,8 @@
     var best = "";
     while ((mm = re.exec(s)) !== null) {
       var hh = parseInt(mm[1], 10);
+      if (isPm && hh < 12) hh += 12;
+      if (isAm && hh === 12) hh = 0;
       if (hh >= 0 && hh <= 23) best = pad2(hh) + ":" + mm[2];
     }
     return best;
@@ -2232,6 +2256,8 @@
     return {
       list: list,
       byBarcode: byBc,
+      /** 실패한 컷라인 상세·페이지 수 — 0 이 아니면 일부 보충 목록이 빠진 것 */
+      failed: 0,
       add: function (item) {
         var bc = item && item.barcode;
         if (!bc) return;
@@ -2555,6 +2581,7 @@
   function mergeOutboundStores(intoStore, fromStore) {
     var i;
     for (i = 0; i < fromStore.list.length; i++) intoStore.add(fromStore.list[i]);
+    intoStore.failed = (intoStore.failed || 0) + (fromStore.failed || 0);
   }
 
   function outboundPageStoreSig(store) {
@@ -2701,14 +2728,29 @@
     }
   }
 
+  /** 출고 목록 다음 페이지를 받는 방식 — 0~2: GET 주소 형식, 3: POST. -1 = 아직 모름 */
+  var outboundPageMethod = -1;
+
   async function fetchOutboundListPageHtml(baseUrl, uiPage, contextHtml) {
     var tryUrls = [
       buildOutboundPageUrl(baseUrl, "page", Math.max(0, uiPage - 1)),
       buildOutboundPageUrl(baseUrl, "page", uiPage),
       buildOutboundPageUrl(baseUrl, "pageNumber", uiPage),
     ];
-    var ai;
-    for (ai = 0; ai < tryUrls.length; ai++) {
+    // 앞서 통한 방식부터 — 매 페이지 GET 3가지를 차례로 더듬던 것 줄임
+    var order = [0, 1, 2];
+    if (outboundPageMethod >= 0 && outboundPageMethod <= 2) {
+      order = [outboundPageMethod].concat(
+        order.filter(function (x) {
+          return x !== outboundPageMethod;
+        })
+      );
+    } else if (outboundPageMethod === 3) {
+      order = [];
+    }
+    var oi, ai;
+    for (oi = 0; oi < order.length; oi++) {
+      ai = order[oi];
       try {
         var htmlGet = await gmXhr({
           url: tryUrls[ai],
@@ -2717,7 +2759,10 @@
         });
         var storeGet = parseOutboundItemsFromHtml(htmlGet);
         if (!storeGet.list.length) continue;
-        if (parseOutboundActivePageFromHtml(htmlGet) === uiPage) return htmlGet;
+        if (parseOutboundActivePageFromHtml(htmlGet) === uiPage) {
+          outboundPageMethod = ai;
+          return htmlGet;
+        }
       } catch (eGet) {}
     }
     var doc = new DOMParser().parseFromString(String(contextHtml || ""), "text/html");
@@ -2747,8 +2792,11 @@
       tag: "outbound p" + uiPage + " POST",
     });
     if (parseOutboundActivePageFromHtml(htmlPost) !== uiPage) {
+      // POST 로 기억했는데 안 맞으면 다음엔 처음부터 다시 더듬음
+      if (outboundPageMethod === 3) outboundPageMethod = -1;
       throw new Error("outbound page mismatch " + uiPage);
     }
+    outboundPageMethod = 3;
     return htmlPost;
   }
 
@@ -2773,6 +2821,8 @@
       try {
         htmlP = await fetchOutboundListPageHtml(baseUrl, p, contextHtml);
       } catch (eMove) {
+        // 마지막 페이지 다음은 원래 실패로 끝남 — 있다고 알려진 페이지에서 실패했을 때만 집계
+        if (p <= maxHint) store.failed = (store.failed || 0) + 1;
         break;
       }
       var storeP = parseOutboundItemsFromHtml(htmlP);
@@ -2802,15 +2852,13 @@
           headers: outboundDetailHeaders(urls[di]),
           tag: "outbound 상세 p1",
         });
-        try {
-          html = await applyOutboundPagingSize100(urls[di], html);
-        } catch (eSz2) {}
         var part = await collectOutboundItemsAllPages(urls[di], html, function (p, maxH) {
           if (onProgress) onProgress(di + 1, urls.length, urls[di], p, maxH);
         });
         mergeOutboundStores(store, part);
       } catch (eD) {
-        /* skip failed detail */
+        // 실패한 컷라인은 건너뛰되 개수는 남김 — 완료 메시지에 표시
+        store.failed = (store.failed || 0) + 1;
       }
       if (di + 1 < urls.length) await sleep(80);
     }
@@ -2821,6 +2869,7 @@
     var out = {
       items: store.list,
       byBarcode: store.byBarcode,
+      failed: store.failed || 0,
       barcodes: store.list.map(function (it) {
         return it.barcode;
       }),
@@ -4203,14 +4252,15 @@
   function atsDeadlineSortKey(row) {
     var dl = String((row && row.atsDeadline) || "").trim();
     if (!dl) return "\uffff";
-    return dl;
+    var rel = atsDeadlineRelMinutes(dl);
+    if (!isFinite(rel)) return dl;
+    return ("0000" + rel).slice(-4);
   }
 
   /** 버퍼존 주문행 — 유통기한 짧은 순 (표시 열 아님) */
   function atsExpiredAtSortKey(row) {
-    var e = String((row && row._expiredAt) || "").trim();
-    if (!e) return "\uffff";
-    return e;
+    // "2026-1-5" / "2026.01.05" 처럼 표기가 달라도 같은 기준(YYYY-MM-DD)으로 비교
+    return inventoryExpirySortKey(row);
   }
 
   /** 이관 상태 「진열완료」— 부분진열완료는 제외하지 않음 */
@@ -5676,7 +5726,10 @@
           }
           var stillHidden = allRows.length - atsAllRows.length;
           if (stillHidden > 0) bits.push("진열완료숨김 " + stillHidden);
-          setStatus(bits.join(" · "), "ok");
+          if (dash.failed) {
+            bits.push("출고 조회 일부 실패 " + dash.failed + "건 — 다시 조회 권장");
+          }
+          setStatus(bits.join(" · "), dash.failed ? "err" : "ok");
         }
       } catch (e) {
         setStatus("실패: " + (e && e.message ? e.message : String(e)), "err");

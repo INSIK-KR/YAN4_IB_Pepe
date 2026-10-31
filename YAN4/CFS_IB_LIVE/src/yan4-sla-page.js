@@ -699,6 +699,8 @@
         method: opt.method || "GET",
         url: opt.url,
         headers: opt.headers || {},
+        // POST 예비 경로(poManagementPost·inventoryPostJson)가 본문 없이 나가던 것
+        data: opt.data != null ? opt.data : opt.body != null ? opt.body : undefined,
         timeout: opt.timeout || 120000,
         onload: function (r) {
           if (r.status >= 200 && r.status < 400) {
@@ -6581,6 +6583,8 @@
         if (!isFinite(totalPages) || totalPages < 1) totalPages = 1;
         page++;
       }
+      // 재고 줄이 상한(8페이지)을 넘으면 일부만 더한 값 — 실패로 보고 피벗을 건드리지 않음
+      if (totalPages > PAGING_PAGE_CAP) return { ok: false, qty: 0, login: false };
       return { ok: true, qty: qty, login: false };
     } catch (eTote) {
       var msg = String((eTote && eTote.message) || eTote || "");
@@ -6712,6 +6716,7 @@
     if (!delta) return;
     td.classList.add("yna4-sla-pivot-num--live");
     td.style.setProperty("background", DIRECT_PIVOT_LIVE_BG, "important");
+    clearPivotCellAlertIfEmpty(td, newVal);
     var rowTotal = tr.querySelector('td[data-pivot-col="__TOTAL__"]');
     if (rowTotal) rowTotal.textContent = formatPivotNum(parsePivotCellNum(rowTotal) + delta);
     var grand = wrap.querySelector('tr[data-pivot-row-key="__GRAND__"]');
@@ -10709,6 +10714,17 @@
     return out;
   }
 
+  /** 실시간 반영으로 0 이 된 칸 — 원래 값 기준 임박·MISS·값 표시를 지움 (노란 실시간 표시는 유지) */
+  function clearPivotCellAlertIfEmpty(td, newVal) {
+    if (!td || newVal > 0) return;
+    td.classList.remove(
+      "yna4-sla-pivot-num--hit",
+      "yna4-sla-pivot-num--overdue-day",
+      "yna4-sla-pivot-num--sla-alert",
+      "yna4-sla-pivot-num--pending-only"
+    );
+  }
+
   function updateDirectPivotCellDom(wrap, matrix, cell, oldVal, newVal, delta, stamp) {
     var tr = wrap.querySelector(
       'tr[data-pivot-row-key="' + cssAttrValue(cell.rowKey) + '"]'
@@ -10729,6 +10745,7 @@
         " (직전 " +
         formatDrillQty(oldVal) +
         ") · 더블클릭: SLA 상세";
+      clearPivotCellAlertIfEmpty(td, newVal);
     }
     var rowTotal = tr.querySelector('td[data-pivot-col="__TOTAL__"]');
     if (rowTotal) {
