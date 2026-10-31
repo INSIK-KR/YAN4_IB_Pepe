@@ -10353,7 +10353,7 @@
    * 드릴 RCRT 조회 결과. onDone(results) — results[i] = { units, failed }
    * units: SLA RCRT 의 지금 SKU 재고 합계 (SLA 에 없는 SKU 는 null), failed: 조회 실패·로그인 풀림
    */
-  async function loadDirectDrillRcrtLocations(itemLines, tbody, onDone, noLive) {
+  async function loadDirectDrillRcrtLocations(itemLines, tbody, onDone, noLive, onProgress) {
     var bridge = window.__YAN4_UNLOAD_GAP_BRIDGE__;
     var hasLive = !noLive && !!(
       bridge &&
@@ -10479,9 +10479,14 @@
         mi = next++;
         if (mi >= itemLines.length) return;
         await fillOne(mi);
+        doneCount++;
+        if (typeof onProgress === "function" && tbody.isConnected) {
+          onProgress(doneCount, itemLines.length);
+        }
       }
     }
 
+    var doneCount = 0;
     var jobs = [];
     for (wi = 0; wi < workers; wi++) {
       jobs.push(worker());
@@ -10865,6 +10870,7 @@
             fillDrillHeadTitle(head, headText + " · 실시간 조회 안 함(SLA 파일 값)");
             return loadDirectDrillRcrtLocations(itemLines, tbody, null, true);
           }
+          fillDrillHeadTitle(head, headText + " · RCRT 실시간 조회…");
           return loadDirectDrillRcrtLocations(itemLines, tbody, function (results) {
             // 드릴 끝 — 피벗 셀을 RCRT 실시간 유닛으로 (실패 셀은 그대로)
             var applied = applyDirectDrillLiveToPivot(
@@ -10874,7 +10880,19 @@
               wrap
             );
             if (!alive()) return;
+            // 이관처럼 — 다 조회한 뒤 RCRT 재고 0(진열완료) 행을 한꺼번에 뺌
+            var stowed = 0;
+            var ri;
+            for (ri = itemLines.length - 1; ri >= 0; ri--) {
+              var res = results[ri];
+              if (!res || res.failed || res.units == null || res.units > 0) continue;
+              if (tbody.children[ri]) {
+                tbody.removeChild(tbody.children[ri]);
+                stowed++;
+              }
+            }
             var note = "";
+            if (stowed) note += " · 진열완료 " + stowed + "품목 제외";
             if (applied.cells) {
               note +=
                 " · RCRT 실시간 " +
@@ -10883,7 +10901,10 @@
             if (applied.skipped) {
               note += " · 조회 실패 " + applied.skipped + "칸 피벗 미반영";
             }
-            if (note) fillDrillHeadTitle(head, headText + note);
+            fillDrillHeadTitle(head, headText + note);
+          }, false, function (done, total) {
+            if (!alive()) return;
+            fillDrillHeadTitle(head, headText + " · RCRT 실시간 조회 " + done + "/" + total);
           });
         });
       })
