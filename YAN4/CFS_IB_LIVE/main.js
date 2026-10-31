@@ -42,8 +42,6 @@ const NET_TIME_URLS = [
   "https://www.coupang.com/",
 ];
 const NET_TIME_TIMEOUT_MS = 4000;
-/** WMS·SharePoint 세션 요청 기본 시간 제한 — 큰 엑셀 조회도 넘치지 않게 넉넉히 */
-const SESSION_FETCH_TIMEOUT_MS = 180000;
 const EXPIRY_RECHECK_MS = 30 * 60 * 1000;
 
 const LOGIN_TARGETS = {
@@ -409,16 +407,6 @@ async function sessionFetch(message) {
     }
     opts.body = String(message.body);
   }
-  // 응답이 멈추면 조회가 영원히 "조회 중"에 머묾 → 시간 제한 (본문 읽기까지 포함)
-  const timeoutMs =
-    Number(message && message.timeoutMs) > 0
-      ? Number(message.timeoutMs)
-      : SESSION_FETCH_TIMEOUT_MS;
-  const ctrl = new AbortController();
-  const timer = setTimeout(function () {
-    ctrl.abort();
-  }, timeoutMs);
-  opts.signal = ctrl.signal;
   try {
     const ses = getSes();
     const res = await ses.fetch(url, opts);
@@ -444,19 +432,10 @@ async function sessionFetch(message) {
     const text = await res.text();
     return { ok: true, status: status, body: text };
   } catch (e) {
-    if (ctrl.signal.aborted) {
-      return {
-        ok: false,
-        timedOut: true,
-        error: "응답 시간 초과(" + Math.round(timeoutMs / 1000) + "초)",
-      };
-    }
     return {
       ok: false,
       error: e && e.message ? e.message : String(e),
     };
-  } finally {
-    clearTimeout(timer);
   }
 }
 
