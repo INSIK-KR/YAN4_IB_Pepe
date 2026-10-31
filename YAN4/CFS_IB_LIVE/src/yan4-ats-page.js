@@ -3528,12 +3528,13 @@
 
   /** beforeprint 에서 ATS 보충지를 준비할지 — 버튼 출력이거나, ATS 화면에서 Ctrl+P 일 때만 */
   function atsShouldHandleBeforePrint() {
-    if (atsPrintOwnRequest) return true;
     var bl = document.body.classList;
     var i;
+    // 다른 출력이 먼저 — afterprint 가 안 와서 atsPrintOwnRequest 가 남아 있어도 끼어들지 않게
     for (i = 0; i < ATS_FOREIGN_PRINT_CLASSES.length; i++) {
       if (bl.contains(ATS_FOREIGN_PRINT_CLASSES[i])) return false;
     }
+    if (atsPrintOwnRequest) return true;
     var grid = atsPrintContext.dashboardsGrid;
     return !!(grid && grid.isConnected && grid.getClientRects().length);
   }
