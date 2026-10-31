@@ -11888,12 +11888,8 @@
     return r;
   }
 
-  /** 화면 그대로 찍기 (빗금·색 그대로). 표가 화면에 다 안 들어오면 false */
-  async function slaTryNativeCaptureToClipboard(el) {
-    var desk = window.yan4ShellDesktop;
-    if (!desk || typeof desk.captureRectToClipboard !== "function") {
-      return false;
-    }
+  /** 화면에 보이게 스크롤한 뒤, 전부 보이면 그 사각형 */
+  async function slaScrollToVisibleRect(el) {
     try {
       el.scrollIntoView({ block: "nearest", inline: "nearest" });
     } catch (eScroll) {}
@@ -11902,7 +11898,131 @@
         requestAnimationFrame(resolve);
       });
     });
-    var r = slaFullyVisibleRect(el);
+    return slaFullyVisibleRect(el);
+  }
+
+  function slaLoadImage(dataUrl) {
+    return new Promise(function (resolve, reject) {
+      var img = new Image();
+      img.onload = function () {
+        resolve(img);
+      };
+      img.onerror = function () {
+        reject(new Error("이미지 로드 실패"));
+      };
+      img.src = dataUrl;
+    });
+  }
+
+  /** 한 영역을 이미지로: 화면 그대로 찍고, 안 되면 html2canvas. { img, scale(px/CSSpx), native } */
+  async function slaCaptureElementImage(el, label) {
+    var desk = window.yan4ShellDesktop;
+    if (desk && typeof desk.captureRect === "function") {
+      var r = await slaScrollToVisibleRect(el);
+      if (r) {
+        var resp = await desk.captureRect({
+          x: r.left,
+          y: r.top,
+          width: r.width,
+          height: r.height,
+        });
+        if (resp && resp.ok && resp.dataUrl) {
+          var nImg = await slaLoadImage(resp.dataUrl);
+          return { img: nImg, scale: nImg.naturalWidth / r.width, native: true };
+        }
+        console.warn("[SLA] " + label + " 화면 캡처 실패, html2canvas 로 대체", resp && resp.error);
+      }
+    }
+    var cssW = el.scrollWidth || el.offsetWidth || 1;
+    var hImg = await slaLoadImage(await captureElementToPngDataUrl(el, label));
+    return { img: hImg, scale: hImg.naturalWidth / cssW, native: false };
+  }
+
+  /** 진척율·SLA·이동중을 위에서 아래로 한 장에 합쳐 클립보드에 복사 */
+  async function slaCaptureAllToClipboard(progressHost, pivotHost, movingHost) {
+    var targets = [
+      {
+        label: "진척율",
+        el: progressHost && progressHost.querySelector(".yna4-sla-progress-left"),
+      },
+      {
+        label: "SLA",
+        el: pivotHost && pivotHost.querySelector("table.yna4-sla-pivot-table--excel"),
+      },
+      { label: "이동중", el: resolveSlaMovingCaptureTarget(movingHost) },
+    ];
+    var shots = [];
+    var ti;
+    for (ti = 0; ti < targets.length; ti++) {
+      var t = targets[ti];
+      if (!t.el || !t.el.textContent.trim()) continue;
+      var shot = await slaCaptureElementImage(t.el, t.label);
+      shot.label = t.label;
+      shots.push(shot);
+    }
+    if (!shots.length) throw new Error("캡처할 내용 없음");
+
+    // 화면 캡처 배율에 맞춤 (html2canvas 2.5배는 줄여서 같은 크기로)
+    var S = 0;
+    for (ti = 0; ti < shots.length; ti++) {
+      if (shots[ti].native) S = Math.max(S, shots[ti].scale);
+    }
+    if (!S) S = shots[0].scale;
+    var PAD = Math.round(12 * S);
+    var GAP = Math.round(20 * S);
+    var LABEL_H = Math.round(18 * S);
+    var LABEL_GAP = Math.round(4 * S);
+    var width = 0;
+    var height = PAD;
+    for (ti = 0; ti < shots.length; ti++) {
+      var sh = shots[ti];
+      sh.w = Math.round((sh.img.naturalWidth * S) / sh.scale);
+      sh.h = Math.round((sh.img.naturalHeight * S) / sh.scale);
+      width = Math.max(width, sh.w);
+      if (ti) height += GAP;
+      height += LABEL_H + LABEL_GAP + sh.h;
+    }
+    width += PAD * 2;
+    height += PAD;
+
+    var canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    var g = canvas.getContext("2d");
+    g.fillStyle = "#ffffff";
+    g.fillRect(0, 0, width, height);
+    g.imageSmoothingQuality = "high";
+    g.fillStyle = "#334155";
+    g.font = "700 " + Math.round(13 * S) + 'px "Malgun Gothic", "Segoe UI", sans-serif';
+    g.textBaseline = "middle";
+    var y = PAD;
+    for (ti = 0; ti < shots.length; ti++) {
+      var s2 = shots[ti];
+      if (ti) y += GAP;
+      g.fillText(s2.label, PAD, y + LABEL_H / 2);
+      y += LABEL_H + LABEL_GAP;
+      g.drawImage(s2.img, PAD, y, s2.w, s2.h);
+      y += s2.h;
+    }
+    var dataUrl = canvas.toDataURL("image/png");
+    var desk = window.yan4ShellDesktop;
+    if (desk && typeof desk.clipboardWritePng === "function") {
+      var resp = await desk.clipboardWritePng(dataUrl);
+      if (resp && resp.ok) return;
+    }
+    var blob = await new Promise(function (resolve) {
+      canvas.toBlob(resolve, "image/png");
+    });
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+  }
+
+  /** 화면 그대로 찍기 (빗금·색 그대로). 표가 화면에 다 안 들어오면 false */
+  async function slaTryNativeCaptureToClipboard(el) {
+    var desk = window.yan4ShellDesktop;
+    if (!desk || typeof desk.captureRectToClipboard !== "function") {
+      return false;
+    }
+    var r = await slaScrollToVisibleRect(el);
     if (!r) return false;
     var resp = await desk.captureRectToClipboard({
       x: r.left,
@@ -12882,6 +13002,34 @@
     btnAuto.title =
       "30min Auto: run + capture now, then every 30 min → Inbox PNG×3 + teams.json";
 
+    var btnCapAll = document.createElement("button");
+    btnCapAll.type = "button";
+    btnCapAll.className = "yna4-sla-btn";
+    btnCapAll.textContent = "캡처";
+    btnCapAll.title =
+      "진척율·SLA·이동중을 이미지 한 장으로 합쳐 복사 (팀즈에 붙여넣기)";
+    btnCapAll.addEventListener("click", function () {
+      if (btnCapAll.disabled) return;
+      btnCapAll.disabled = true;
+      btnCapAll.textContent = "캡처…";
+      var done = function (msg) {
+        btnCapAll.textContent = msg;
+        setTimeout(function () {
+          btnCapAll.textContent = "캡처";
+          btnCapAll.disabled = false;
+        }, 1600);
+      };
+      slaCaptureAllToClipboard(progressHost, pivotHost, movingHost).then(
+        function () {
+          done("복사됨");
+        },
+        function (e) {
+          console.warn("[SLA] 전체 캡처 실패", e);
+          done(e && e.message === "캡처할 내용 없음" ? "내용 없음" : "실패");
+        }
+      );
+    });
+
     var statusEl = document.createElement("span");
     statusEl.className = "yna4-sla-status";
     statusEl.setAttribute("role", "status");
@@ -12891,6 +13039,7 @@
     toolbar.appendChild(lookbackSel);
     toolbar.appendChild(directDoneLbl);
     toolbar.appendChild(btnAuto);
+    toolbar.appendChild(btnCapAll);
     toolbar.appendChild(btnStop);
     toolbar.appendChild(statusEl);
 

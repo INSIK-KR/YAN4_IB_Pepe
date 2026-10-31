@@ -34,6 +34,12 @@ contextBridge.exposeInMainWorld("yan4ShellDesktop", {
   captureRectToClipboard: function (rect) {
     return ipcRenderer.invoke("yan4-shell-capture-rect-to-clipboard", rect);
   },
+  captureRect: function (rect) {
+    return ipcRenderer.invoke("yan4-shell-capture-rect", rect);
+  },
+  clipboardWritePng: function (dataUrl) {
+    return ipcRenderer.invoke("yan4-shell-clipboard-write-png", dataUrl);
+  },
   storageGet: function (keys) {
     return ipcRenderer.invoke("yan4-shell-storage-get", keys);
   },

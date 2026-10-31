@@ -1202,28 +1202,53 @@ ipcMain.handle("yan4-shell-print-to-pdf", async function (_e, opts) {
   }
 });
 
-/** 화면에 보이는 영역(CSS px)을 그대로 찍어 클립보드에 비트맵으로 복사 */
+/** 화면에 보이는 영역(CSS px)을 그대로 찍기 */
+async function captureSenderRect(sender, rect) {
+  const zoom = sender.getZoomFactor() || 1;
+  const r = {
+    x: Math.max(0, Math.floor(Number(rect.x) * zoom)),
+    y: Math.max(0, Math.floor(Number(rect.y) * zoom)),
+    width: Math.ceil(Number(rect.width) * zoom),
+    height: Math.ceil(Number(rect.height) * zoom),
+  };
+  if (!(r.width > 0 && r.height > 0)) throw new Error("빈 영역");
+  const img = await sender.capturePage(r);
+  if (!img || img.isEmpty()) throw new Error("빈 이미지");
+  return img;
+}
+
+function ipcErr(err) {
+  return { ok: false, error: err && err.message ? err.message : String(err) };
+}
+
+/** 찍은 영역을 클립보드에 비트맵으로 복사 */
 ipcMain.handle("yan4-shell-capture-rect-to-clipboard", async function (e, rect) {
   try {
-    const zoom = e.sender.getZoomFactor() || 1;
-    const r = {
-      x: Math.max(0, Math.floor(Number(rect.x) * zoom)),
-      y: Math.max(0, Math.floor(Number(rect.y) * zoom)),
-      width: Math.ceil(Number(rect.width) * zoom),
-      height: Math.ceil(Number(rect.height) * zoom),
-    };
-    if (!(r.width > 0 && r.height > 0)) {
-      return { ok: false, error: "빈 영역" };
-    }
-    const img = await e.sender.capturePage(r);
-    if (!img || img.isEmpty()) return { ok: false, error: "빈 이미지" };
+    clipboard.writeImage(await captureSenderRect(e.sender, rect));
+    return { ok: true };
+  } catch (err) {
+    return ipcErr(err);
+  }
+});
+
+/** 찍은 영역을 PNG dataURL 로 돌려줌 (여러 장 합치기용) */
+ipcMain.handle("yan4-shell-capture-rect", async function (e, rect) {
+  try {
+    const img = await captureSenderRect(e.sender, rect);
+    return { ok: true, dataUrl: img.toDataURL() };
+  } catch (err) {
+    return ipcErr(err);
+  }
+});
+
+ipcMain.handle("yan4-shell-clipboard-write-png", async function (_e, dataUrl) {
+  try {
+    const img = nativeImage.createFromDataURL(String(dataUrl || ""));
+    if (img.isEmpty()) throw new Error("빈 이미지");
     clipboard.writeImage(img);
     return { ok: true };
   } catch (err) {
-    return {
-      ok: false,
-      error: err && err.message ? err.message : String(err),
-    };
+    return ipcErr(err);
   }
 });
 
