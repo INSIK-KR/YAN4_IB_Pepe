@@ -17366,6 +17366,7 @@
         : "통합 3페이지 (단일 화면)";
     }
 
+    var shellPageSetCount = 0;
     function setShellPage(pageKey) {
       var p = normalizeShellPageKey(pageKey);
       if (cfsAppIsPs() && p !== "2" && p !== "3" && p !== "ats") {
@@ -17470,9 +17471,14 @@
       btnShellPage4.classList.toggle("is-active", p === "4");
       btnShellPageSla.classList.toggle("is-active", p === "sla");
       btnShellPageAts.classList.toggle("is-active", p === "ats");
+      shellPageSetCount++;
       try {
         GM_setValue(ROOT_ID + "_shell_page", p);
       } catch (eSp) {}
+      // GM_getValue 는 Promise 라 시작 때 바로 못 읽음 → 동기로 읽을 사본
+      try {
+        localStorage.setItem(ROOT_ID + "_shell_page", p);
+      } catch (eLsP) {}
       if (p === "1") syncNeedHelpColumnHeight(wrap);
       applyShellTierNavVisibility();
     }
@@ -17498,8 +17504,7 @@
 
     applyShellTierNavVisibility();
 
-    try {
-      var savedPage = GM_getValue(ROOT_ID + "_shell_page", "1");
+    function applyRestoredShellPage(savedPage) {
       if (cfsAppIsPs()) {
         var restoredPs = normalizeShellPageKey(savedPage);
         if (restoredPs !== "2" && restoredPs !== "3" && restoredPs !== "ats") {
@@ -17521,9 +17526,29 @@
           setShellPage(restored);
         }
       }
+    }
+
+    var lsShellPage = null;
+    try {
+      lsShellPage = localStorage.getItem(ROOT_ID + "_shell_page");
+    } catch (eLsR) {}
+    try {
+      applyRestoredShellPage(lsShellPage || "1");
     } catch (eSp2) {
       if (cfsAppIsPs()) setShellPage("ats");
       else if (shellTierIsRecvqLimited()) setShellPage("3");
+    }
+    if (!lsShellPage && typeof GM_getValue === "function") {
+      // 사본이 아직 없으면(이전 버전) 저장소 값으로 한 번 복원 — 그사이 사용자가 페이지를 바꿨으면 그대로 둠
+      var shellPageSetAtBoot = shellPageSetCount;
+      try {
+        Promise.resolve(GM_getValue(ROOT_ID + "_shell_page", "")).then(function (v) {
+          if (!v || shellPageSetCount !== shellPageSetAtBoot) return;
+          try {
+            applyRestoredShellPage(v);
+          } catch (eSp3) {}
+        });
+      } catch (eGmP) {}
     }
 
     UNIFIED_SHELL_PANE_SPECS.forEach(function (spec) {

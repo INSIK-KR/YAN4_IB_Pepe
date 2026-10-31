@@ -156,8 +156,14 @@
           contentType: headers["Content-Type"] || headers["content-type"] || "",
           headers: headers,
           body: details.data != null ? details.data : undefined,
+          // 호출 쪽 timeout(28~60초)은 데스크톱에서 원래 안 쓰던 값 — 느린 조회가 새로 실패하지 않게
+          // main 기본 시간 제한(3분)만 적용, 멈춘 요청만 끊음
         })
         .then(function (res) {
+          if (res && res.timedOut && details.ontimeout) {
+            details.ontimeout();
+            return;
+          }
           if (res && res.ok) {
             if (details.onload) {
               details.onload({
