@@ -7066,6 +7066,15 @@
     table.appendChild(tbody);
 
     tableShell.appendChild(table);
+    var capBar = document.createElement("div");
+    capBar.className = "yna4-sla-capture-bar";
+    capBar.setAttribute("data-html2canvas-ignore", "true");
+    capBar.appendChild(
+      makeSlaCaptureCopyButton("SLA", function () {
+        return table;
+      })
+    );
+    wrap.appendChild(capBar);
     wrap.appendChild(tableShell);
 
     if (matrixHasPendingQty(matrixPending)) {
@@ -8595,6 +8604,12 @@
         (bundle.stats && bundle.stats.operationalYmd) ||
           (model && model.operationalYmd)
       );
+    var progressCapBtn = makeSlaCaptureCopyButton("진척율", function () {
+      return host.querySelector(".yna4-sla-progress-left");
+    });
+    progressCapBtn.style.marginLeft = "8px";
+    progressCapBtn.style.verticalAlign = "middle";
+    head.appendChild(progressCapBtn);
     wrap.appendChild(head);
 
     var grid = document.createElement("div");
@@ -11299,6 +11314,12 @@
         copyMovingPanelForTeams(teamsBtn, titleText, rows);
       });
       head.appendChild(teamsBtn);
+      var movingCapBtn = makeSlaCaptureCopyButton("이동중", function () {
+        return resolveSlaMovingCaptureTarget(host);
+      });
+      movingCapBtn.style.marginLeft = "4px";
+      movingCapBtn.style.verticalAlign = "middle";
+      head.appendChild(movingCapBtn);
     }
     wrap.appendChild(head);
 
@@ -11799,6 +11820,54 @@
           slaCaptureErrorBrief(eUrl, 80)
       );
     }
+  }
+
+  /** 30MIN AUTO 와 같은 캡처로 PNG 를 만들어 클립보드에 비트맵으로 복사 */
+  function makeSlaCaptureCopyButton(label, resolveTarget) {
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "yna4-sla-pivot-drill-teams-btn yna4-sla-capture-btn";
+    btn.textContent = "캡처";
+    btn.title = label + " 화면을 이미지로 복사 (팀즈에 붙여넣기)";
+    btn.setAttribute("data-html2canvas-ignore", "true");
+    btn.addEventListener("click", function (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (btn.disabled) return;
+      var flash = function (msg) {
+        btn.textContent = msg;
+        setTimeout(function () {
+          btn.textContent = "캡처";
+          btn.disabled = false;
+        }, 1600);
+      };
+      btn.disabled = true;
+      btn.textContent = "캡처…";
+      (async function () {
+        if (typeof html2canvas !== "function") {
+          throw new Error("html2canvas 로드 실패");
+        }
+        var el = resolveTarget();
+        if (!el) throw new Error("캡처할 내용 없음");
+        var dataUrl = await captureElementToPngDataUrl(el, label);
+        var bin = atob(dataUrl.slice(dataUrl.indexOf(",") + 1));
+        var bytes = new Uint8Array(bin.length);
+        for (var bi = 0; bi < bin.length; bi++) bytes[bi] = bin.charCodeAt(bi);
+        var blob = new Blob([bytes], { type: "image/png" });
+        await navigator.clipboard.write([
+          new ClipboardItem({ "image/png": blob }),
+        ]);
+      })().then(
+        function () {
+          flash("복사됨");
+        },
+        function (e) {
+          console.warn("[SLA] " + label + " 캡처 실패", e);
+          flash("실패");
+        }
+      );
+    });
+    return btn;
   }
 
   function resolveSlaPivotCaptureTarget(pivotHost) {
