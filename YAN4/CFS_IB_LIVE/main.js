@@ -306,18 +306,71 @@ function openLoginWindow(kind) {
   return { ok: true, reused: false, kind: key };
 }
 
+/** 앱 화면 밖 링크용 창 — 같은 로그인 세션, preload(앱 기능) 없음 */
+function openExternalLinkWindow(url) {
+  const win = new BrowserWindow({
+    width: 1200,
+    height: 850,
+    title: CFS_APP_LABEL,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      partition: PARTITION,
+    },
+  });
+  try {
+    win.webContents.setUserAgent(CHROME_UA);
+  } catch (eUa) {}
+  win.webContents.setWindowOpenHandler(function (d) {
+    if (/^https?:/i.test(d.url)) openExternalLinkWindow(d.url);
+    return { action: "deny" };
+  });
+  win.loadURL(url);
+  return win;
+}
+
+function stripUrlHash(u) {
+  return String(u || "").split("#")[0];
+}
+
+/**
+ * 앱 기능(preload)이 붙은 창이 다른 페이지로 넘어가거나 자식 창에 preload 를 물려주지 않게.
+ * 웹 링크(target=_blank 등)는 preload 없는 별도 창으로 연다.
+ */
+function guardAppWindow(win, opts) {
+  opts = opts || {};
+  const wc = win.webContents;
+  wc.on("will-navigate", function (ev, url) {
+    // 같은 페이지 안(#)만 허용 — 파일 끌어놓기·링크 클릭으로 화면이 바뀌는 것 차단
+    if (stripUrlHash(url) === stripUrlHash(wc.getURL())) return;
+    // 엑셀 등 파일 저장(a.download + blob:) 은 막지 않음
+    if (/^(blob|data):/i.test(url)) return;
+    ev.preventDefault();
+    if (opts.openLinks && /^https?:/i.test(url)) openExternalLinkWindow(url);
+  });
+  wc.setWindowOpenHandler(function (d) {
+    if (opts.openLinks && /^https?:/i.test(d.url)) openExternalLinkWindow(d.url);
+    return { action: "deny" };
+  });
+}
+
 function allowedFetchUrl(url) {
-  const u = String(url || "");
+  // 문자열 앞부분이 아니라 실제 호스트로 검사 — "https://evil.com?.coupang.com/" 같은 우회 차단
+  let u;
+  try {
+    u = new URL(String(url || ""));
+  } catch (eUrl) {
+    return false;
+  }
+  if (u.protocol !== "https:" || u.username || u.password) return false;
+  const host = u.hostname.toLowerCase();
   return (
-    u.indexOf("https://inventory.coupang.com/") === 0 ||
-    u.indexOf("https://outbound.coupang.com/") === 0 ||
-    u.indexOf("https://inbound.coupang.com/") === 0 ||
-    u.indexOf("https://wms-front.coupang.com/") === 0 ||
-    u.indexOf("https://mos.coupang.net/") === 0 ||
-    u.indexOf("https://po-management.coupang.net/") === 0 ||
-    u.indexOf("https://coupangfsnam.sharepoint.com/") === 0 ||
-    /^https:\/\/[^/]*\.coupang\.com\//.test(u) ||
-    /^https:\/\/[^/]*\.sharepoint\.com\//.test(u)
+    host === "mos.coupang.net" ||
+    host === "po-management.coupang.net" ||
+    host === "coupang.com" ||
+    host.endsWith(".coupang.com") ||
+    host.endsWith(".sharepoint.com")
   );
 }
 
@@ -856,11 +909,15 @@ async function handleRuntimeMessage(message) {
       /^\/+/,
       ""
     );
+    const rendererDir = path.join(__dirname, "renderer");
     const candidates = [
-      path.join(__dirname, "renderer", "vendor", path.basename(rel)),
-      path.join(__dirname, "renderer", rel),
+      path.join(rendererDir, "vendor", path.basename(rel)),
+      path.join(rendererDir, rel),
     ];
     for (let i = 0; i < candidates.length; i++) {
+      // ../ 로 renderer 폴더 밖 파일을 읽지 못하게
+      const resolved = path.resolve(candidates[i]);
+      if (resolved.indexOf(rendererDir + path.sep) !== 0) continue;
       try {
         if (fs.existsSync(candidates[i])) {
           const body = fs.readFileSync(candidates[i], "utf8");
@@ -1123,12 +1180,14 @@ function createWindow() {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      // preload 는 contextBridge·ipcRenderer 만 써서 sandbox 에서도 동작
+      sandbox: true,
       partition: PARTITION,
       backgroundThrottling: true,
       spellcheck: false,
     },
   });
+  guardAppWindow(mainWindow, { openLinks: true });
   let splashHoldArmed = false;
   const revealMain = function () {
     if (!mainWindow || mainWindow.isDestroyed() || mainWindow.isVisible() || splashHoldArmed) return;
@@ -1563,6 +1622,7 @@ function openInboundSopWindow(opts) {
     },
   });
 
+  guardAppWindow(sopWindow, { openLinks: false });
   sopWindow.loadFile(path.join(__dirname, "renderer", "sop.html"));
   sopWindow.on("closed", function () {
     sopWindow = null;
