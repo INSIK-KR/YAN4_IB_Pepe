@@ -5919,7 +5919,9 @@
       case "aging":
         return line.agingAt ? formatDrillDateTimeNoYear(line.agingAt) : "-";
       case "moveQty":
-        return formatPivotNum(line.moveQuantity);
+        return formatPivotNum(
+          line.liveQty != null ? line.liveQty : line.moveQuantity
+        );
       case "skuId":
         return line.skuId || "-";
       case "temperature":
@@ -5973,6 +5975,15 @@
           td.classList.add("yna4-sla-pivot-drill-unit");
         }
         td.textContent = toteStowDrillCellValue(lines[li], colDef.key, maps);
+        if (
+          colDef.key === "moveQty" &&
+          lines[li].liveQty != null &&
+          lines[li].liveQty !== lines[li].moveQuantity
+        ) {
+          // 토트 실시간 재고로 바뀐 유닛 — 피벗과 같은 노란색
+          td.style.setProperty("background", DIRECT_PIVOT_LIVE_BG, "important");
+          td.title = "토트 실시간 (이동 수량 " + formatDrillQty(lines[li].moveQuantity) + ")";
+        }
         tr.appendChild(td);
       }
       tbody.appendChild(tr);
@@ -6474,14 +6485,40 @@
             stowedRows++;
           }
         }
-        if (stowedRows) paintToteBody(drillShrinkSkuMaps(drillCtx));
+        // 유닛 = 토트별 지금 재고를 행 순서대로 이동 수량 한도 안에서 나눔
+        var remainByBc = Object.create(null);
+        var liveSum = 0;
+        for (k = 0; k < lines.length; k++) {
+          bc = normalizeGcKey(lines[k].toteBarcode);
+          if (!bc || liveRes.liveByGc[bc] === undefined) continue;
+          if (remainByBc[bc] === undefined) remainByBc[bc] = liveRes.liveByGc[bc];
+          lines[k].liveQty = Math.max(
+            0,
+            Math.min(Number(lines[k].moveQuantity) || 0, remainByBc[bc])
+          );
+          remainByBc[bc] -= lines[k].liveQty;
+        }
+        for (k = 0; k < lines.length; k++) {
+          liveSum +=
+            lines[k].liveQty != null
+              ? lines[k].liveQty
+              : Number(lines[k].moveQuantity) || 0;
+        }
+        paintToteBody(drillShrinkSkuMaps(drillCtx));
         var newVal = transferCellLiveValue(toteMatches, liveRes.liveByGc);
         updateTransferPivotCellDom(wrap, rowKey, colName, newVal);
         fillDrillHeadTitle(
           head,
-          agHeadText +
-            " · 토트 실시간 " +
-            Math.round(newVal).toLocaleString("en-US") +
+          TOTE_STOW_ZONE_LABEL +
+            " · " +
+            rowLabel +
+            " · " +
+            colLabel +
+            " · " +
+            lines.length +
+            "행 · 유닛 " +
+            Math.round(liveSum).toLocaleString("en-US") +
+            " · 토트 실시간 반영" +
             (liveRes.stowedGcs
               ? " · 진열완료 토트 " + liveRes.stowedGcs + "개(" + stowedRows + "행) 제외"
               : "")
