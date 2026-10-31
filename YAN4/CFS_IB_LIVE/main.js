@@ -11,6 +11,7 @@ const {
   dialog,
   screen,
   nativeImage,
+  clipboard,
 } = require("electron");
 const path = require("path");
 const fs = require("fs");
@@ -1193,6 +1194,31 @@ ipcMain.handle("yan4-shell-storage-set", async function (_e, items) {
 ipcMain.handle("yan4-shell-print-to-pdf", async function (_e, opts) {
   try {
     return await printPageToPdfFile(opts || {});
+  } catch (err) {
+    return {
+      ok: false,
+      error: err && err.message ? err.message : String(err),
+    };
+  }
+});
+
+/** 화면에 보이는 영역(CSS px)을 그대로 찍어 클립보드에 비트맵으로 복사 */
+ipcMain.handle("yan4-shell-capture-rect-to-clipboard", async function (e, rect) {
+  try {
+    const zoom = e.sender.getZoomFactor() || 1;
+    const r = {
+      x: Math.max(0, Math.floor(Number(rect.x) * zoom)),
+      y: Math.max(0, Math.floor(Number(rect.y) * zoom)),
+      width: Math.ceil(Number(rect.width) * zoom),
+      height: Math.ceil(Number(rect.height) * zoom),
+    };
+    if (!(r.width > 0 && r.height > 0)) {
+      return { ok: false, error: "빈 영역" };
+    }
+    const img = await e.sender.capturePage(r);
+    if (!img || img.isEmpty()) return { ok: false, error: "빈 이미지" };
+    clipboard.writeImage(img);
+    return { ok: true };
   } catch (err) {
     return {
       ok: false,

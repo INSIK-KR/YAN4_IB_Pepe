@@ -11679,7 +11679,7 @@
 
   var SLA_CAPTURE_MAX_PX = 8192;
   var SLA_CAPTURE_MAX_AREA = 64000000;
-  var SLA_CAPTURE_BASE_SCALE = 1.5;
+  var SLA_CAPTURE_BASE_SCALE = 2.5;
   var SLA_PIVOT_HATCH_MOVING =
     "repeating-linear-gradient(-45deg, transparent, transparent 5px, rgba(59, 130, 246, 0.28) 5px, rgba(59, 130, 246, 0.28) 6px)";
   var SLA_PIVOT_HATCH_ADHOC =
@@ -11702,15 +11702,43 @@
     var adhoc = root.querySelectorAll("td.yna4-sla-pivot-col--adhoc");
     var overdue = root.querySelectorAll("td.yna4-sla-pivot-num--overdue-day");
     var i;
+    var hatchMoving = slaHatchTileUrl("rgba(59, 130, 246, 0.28)", SLA_PIVOT_HATCH_MOVING);
+    var hatchAdhoc = slaHatchTileUrl("rgba(124, 58, 237, 0.28)", SLA_PIVOT_HATCH_ADHOC);
+    var hatchOverdue = slaHatchTileUrl("rgba(51, 65, 85, 0.38)", SLA_PIVOT_HATCH_OVERDUE);
     for (i = 0; i < moving.length; i++) {
-      moving[i].style.backgroundImage = SLA_PIVOT_HATCH_MOVING;
+      moving[i].style.backgroundImage = hatchMoving;
     }
     for (i = 0; i < adhoc.length; i++) {
-      adhoc[i].style.backgroundImage = SLA_PIVOT_HATCH_ADHOC;
+      adhoc[i].style.backgroundImage = hatchAdhoc;
     }
     for (i = 0; i < overdue.length; i++) {
-      overdue[i].style.backgroundImage = SLA_PIVOT_HATCH_OVERDUE;
+      overdue[i].style.backgroundImage = hatchOverdue;
+      overdue[i].style.backgroundRepeat = "repeat";
     }
+  }
+
+  /** html2canvas 는 repeating-linear-gradient 빗금을 못 그려서 PNG 타일로 대체 */
+  var slaHatchTileCache = {};
+  function slaHatchTileUrl(color, fallback) {
+    if (slaHatchTileCache[color]) return slaHatchTileCache[color];
+    try {
+      var c = document.createElement("canvas");
+      c.width = 8;
+      c.height = 8;
+      var g = c.getContext("2d");
+      g.strokeStyle = color;
+      g.lineWidth = 1;
+      g.beginPath();
+      // -45deg 빗금: 왼쪽 위 → 오른쪽 아래, 타일 경계에서 이어지도록 3줄
+      g.moveTo(-8, 0); g.lineTo(8, 16);
+      g.moveTo(0, 0); g.lineTo(8, 8);
+      g.moveTo(0, -8); g.lineTo(16, 8);
+      g.stroke();
+      slaHatchTileCache[color] = 'url("' + c.toDataURL("image/png") + '")';
+    } catch (eTile) {
+      return fallback;
+    }
+    return slaHatchTileCache[color];
   }
 
   function slaApplyCaptureCloneStyles(root) {
@@ -11822,7 +11850,66 @@
     }
   }
 
-  /** 30MIN AUTO 와 같은 캡처로 PNG 를 만들어 클립보드에 비트맵으로 복사 */
+  /** 요소 전체가 화면(스크롤 박스 포함)에 보이면 그 사각형, 아니면 null */
+  function slaFullyVisibleRect(el) {
+    var r = el.getBoundingClientRect();
+    var tol = 1;
+    if (r.width < 1 || r.height < 1) return null;
+    if (
+      r.left < -tol ||
+      r.top < -tol ||
+      r.right > window.innerWidth + tol ||
+      r.bottom > window.innerHeight + tol
+    ) {
+      return null;
+    }
+    var p = el.parentElement;
+    while (p && p !== document.body && p !== document.documentElement) {
+      var cs = getComputedStyle(p);
+      if (cs.overflowX !== "visible" || cs.overflowY !== "visible") {
+        var pr = p.getBoundingClientRect();
+        if (
+          r.left < pr.left - tol ||
+          r.top < pr.top - tol ||
+          r.right > pr.left + p.clientLeft + p.clientWidth + tol ||
+          r.bottom > pr.top + p.clientTop + p.clientHeight + tol
+        ) {
+          return null;
+        }
+      }
+      p = p.parentElement;
+    }
+    return r;
+  }
+
+  /** 화면 그대로 찍기 (빗금·색 그대로). 표가 화면에 다 안 들어오면 false */
+  async function slaTryNativeCaptureToClipboard(el) {
+    var desk = window.yan4ShellDesktop;
+    if (!desk || typeof desk.captureRectToClipboard !== "function") {
+      return false;
+    }
+    try {
+      el.scrollIntoView({ block: "nearest", inline: "nearest" });
+    } catch (eScroll) {}
+    await new Promise(function (resolve) {
+      requestAnimationFrame(function () {
+        requestAnimationFrame(resolve);
+      });
+    });
+    var r = slaFullyVisibleRect(el);
+    if (!r) return false;
+    var resp = await desk.captureRectToClipboard({
+      x: r.left,
+      y: r.top,
+      width: r.width,
+      height: r.height,
+    });
+    if (resp && resp.ok) return true;
+    console.warn("[SLA] 화면 캡처 실패, html2canvas 로 대체", resp && resp.error);
+    return false;
+  }
+
+  /** 화면 캡처로 PNG 를 클립보드에 비트맵으로 복사 (화면 밖이면 30MIN AUTO 방식) */
   function makeSlaCaptureCopyButton(label, resolveTarget) {
     var btn = document.createElement("button");
     btn.type = "button";
@@ -11849,6 +11936,7 @@
         }
         var el = resolveTarget();
         if (!el) throw new Error("캡처할 내용 없음");
+        if (await slaTryNativeCaptureToClipboard(el)) return;
         var dataUrl = await captureElementToPngDataUrl(el, label);
         var bin = atob(dataUrl.slice(dataUrl.indexOf(",") + 1));
         var bytes = new Uint8Array(bin.length);

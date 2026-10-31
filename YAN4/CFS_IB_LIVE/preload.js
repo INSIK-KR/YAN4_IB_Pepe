@@ -31,6 +31,9 @@ contextBridge.exposeInMainWorld("yan4ShellDesktop", {
   printToPdf: function (opts) {
     return ipcRenderer.invoke("yan4-shell-print-to-pdf", opts || {});
   },
+  captureRectToClipboard: function (rect) {
+    return ipcRenderer.invoke("yan4-shell-capture-rect-to-clipboard", rect);
+  },
   storageGet: function (keys) {
     return ipcRenderer.invoke("yan4-shell-storage-get", keys);
   },
