@@ -483,7 +483,20 @@
     return host;
   }
 
+  /** 남은 ATS 보충지 인쇄 상태를 지움 — 안 지우면 이 출력에 ATS 보충지가 섞여 찍힘 */
+  function clearStaleAtsPrintState() {
+    document.body.classList.remove("yna4-ats-print-mode");
+    var atsHost = document.getElementById("yna4AtsPrintChunkHost");
+    if (atsHost) atsHost.innerHTML = "";
+    var hidden = document.querySelectorAll(".yna4-ats-hidden-for-print-pages");
+    var hi;
+    for (hi = 0; hi < hidden.length; hi++) {
+      hidden[hi].classList.remove("yna4-ats-hidden-for-print-pages");
+    }
+  }
+
   function triggerPrint(host, onDone, pdfName, mode) {
+    clearStaleAtsPrintState();
     document.body.classList.add(PRINT_BODY_CLASS);
     var wantPdf = mode === "pdf";
     function runCleanup() {

@@ -3518,6 +3518,26 @@
     "10.5%",
   ];
 
+  // 보충지출력(PDF) 버튼으로 시작한 인쇄인지 — 다른 출력(프리팩·라벨)엔 끼어들지 않게
+  var atsPrintOwnRequest = false;
+  var ATS_FOREIGN_PRINT_CLASSES = [
+    "yna4-prepack-print",
+    "yna4-rcrt-print-mode",
+    "yna4-bipyo-print-mode",
+  ];
+
+  /** beforeprint 에서 ATS 보충지를 준비할지 — 버튼 출력이거나, ATS 화면에서 Ctrl+P 일 때만 */
+  function atsShouldHandleBeforePrint() {
+    if (atsPrintOwnRequest) return true;
+    var bl = document.body.classList;
+    var i;
+    for (i = 0; i < ATS_FOREIGN_PRINT_CLASSES.length; i++) {
+      if (bl.contains(ATS_FOREIGN_PRINT_CLASSES[i])) return false;
+    }
+    var grid = atsPrintContext.dashboardsGrid;
+    return !!(grid && grid.isConnected && grid.getClientRects().length);
+  }
+
   var atsPrintContext = {
     dashboardsGrid: null,
     dashPanelTables: null,
@@ -3895,6 +3915,7 @@
     var host = document.getElementById(ATS_PRINT_CHUNK_HOST_ID);
     if (host) host.innerHTML = "";
     document.body.classList.remove("yna4-ats-print-mode");
+    atsPrintOwnRequest = false;
   }
 
   function runAtsPrintMergePdf(btnPrintPdf) {
@@ -3936,6 +3957,7 @@
     }
     // 다른 카드(라벨·프리팩)의 @page가 뒤에 붙어 있으면 그쪽이 이김 → 출력 직전 맨 뒤로 다시 붙임
     injectAtsPrintCriticalCss();
+    atsPrintOwnRequest = true;
     document.body.classList.add("yna4-ats-print-mode");
     window.requestAnimationFrame(function () {
       window.requestAnimationFrame(function () {
@@ -3947,6 +3969,13 @@
   if (!window.__YAN4_ATS_PRINT_HOOKS__) {
     window.__YAN4_ATS_PRINT_HOOKS__ = true;
     window.addEventListener("beforeprint", function () {
+      if (!atsShouldHandleBeforePrint()) {
+        // 다른 화면 출력 — 혹시 남은 ATS 보충지도 지우고 빠짐
+        try {
+          restoreAtsPrintPagedTables();
+        } catch (eSkip) {}
+        return;
+      }
       document.body.classList.add("yna4-ats-print-mode");
       try {
         prepareAtsPrintPagedTables();

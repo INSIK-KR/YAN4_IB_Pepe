@@ -14781,8 +14781,21 @@
     fallback();
   }
 
+  /** 남은 ATS 보충지 인쇄 상태를 지움 — 안 지우면 이 출력에 ATS 보충지가 섞여 찍힘 */
+  function clearStaleAtsPrintState() {
+    document.body.classList.remove("yna4-ats-print-mode");
+    var atsHost = document.getElementById("yna4AtsPrintChunkHost");
+    if (atsHost) atsHost.innerHTML = "";
+    var hidden = document.querySelectorAll(".yna4-ats-hidden-for-print-pages");
+    var hi;
+    for (hi = 0; hi < hidden.length; hi++) {
+      hidden[hi].classList.remove("yna4-ats-hidden-for-print-pages");
+    }
+  }
+
   function prepackPrintPdf(res, setMsg) {
     var body = document.body;
+    clearStaleAtsPrintState();
     var ownId = ROOT_ID + "-prepack-style";
     // 라벨 출력 CSS 등은 @page·html/body 크기를 전역으로 고정 → 출력 동안만 끔
     var muted = Array.prototype.filter.call(
