@@ -16961,14 +16961,14 @@
     /* Desktop: 타이틀 제거 · SLA/ATS/1/2/3/4 는 #banner(YAN4 IB LIVE) 열로 이동
        Extension: 타이틀 제거 · 페이지 내비만 헤더에 유지 */
     if (isDesktopShell) {
-      /* MK2: 페이지 버튼은 왼쪽 메뉴(#sideNav)로 — 버튼·setShellPage 동작은 그대로 */
-      var desktopSideNav = document.getElementById("sideNav");
-      if (desktopSideNav) {
-        btnShellPage1.textContent = "통합 현황";
-        btnShellPage2.textContent = "입고 도구";
-        btnShellPage3.textContent = "토트 바코드";
-        btnShellPage4.textContent = "STOW Error";
-        desktopSideNav.appendChild(pageNav);
+      var desktopBanner = document.getElementById("banner");
+      if (desktopBanner) {
+        var loginGroupEl = desktopBanner.querySelector(".login-group");
+        if (loginGroupEl) {
+          desktopBanner.insertBefore(pageNav, loginGroupEl);
+        } else {
+          desktopBanner.appendChild(pageNav);
+        }
       } else {
         hdr.appendChild(pageNav);
       }

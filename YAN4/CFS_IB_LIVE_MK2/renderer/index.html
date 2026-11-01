@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>CFS IB LIVE MK2_By Pepe</title>
   <style>
-    :root { --side-w: 176px; }
     html, body {
       margin: 0;
       height: 100%;
@@ -19,86 +18,87 @@
         max-height: none !important;
         overflow: visible !important;
       }
-      #sideNav { display: none !important; }
-      #banner { margin-left: 0 !important; }
-      #shellMount { left: 0 !important; }
     }
-    #sideNav {
-      position: absolute;
-      top: 0;
-      bottom: 0;
-      left: 0;
-      width: var(--side-w);
-      box-sizing: border-box;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      padding: 12px 8px;
-      background: #fafafa;
-      border-right: 1px solid #e5e5e5;
-      color: #0a0a0a;
-      z-index: 2147483647;
-    }
-    #sideNav .side-brand {
-      padding: 4px 8px;
-      font-size: 14px;
-      font-weight: 600;
-      letter-spacing: -0.01em;
-      white-space: nowrap;
-    }
-    #sideNav .side-brand small {
-      margin-left: 4px;
-      font-size: 11px;
-      font-weight: 500;
-      color: #737373;
-    }
-    #sideNav .yna4-shell-page-nav {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-    #sideNav .yna4-shell-page-nav button {
-      display: block;
-      width: 100%;
-      height: 32px;
-      padding: 0 8px;
-      border: 0;
-      border-radius: 6px;
-      background: transparent;
-      color: #404040;
-      font: 500 13px/32px "Segoe UI", "Malgun Gothic", sans-serif;
-      text-align: left;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      cursor: pointer;
-    }
-    #sideNav .yna4-shell-page-nav button:hover { background: #f0f0f0; color: #0a0a0a; }
-    #sideNav .yna4-shell-page-nav button.is-active { background: #171717; color: #fafafa; }
     #banner {
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
       align-items: center;
       padding: 6px 10px;
-      margin-left: var(--side-w);
-      background: #ffffff;
-      color: #0a0a0a;
-      border-bottom: 1px solid #e5e5e5;
+      background: #0f172a;
+      color: #e2e8f0;
       font-size: 12px;
       flex-shrink: 0;
       z-index: 2147483647;
       position: relative;
     }
-    #banner .ok { color: #16a34a; }
-    #banner .bad { color: #dc2626; }
-    #banner .hint { color: #737373; }
+    #banner strong { color: #fbbf24; }
+    #banner .ok { color: #86efac; }
+    #banner .bad { color: #fca5a5; }
+    #banner .hint { color: #94a3b8; }
     #banner .login-group {
       display: inline-flex;
       flex-wrap: wrap;
       gap: 6px;
       align-items: center;
       margin-left: auto;
+    }
+    #banner .yna4-shell-page-nav {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+      margin-left: 4px;
+    }
+    #banner .yna4-shell-page-nav button {
+      width: 28px;
+      height: 24px;
+      min-width: 28px;
+      padding: 0;
+      border: 1px solid #475569;
+      border-radius: 4px;
+      background: #1e293b;
+      color: #e2e8f0;
+      font-size: 11px;
+      font-weight: 800;
+      cursor: pointer;
+      line-height: 1;
+      box-sizing: border-box;
+    }
+    #banner .yna4-shell-page-nav button.is-active {
+      background: #2563eb;
+      border-color: #3b82f6;
+      color: #fff;
+    }
+    #banner .yna4-shell-page-nav button.yna4-shell-page-nav--sla {
+      min-width: 34px;
+      width: auto;
+      padding: 0 6px;
+      font-size: 10px;
+      letter-spacing: 0.02em;
+      border-color: #6366f1;
+      background: #312e81;
+      color: #c7d2fe;
+    }
+    #banner .yna4-shell-page-nav button.yna4-shell-page-nav--sla.is-active {
+      background: #4f46e5;
+      border-color: #818cf8;
+      color: #fff;
+    }
+    #banner .yna4-shell-page-nav button.yna4-shell-page-nav--ats {
+      min-width: 34px;
+      width: auto;
+      padding: 0 6px;
+      font-size: 10px;
+      letter-spacing: 0.02em;
+      border-color: #f87171;
+      background: #7f1d1d;
+      color: #fecaca;
+    }
+    #banner .yna4-shell-page-nav button.yna4-shell-page-nav--ats.is-active {
+      background: #dc2626;
+      border-color: #f87171;
+      color: #fff;
     }
     #banner .login-group button {
       border: 0;
@@ -128,14 +128,14 @@
       gap: 6px;
       margin-right: 6px;
       padding-right: 8px;
-      border-right: 1px solid #e5e5e5;
+      border-right: 1px solid #334155;
     }
     #banner .center-group select {
       height: 24px;
-      border: 1px solid #d4d4d4;
+      border: 1px solid #475569;
       border-radius: 4px;
-      background: #ffffff;
-      color: #0a0a0a;
+      background: #1e293b;
+      color: #e2e8f0;
       font-size: 12px;
       padding: 0 4px;
     }
@@ -237,7 +237,7 @@
     }
     #shellMount {
       position: absolute;
-      inset: 36px 0 0 var(--side-w);
+      inset: 36px 0 0 0;
       overflow: hidden;
       background: #f1f5f9;
     }
@@ -255,10 +255,8 @@
   </style>
 </head>
 <body>
-  <aside id="sideNav" aria-label="메뉴">
-    <div class="side-brand">CFS IB LIVE<small>MK2</small></div>
-  </aside>
   <div id="banner">
+    <strong>CFS IB LIVE MK2</strong>
     <span id="sessStatus" class="hint" aria-live="polite"></span>
     <span class="login-group">
       <span class="center-group">
