@@ -99,6 +99,7 @@
       alert: 0,
       alertRows: [],
       alertByGroup: Object.create(null),
+      missByGroup: Object.create(null),
       alertSkuCount: 0,
       today: 0,
       todayCols: [],
@@ -141,6 +142,7 @@
         if (cell.overdue) {
           byCol[col].overdue += qty;
           rowMiss += qty;
+          if (group) out.missByGroup[group] = (out.missByGroup[group] || 0) + qty;
         }
         p = parseCol(col);
         if (inOperDay(p)) {
@@ -205,32 +207,45 @@
     return out;
   }
 
+  /** 수량 있는 온도대 전부, 많은 순 */
+  function groupsText(byGroup) {
+    return ALERT_GROUPS.filter(function (g) {
+      return byGroup[g.key] > 0;
+    })
+      .sort(function (a, b) {
+        return byGroup[b.key] - byGroup[a.key];
+      })
+      .map(function (g) {
+        return g.label + " " + fmt(byGroup[g.key]);
+      })
+      .join(" · ");
+  }
+
+  function topRowsText(rows) {
+    return rows
+      .slice(0, 2)
+      .map(function (r) {
+        return r.label + " " + fmt(r.qty);
+      })
+      .join(" · ");
+  }
+
   function buildChecks(s, specials) {
     var checks = [];
     if (s.miss > 0) {
       checks.push({
         tone: "bad",
         tag: "MISS",
-        title: s.missRows
-          .slice(0, 2)
-          .map(function (r) {
-            return r.label + " " + fmt(r.qty);
-          })
-          .join(" · "),
-        detail: colLabel(s.missFromCol) + "부터 누적 " + fmt(s.miss) + " 유닛",
+        title: groupsText(s.missByGroup) || topRowsText(s.missRows),
+        detail: topRowsText(s.missRows) + " · " + colLabel(s.missFromCol) + "부터 누적",
       });
     }
     if (s.alert > 0) {
       checks.push({
         tone: "warn",
         tag: "임박",
-        title: s.alertRows
-          .slice(0, 2)
-          .map(function (r) {
-            return r.label + " " + fmt(r.qty);
-          })
-          .join(" · "),
-        detail: "SKU " + fmt(s.alertSkuCount) + "개 · " + fmt(s.alert) + " 유닛 · TR·DIR 2시간, RM·AG 8시간 이내",
+        title: groupsText(s.alertByGroup) || topRowsText(s.alertRows),
+        detail: topRowsText(s.alertRows) + " · SKU " + fmt(s.alertSkuCount) + "개",
       });
     }
     if (s.expired.length) {
@@ -311,23 +326,22 @@
         "이전 조회 " + fmt(prev.total) + " → " + (d > 0 ? "+" : d < 0 ? "-" : "±") + fmt(Math.abs(d));
     }
     row.appendChild(kpi("yna4-sla-ov-kpi--hero", "총 미진열 유닛", fmt(s.total), deltaText));
-    row.appendChild(
-      kpi(
-        "yna4-sla-ov-kpi--miss",
-        "MISS 누적",
-        fmt(s.miss),
-        s.total ? "전체의 " + ((s.miss / s.total) * 100).toFixed(1) + "%" : "-"
-      )
-    );
+    function fillTemps(box, byGroup) {
+      var sub = box.querySelector(".yna4-sla-ov-kpi-sub");
+      sub.className = "yna4-sla-ov-kpi-temps";
+      ALERT_GROUPS.forEach(function (g) {
+        var t = el("span", "yna4-sla-ov-kpi-temp", g.label + " ");
+        t.appendChild(el("b", "", fmt(byGroup[g.key] || 0)));
+        sub.appendChild(t);
+      });
+    }
+    var missBox = kpi("yna4-sla-ov-kpi--miss", "MISS 누적", fmt(s.miss), "");
+    missBox.title = s.total ? "전체의 " + ((s.miss / s.total) * 100).toFixed(1) + "%" : "";
+    fillTemps(missBox, s.missByGroup);
+    row.appendChild(missBox);
     var alertBox = kpi("yna4-sla-ov-kpi--alert", "SLA 임박", fmt(s.alert), "");
     alertBox.title = "SKU별 수량 · TR·DIR 2시간, RM·AG 8시간 이내 (MISS 칸 제외)";
-    var alertSub = alertBox.querySelector(".yna4-sla-ov-kpi-sub");
-    alertSub.className = "yna4-sla-ov-kpi-temps";
-    ALERT_GROUPS.forEach(function (g) {
-      var t = el("span", "yna4-sla-ov-kpi-temp", g.label + " ");
-      t.appendChild(el("b", "", fmt(s.alertByGroup[g.key] || 0)));
-      alertSub.appendChild(t);
-    });
+    fillTemps(alertBox, s.alertByGroup);
     row.appendChild(alertBox);
     var un = s.progress && s.progress.unload && s.progress.unload.total;
     var re = s.progress && s.progress.receive && s.progress.receive.total;

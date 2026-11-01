@@ -7567,7 +7567,8 @@
           alertQty: alertCell ? Math.min(alertCell.qty, qty) : 0,
           alertSkus: alertCell ? Object.keys(alertCell.skus) : [],
         };
-        if (qty > 0) {
+        /* 임박 칸은 원래 빨강을 유지 (CSS) */
+        if (qty > 0 && !td.classList.contains("yna4-sla-pivot-num--sla-alert")) {
           td.style.setProperty(
             "background-color",
             "rgba(" +

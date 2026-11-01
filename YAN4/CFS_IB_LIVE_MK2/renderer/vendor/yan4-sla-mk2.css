@@ -459,8 +459,9 @@
 }
 
 .yna4-shell-page-sla-inner .yna4-sla-root table.yna4-sla-pivot-table--excel tbody td.yna4-sla-pivot-num--sla-alert {
-  color: #b91c1c !important;
-  outline: 1px solid #fca5a5;
+  background: #fecaca !important;
+  color: #9f1239 !important;
+  outline: 1px solid #f87171;
   outline-offset: -1px;
 }
 
