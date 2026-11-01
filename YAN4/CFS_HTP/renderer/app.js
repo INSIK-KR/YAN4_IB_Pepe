@@ -554,6 +554,22 @@
     return html + "</tbody></table></details></div>";
   }
 
+  // ---------- MOS 로그인 ----------
+  function renderMosSession(st) {
+    const loggedIn = !!(st && st.loggedIn);
+    $("mosLoginDot").classList.toggle("on", loggedIn);
+    $("mosLoginText").textContent = loggedIn ? "MOS 로그인됨" : "MOS 로그인";
+  }
+
+  $("mosLogin").addEventListener("click", function () {
+    if (window.cfsHtp) window.cfsHtp.mosLogin();
+  });
+
+  if (window.cfsHtp) {
+    window.cfsHtp.onMosSession(renderMosSession);
+    window.cfsHtp.mosStatus().then(renderMosSession);
+  }
+
   // ---------- 시작 ----------
   function start(saved) {
     state.inputs = mergeInputs(saved);

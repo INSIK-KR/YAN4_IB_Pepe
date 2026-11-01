@@ -41,6 +41,31 @@ body {
   background: #34436b;
   color: #fff;
 }
+.login-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #4a5a85;
+  border-radius: 6px;
+  padding: 4px 10px;
+  background: #2a3757;
+  color: #fff;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.login-btn:hover {
+  background: #34436b;
+}
+.login-btn .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e05252;
+}
+.login-btn .dot.on {
+  background: #3ccf7a;
+}
 .mos-state,
 .version {
   font-size: 12px;
