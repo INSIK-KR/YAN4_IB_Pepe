@@ -1,18 +1,15 @@
-"use strict";
-
 /**
  * htp-calc.js 결과를 엑셀 Status 값과 비교한다.
- * 사용: node tools/verify.js <mos.tsv> <status.json>
+ * 사용: node tools/verify.mjs <mos.tsv> <status.json>
  *  - mos.tsv: 엑셀 MOS 시트를 탭 구분으로 내보낸 파일 (머리글 포함)
  *  - status.json: { status: {셀주소: 값}, vehicles: [...] } — 엑셀 Status 시트 계산값
  */
-const fs = require("fs");
-const path = require("path");
-const calc = require(path.join(__dirname, "..", "renderer", "htp-calc.js"));
+import fs from "node:fs";
+import * as calc from "../src/lib/htp-calc.mjs";
 
 const [mosPath, statusPath] = process.argv.slice(2);
 if (!mosPath || !statusPath) {
-  console.error("usage: node tools/verify.js <mos.tsv> <status.json>");
+  console.error("usage: node tools/verify.mjs <mos.tsv> <status.json>");
   process.exit(1);
 }
 

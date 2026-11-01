@@ -152,7 +152,9 @@ function createMainWindow() {
     },
   });
   mainWindow.setMenu(null);
-  mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
+  // npm run dev 로 띄운 Vite 서버가 있으면 그 화면을, 아니면 빌드된 dist 를 연다
+  if (process.env.CFS_HTP_DEV_URL) mainWindow.loadURL(process.env.CFS_HTP_DEV_URL);
+  else mainWindow.loadFile(path.join(__dirname, "dist", "index.html"));
   mainWindow.on("closed", function () {
     mainWindow = null;
   });

@@ -6,8 +6,10 @@ MOS 자료를 받아 입고 HTP 현황(엑셀 `Status` 시트)을 보여주는 E
 
 ```
 npm install
-npm start
+npm start          # 화면 빌드(vite build) 후 Electron 실행
 ```
+
+화면만 고치면서 볼 때: `npm run dev`(Vite 서버, 5183 포트)를 켜 두고 다른 터미널에서 `CFS_HTP_DEV_URL=http://localhost:5183 npx electron .`
 
 ## 배포 exe 만들기
 
@@ -19,23 +21,28 @@ npm run dist
 
 ## 화면
 
+React + Tailwind + shadcn/ui (`components.json`, 부품은 `src/components/ui`). 글꼴은 Pretendard.
+
+
 - **Status**: 엑셀 Status 시트와 같은 계산 (HTP Actual·Gap, S&OP, 업무별 근무조 비중, H/C, 근무조 시뮬레이션, 시간대별 하차·매입·진열·생산성, 진열 구성, 공정별 MH, 체크인 지연)
-- **MOS 데이터**: MOS 엑셀/CSV 파일 불러오기, 또는 복사한 표를 Ctrl+V. 통합문서에 `MOS` 시트가 있으면 그 시트만 읽음
+- **MOS 데이터**: [MOS에서 받기](로그인 세션으로 exportExcel → getAsyncFileSaveStatus → downloadSavedFile), 엑셀/CSV 파일 끌어놓기, 복사한 표 Ctrl+V. 통합문서에 `MOS` 시트가 있으면 그 시트만 읽음
 - **입력**: Target, S&OP, 진열 비율, Facility 인원, H/C, 이관 차량 하차 정보. 사용자 데이터 폴더의 `inputs.json`에 저장
 
 ## 구조
 
-- `main.js` — 메인 프로세스 (창, 단일 인스턴스, 입력값 저장 IPC)
-- `preload.js` — 렌더러에 `window.cfsHtp` 노출
-- `renderer/htp-calc.js` — 엑셀 계산(Caculation·ManHour·MosDelay → Status)을 옮긴 모듈. node에서도 require 가능
-- `renderer/app.js` — 화면
-- `renderer/vendor/xlsx.full.min.js` — SheetJS (CFS IB LIVE와 같은 파일)
-- `tools/verify.js` — 계산 결과를 엑셀 Status 값과 대조
+- `main.js` — 메인 프로세스 (창, 단일 인스턴스, 입력값 저장, MOS 로그인 창, MOS 요청)
+- `preload.js` — 화면에 `window.cfsHtp` 노출
+- `src/` — 화면 (Vite root). `pages/` Status·MOS 데이터·입력, `components/HourlyTable.tsx` 시간대별 표
+- `src/lib/htp-calc.mjs` — 엑셀 계산(Caculation·ManHour·MosDelay → Status)을 옮긴 모듈. 타입은 `htp-calc.d.mts`
+- `src/lib/mos.ts` — MOS 자료 읽기와 MOS에서 받기
+- `src/public/vendor/xlsx.full.min.js` — SheetJS (CFS IB LIVE와 같은 파일)
+- `tools/verify.mjs` — 계산 결과를 엑셀 Status 값과 대조
+- `dist/` — 빌드된 화면 (git 제외)
 
 ## 엑셀과 대조
 
 ```
-node tools/verify.js <MOS 시트를 탭 구분으로 내보낸 파일> <Status 값 JSON>
+node tools/verify.mjs <MOS 시트를 탭 구분으로 내보낸 파일> <Status 값 JSON>
 ```
 
 2026-10-29 자료(123.xlsm) 기준 1,328개 값 중 1,324개 일치. 다른 4개는 엑셀 Status G23·L23 셀이 수식 대신 공백으로 덮여 있어 엑셀 쪽이 0으로 나오는 경우.
