@@ -6717,6 +6717,7 @@
     td.classList.add("yna4-sla-pivot-num--live");
     td.style.setProperty("background", DIRECT_PIVOT_LIVE_BG, "important");
     clearPivotCellAlertIfEmpty(td, newVal);
+    slaOverviewSyncCell(rowKey, colName, newVal, td);
     var rowTotal = tr.querySelector('td[data-pivot-col="__TOTAL__"]');
     if (rowTotal) rowTotal.textContent = formatPivotNum(parsePivotCellNum(rowTotal) + delta);
     var grand = wrap.querySelector('tr[data-pivot-row-key="__GRAND__"]');
@@ -7499,7 +7500,11 @@
         if (col === "__TOTAL__") continue;
         qty = Number(rowData[col]) || 0;
         overdue = td.classList.contains("yna4-sla-pivot-num--overdue-day");
-        cells[col] = { qty: qty, overdue: overdue };
+        cells[col] = {
+          qty: qty,
+          overdue: overdue,
+          alert: td.classList.contains("yna4-sla-pivot-num--sla-alert"),
+        };
         if (qty > 0) {
           td.style.setProperty(
             "background-color",
@@ -7560,6 +7565,24 @@
       } catch (eOv) {
         console.warn("[SLA] 개요 표시 실패", eOv);
       }
+    }
+  }
+
+  /* 상세 패널의 실시간 반영으로 바뀐 피벗 칸을 개요에도 맞춘다 */
+  function slaOverviewSyncCell(rowKey, colName, newVal, td) {
+    var pivot = slaOverviewState.pivot;
+    if (!pivot) return;
+    var ri, cell;
+    for (ri = 0; ri < pivot.rows.length; ri++) {
+      if (pivot.rows[ri].key !== rowKey) continue;
+      cell = pivot.rows[ri].cells[colName];
+      if (!cell) return;
+      pivot.grand += newVal - cell.qty;
+      cell.qty = newVal;
+      cell.overdue = td.classList.contains("yna4-sla-pivot-num--overdue-day");
+      cell.alert = td.classList.contains("yna4-sla-pivot-num--sla-alert");
+      slaOverviewSet({});
+      return;
     }
   }
 
@@ -10941,6 +10964,7 @@
         formatDrillQty(oldVal) +
         ") · 더블클릭: SLA 상세";
       clearPivotCellAlertIfEmpty(td, newVal);
+      slaOverviewSyncCell(cell.rowKey, cell.timeCol, newVal, td);
     }
     var rowTotal = tr.querySelector('td[data-pivot-col="__TOTAL__"]');
     if (rowTotal) {

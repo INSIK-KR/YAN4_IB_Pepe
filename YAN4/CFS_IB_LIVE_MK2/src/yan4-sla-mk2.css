@@ -179,8 +179,12 @@
   color: #b91c1c;
 }
 
-.yna4-sla-ov-kpi--today {
-  border-top-color: #2563eb;
+.yna4-sla-ov-kpi--alert {
+  border-top-color: #f59e0b;
+}
+
+.yna4-sla-ov-kpi--alert .yna4-sla-ov-kpi-value {
+  color: #b45309;
 }
 
 .yna4-sla-ov-kpi--unload {

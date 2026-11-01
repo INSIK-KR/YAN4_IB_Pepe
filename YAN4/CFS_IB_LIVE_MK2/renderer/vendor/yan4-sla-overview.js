@@ -80,6 +80,8 @@
       total: Number(pivot.grand) || 0,
       miss: 0,
       missFromCol: "",
+      alert: 0,
+      alertRows: [],
       today: 0,
       todayCols: [],
       columns: [],
@@ -101,6 +103,7 @@
       row = pivot.rows[ri];
       chan = channelOf(row);
       var rowMiss = 0;
+      var rowAlert = 0;
       for (ci = 0; ci < pivot.timeCols.length; ci++) {
         col = pivot.timeCols[ci];
         cell = row.cells[col];
@@ -112,6 +115,7 @@
           byCol[col].overdue += qty;
           rowMiss += qty;
         }
+        if (cell.alert) rowAlert += qty;
         p = parseCol(col);
         if (inOperDay(p)) {
           if (!out.topCell || qty > out.topCell.qty) {
@@ -123,10 +127,16 @@
         out.miss += rowMiss;
         out.missRows.push({ label: row.label, qty: rowMiss });
       }
+      if (rowAlert > 0) {
+        out.alert += rowAlert;
+        out.alertRows.push({ label: row.label, qty: rowAlert });
+      }
     }
-    out.missRows.sort(function (a, b) {
+    function byQtyDesc(a, b) {
       return b.qty - a.qty;
-    });
+    }
+    out.missRows.sort(byQtyDesc);
+    out.alertRows.sort(byQtyDesc);
 
     for (ci = 0; ci < pivot.timeCols.length; ci++) {
       col = pivot.timeCols[ci];
@@ -181,6 +191,19 @@
           })
           .join(" · "),
         detail: colLabel(s.missFromCol) + "부터 누적 " + fmt(s.miss) + " 유닛",
+      });
+    }
+    if (s.alert > 0) {
+      checks.push({
+        tone: "warn",
+        tag: "임박",
+        title: s.alertRows
+          .slice(0, 2)
+          .map(function (r) {
+            return r.label + " " + fmt(r.qty);
+          })
+          .join(" · "),
+        detail: "SLA 임박 칸 합계 " + fmt(s.alert) + " 유닛",
       });
     }
     if (s.expired.length) {
@@ -269,15 +292,9 @@
         s.total ? "전체의 " + ((s.miss / s.total) * 100).toFixed(1) + "%" : "-"
       )
     );
-    var range = s.todayCols.length
-      ? operHourLabel(s.todayCols[0], s.operDay) +
-        " ~ " +
-        operHourLabel(s.todayCols[s.todayCols.length - 1], s.operDay) +
-        " · " +
-        s.todayCols.length +
-        "개 시간대"
-      : "오늘 시간대 없음";
-    row.appendChild(kpi("yna4-sla-ov-kpi--today", "오늘 남은 마감", fmt(s.today), range));
+    row.appendChild(
+      kpi("yna4-sla-ov-kpi--alert", "SLA 임박", fmt(s.alert), "TR·DIR 2시간 · RM·AG 8시간 이내")
+    );
     var un = s.progress && s.progress.unload && s.progress.unload.total;
     var re = s.progress && s.progress.receive && s.progress.receive.total;
     row.appendChild(
