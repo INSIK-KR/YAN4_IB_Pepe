@@ -18,7 +18,8 @@ TASKS.forEach(function (t) {
 const TEMP_BY_LOC = {};
 [
   ["상온", LOC.ambientEach.concat(LOC.ambientPallet)],
-  ["냉장", LOC.chilledEach.concat(LOC.chilledPallet)],
+  // 2CM 은 엑셀 묶음(LOC)에는 없지만 냉장으로 본다
+  ["냉장", LOC.chilledEach.concat(LOC.chilledPallet, ["2CM"])],
   ["냉동", LOC.frozenEach.concat(LOC.frozenPallet)],
   ["로켓마트", LOC.rocketEach.concat(LOC.rocketPallet)],
 ].forEach(function (entry) {
