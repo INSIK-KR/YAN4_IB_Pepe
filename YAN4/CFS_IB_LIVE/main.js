@@ -758,35 +758,6 @@ async function fetchSharePointSlaViaChromeDownload(message) {
   const nameIncludes = String((message && message.nameIncludes) || "");
   const deleteAfterRead = !!(message && message.deleteAfterRead);
 
-  // 1) SLA 전용 크롬 프로필이 있는 PC — 창 없이 받기. 안 되면 아래 평소 크롬으로
-  let fallbackNote = "";
-  const headless = startSlaHeadlessChrome(url);
-  if (headless) {
-    const hStart = Date.now();
-    notifyDownloadProgress(label + " 창 없이 다운로드 중… (SLA 전용 크롬)");
-    const hRes = await waitForDownloadedExcel({
-      downloadsDir: downloadsDir,
-      startedAt: hStart,
-      deadline: hStart + SLA_HEADLESS_WAIT_MS,
-      nameIncludes: nameIncludes,
-      label: label,
-      deleteAfterRead: deleteAfterRead,
-      hint: "창 없이 엑셀 대기 중… ",
-      source: "chrome-headless",
-    });
-    stopChildProcess(headless);
-    if (hRes && hRes.ok) {
-      hRes.via = "창 없이 받음";
-      return hRes;
-    }
-    fallbackNote =
-      hRes && hRes.html
-        ? "SLA 전용 크롬 로그인 풀림 → 평소 크롬으로 받음"
-        : "SLA 전용 크롬 실패 → 평소 크롬으로 받음";
-    notifyDownloadProgress(fallbackNote);
-  }
-
-  // 2) 평소 크롬 — 새 탭으로 열고 Downloads 에서 수집
   const startedAt = Date.now();
   notifyDownloadProgress(
     "Chrome으로 " +
@@ -795,92 +766,16 @@ async function fetchSharePointSlaViaChromeDownload(message) {
   );
   openUrlInChrome(url);
 
-  const res = await waitForDownloadedExcel({
-    downloadsDir: downloadsDir,
-    startedAt: startedAt,
-    deadline: startedAt + CHROME_DOWNLOAD_WAIT_MS,
-    nameIncludes: nameIncludes,
-    label: label,
-    deleteAfterRead: deleteAfterRead,
-    hint: "Downloads에서 엑셀 대기 중… ",
-    hintTail: "s (Chrome 로그인·다운로드 확인)",
-    source: "chrome-download",
-  });
-  if (res && res.ok) {
-    res.via = fallbackNote || "평소 크롬으로 받음";
-    return res;
-  }
-  if (res && res.html) {
-    return {
-      ok: false,
-      error:
-        "다운로드된 파일이 HTML입니다. Chrome에서 SharePoint 로그인 후 " +
-        label +
-        " 조회를 다시 실행하세요.",
-    };
-  }
-
-  notifyDownloadProgress("다운로드 대기 시간 초과");
-  return {
-    ok: false,
-    error:
-      "Chrome Downloads에서 " +
-      label +
-      " 엑셀을 찾지 못했습니다. Chrome에서 SharePoint 로그인·다운로드 허용 후 다시 시도하세요.",
-  };
-}
-
-/** 창 없는 다운로드용 SLA 전용 크롬 프로필 — 이 폴더가 있는 PC 에서만 (평소 크롬과 쿠키·로그인 별도) */
-const SLA_CHROME_PROFILE_DIR = "C:\\CFS-SLA-Chrome";
-/** 창 없는 크롬으로 이 시간 안에 파일이 안 들어오면 평소 크롬으로 */
-const SLA_HEADLESS_WAIT_MS = 45000;
-
-function startSlaHeadlessChrome(url) {
-  try {
-    if (!fs.existsSync(SLA_CHROME_PROFILE_DIR)) return null;
-    const chrome = findChromeExe();
-    if (!chrome) return null;
-    return spawn(
-      chrome,
-      [
-        "--headless=new",
-        "--user-data-dir=" + SLA_CHROME_PROFILE_DIR,
-        "--no-first-run",
-        "--no-default-browser-check",
-        "--disable-gpu",
-        url,
-      ],
-      { stdio: "ignore", windowsHide: true }
-    );
-  } catch (eHl) {
-    return null;
-  }
-}
-
-function stopChildProcess(child) {
-  try {
-    if (child && child.exitCode == null) child.kill();
-  } catch (eKill) {}
-}
-
-/**
- * Downloads 에 새 엑셀이 들어올 때까지 대기.
- * 성공 {ok:true,...} · 로그인 화면(HTML) {ok:false, html:true} · 시간 초과 null
- */
-async function waitForDownloadedExcel(o) {
-  const downloadsDir = o.downloadsDir;
-  const startedAt = o.startedAt;
-  const deadline = o.deadline;
-  const nameIncludes = o.nameIncludes;
-  const label = o.label;
-  const deleteAfterRead = o.deleteAfterRead;
+  const deadline = startedAt + CHROME_DOWNLOAD_WAIT_MS;
   let lastHintAt = 0;
   while (Date.now() < deadline) {
     const now = Date.now();
     if (now - lastHintAt > 3000) {
       lastHintAt = now;
       const left = Math.max(0, Math.ceil((deadline - now) / 1000));
-      notifyDownloadProgress(o.hint + left + (o.hintTail || "s"));
+      notifyDownloadProgress(
+        "Downloads에서 엑셀 대기 중… " + left + "s (Chrome 로그인·다운로드 확인)"
+      );
     }
     const cands = listCandidateDownloads(downloadsDir, startedAt, nameIncludes);
     if (cands.length) {
@@ -906,7 +801,13 @@ async function waitForDownloadedExcel(o) {
           } catch (eDel) {}
         }
         if (isHtml) {
-          return { ok: false, html: true };
+          return {
+            ok: false,
+            error:
+              "다운로드된 파일이 HTML입니다. Chrome에서 SharePoint 로그인 후 " +
+              label +
+              " 조회를 다시 실행하세요.",
+          };
         }
         notifyDownloadProgress(
           label +
@@ -921,7 +822,7 @@ async function waitForDownloadedExcel(o) {
           ok: true,
           base64: buf.toString("base64"),
           byteLength: buf.length,
-          source: o.source,
+          source: "chrome-download",
           filename: hit.name,
           deleted: deleted,
         };
@@ -932,7 +833,15 @@ async function waitForDownloadedExcel(o) {
     }
     await sleep(CHROME_DOWNLOAD_POLL_MS);
   }
-  return null;
+
+  notifyDownloadProgress("다운로드 대기 시간 초과");
+  return {
+    ok: false,
+    error:
+      "Chrome Downloads에서 " +
+      label +
+      " 엑셀을 찾지 못했습니다. Chrome에서 SharePoint 로그인·다운로드 허용 후 다시 시도하세요.",
+  };
 }
 
 async function handleRuntimeMessage(message) {
