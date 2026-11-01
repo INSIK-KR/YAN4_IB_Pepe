@@ -1,6 +1,6 @@
 # CFS HTP
 
-MOS에서 자료를 받아 가공하는 Electron 데스크톱 앱 (직원 배포용 portable exe).
+MOS 자료를 받아 입고 HTP 현황(엑셀 `Status` 시트)을 보여주는 Electron 데스크톱 앱 (직원 배포용 portable exe).
 
 ## 실행
 
@@ -17,14 +17,37 @@ npm run dist
 
 `release/CFS HTP <버전>.exe` 가 만들어집니다. 버전은 `package.json`의 `version`.
 
+## 화면
+
+- **Status**: 엑셀 Status 시트와 같은 계산 (HTP Actual·Gap, S&OP, 업무별 근무조 비중, H/C, 근무조 시뮬레이션, 시간대별 하차·매입·진열·생산성, 진열 구성, 공정별 MH, 체크인 지연)
+- **MOS 데이터**: MOS 엑셀/CSV 파일 불러오기, 또는 복사한 표를 Ctrl+V. 통합문서에 `MOS` 시트가 있으면 그 시트만 읽음
+- **입력**: Target, S&OP, 진열 비율, Facility 인원, H/C, 이관 차량 하차 정보. 사용자 데이터 폴더의 `inputs.json`에 저장
+
 ## 구조
 
-- `main.js` — 메인 프로세스 (창 생성, 단일 인스턴스, IPC)
+- `main.js` — 메인 프로세스 (창, 단일 인스턴스, 입력값 저장 IPC)
 - `preload.js` — 렌더러에 `window.cfsHtp` 노출
-- `renderer/` — 화면 (index.html, app.js, style.css)
+- `renderer/htp-calc.js` — 엑셀 계산(Caculation·ManHour·MosDelay → Status)을 옮긴 모듈. node에서도 require 가능
+- `renderer/app.js` — 화면
+- `renderer/vendor/xlsx.full.min.js` — SheetJS (CFS IB LIVE와 같은 파일)
+- `tools/verify.js` — 계산 결과를 엑셀 Status 값과 대조
 
-## 남은 결정
+## 엑셀과 대조
 
-- 앱 목적과 핵심 화면 2~3개
-- MOS 접근 방식 (웹 주소, 로그인, 엑셀 다운로드 여부)
+```
+node tools/verify.js <MOS 시트를 탭 구분으로 내보낸 파일> <Status 값 JSON>
+```
+
+2026-10-29 자료(123.xlsm) 기준 1,328개 값 중 1,324개 일치. 다른 4개는 엑셀 Status G23·L23 셀이 수식 대신 공백으로 덮여 있어 엑셀 쪽이 0으로 나오는 경우.
+
+## 엑셀과 다르게 한 부분
+
+- Status L5:P11(근무조별 인원 환산)은 엑셀에 값이 고정돼 있어, R열과 같은 식(시간대 MH 합 ÷ 8)으로 계산
+- 이관 차량 대수·하차 PLT(Status 12~17행)는 엑셀 수식이 피벗의 엉뚱한 열(RM·총합계·빈 열)을 가리키고 있어, 입력한 차량 목록에서 도착 시간대·온도별로 직접 집계
+
+## 아직 안 옮긴 부분 (Status 오른쪽)
+
+- AT~AX: 온도별 Inbound S&OP, Staffing (Plan), 진열비율
+- AE30:AJ35: CD H/C 계산기
+- AD47:AO51: 온도별 공정 인원표
 - 아이콘 (현재 Electron 기본 아이콘)
