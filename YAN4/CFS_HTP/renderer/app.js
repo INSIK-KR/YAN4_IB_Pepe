@@ -218,18 +218,58 @@
     return p.toString();
   }
 
+  const STATUS_POLL_MS = 1500;
+  const STATUS_POLL_MAX = 600; // 1.5초 × 600 = 15분까지 기다림
+
   /**
-   * exportExcel 응답에서 내려받을 주소를 찾는다.
-   * 응답 모양을 아직 확인하지 못해 downloadSavedFile 주소, 또는 파일 ID(UUID)+파일 이름을 찾아 조합한다.
+   * exportExcel 응답에서 파일 ID(UUID)와 파일 이름을 찾는다.
+   * 응답 모양을 아직 확인하지 못해 문자열에서 UUID·*.xlsx 를 찾는다.
+   * 파일 이름이 없으면 MOS 화면과 같은 규칙(worker_history_요청시각.xlsx)으로 만든다.
    */
-  function findDownloadUrl(text) {
+  function parseExportResponse(text, requestedAt) {
     const s = String(text || "").replace(/\\\//g, "/");
-    const direct = /(?:https:\/\/mos\.coupang\.net)?(\/common\/export-excel\/downloadSavedFile\/[0-9a-fA-F-]{36}\/[^"'\s]+?\.xlsx)/.exec(s);
-    if (direct) return MOS_BASE + direct[1];
     const id = /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/.exec(s);
+    if (!id) return null;
     const name = /[\w.-]+\.xlsx/.exec(s);
-    if (id && name) return MOS_BASE + "/common/export-excel/downloadSavedFile/" + id[0] + "/" + encodeURIComponent(name[0]);
-    return null;
+    const d = requestedAt;
+    const stamp =
+      d.getFullYear() +
+      String(d.getMonth() + 1).padStart(2, "0") +
+      String(d.getDate()).padStart(2, "0") +
+      String(d.getHours()).padStart(2, "0") +
+      String(d.getMinutes()).padStart(2, "0") +
+      String(d.getSeconds()).padStart(2, "0");
+    return { id: id[0], fileName: name ? name[0] : "worker_history_" + stamp + ".xlsx", nameFromServer: !!name };
+  }
+
+  function sleep(ms) {
+    return new Promise(function (r) {
+      setTimeout(r, ms);
+    });
+  }
+
+  /** getAsyncFileSaveStatus 가 SUCCESS 가 될 때까지 기다린다 */
+  async function waitForExport(id) {
+    for (let i = 0; i < STATUS_POLL_MAX; i++) {
+      const res = await window.cfsHtp.mosFetch({
+        url: MOS_BASE + "/common/export-excel/getAsyncFileSaveStatus/" + id,
+        method: "GET",
+        referer: MOS_REFERER,
+        headers: { "X-Requested-With": "XMLHttpRequest", Accept: "application/json, text/javascript, */*; q=0.01" },
+      });
+      if (!res.ok) return { ok: false, error: res.error || "HTTP " + res.status };
+      let status = "";
+      try {
+        status = String(JSON.parse(res.body).status || "").toUpperCase();
+      } catch (_e) {
+        return { ok: false, error: "상태 응답을 읽지 못함", body: res.body };
+      }
+      if (status === "SUCCESS") return { ok: true };
+      if (/FAIL|ERROR|CANCEL/.test(status)) return { ok: false, error: "MOS 파일 만들기 실패 (" + status + ")" };
+      downloadInfo("MOS가 엑셀을 만드는 중… " + esc(status || "") + " (" + Math.round(((i + 1) * STATUS_POLL_MS) / 1000) + "초)");
+      await sleep(STATUS_POLL_MS);
+    }
+    return { ok: false, error: "15분이 지나도 파일이 준비되지 않았습니다" };
   }
 
   function base64ToArrayBuffer(b64) {
@@ -250,6 +290,7 @@
     if (!st.loggedIn) return downloadInfo('<span class="bad">MOS 로그인이 필요합니다. 오른쪽 위 MOS 로그인을 눌러주세요.</span>');
 
     downloadInfo("MOS에 엑셀 만들기 요청 중… (" + esc(date) + ")");
+    const requestedAt = new Date();
     const exp = await window.cfsHtp.mosFetch({
       url: MOS_BASE + "/status/worker-history/exportExcel?" + workerHistoryQuery(date),
       method: "POST",
@@ -259,24 +300,30 @@
       headers: { Origin: MOS_BASE, "X-Requested-With": "XMLHttpRequest", Accept: "application/json, text/javascript, */*; q=0.01" },
     });
     if (!exp.ok) return downloadInfo('<span class="bad">엑셀 만들기 실패: ' + esc(exp.error || "HTTP " + exp.status) + "</span>");
-    const url = findDownloadUrl(exp.body);
-    if (!url) {
-      return downloadInfo(
-        '<span class="bad">MOS 응답에서 파일 주소를 찾지 못했습니다. 아래 응답을 개발자에게 전달해 주세요.</span><pre>' +
-          esc(String(exp.body || "").slice(0, 2000)) +
-          "</pre>"
-      );
+    const rawExport = '<pre>exportExcel 응답:\n' + esc(String(exp.body || "").slice(0, 2000)) + "</pre>";
+    const job = parseExportResponse(exp.body, requestedAt);
+    if (!job) {
+      return downloadInfo('<span class="bad">MOS 응답에서 파일 ID를 찾지 못했습니다. 아래 응답을 개발자에게 전달해 주세요.</span>' + rawExport);
     }
 
-    downloadInfo("파일 받는 중… " + esc(decodeURIComponent(url.split("/").pop())));
+    const done = await waitForExport(job.id);
+    if (!done.ok) {
+      return downloadInfo('<span class="bad">' + esc(done.error) + "</span>" + (done.body ? "<pre>" + esc(String(done.body).slice(0, 1000)) + "</pre>" : ""));
+    }
+
+    downloadInfo("파일 받는 중… " + esc(job.fileName));
     const file = await window.cfsHtp.mosFetch({
-      url: url,
+      url: MOS_BASE + "/common/export-excel/downloadSavedFile/" + job.id + "/" + encodeURIComponent(job.fileName),
       method: "GET",
       referer: MOS_REFERER,
       binary: true,
       headers: { Accept: "*/*" },
     });
-    if (!file.ok || !file.base64) return downloadInfo('<span class="bad">파일 받기 실패: ' + esc(file.error || "HTTP " + file.status) + "</span>");
+    if (!file.ok || !file.base64) {
+      return downloadInfo(
+        '<span class="bad">파일 받기 실패: ' + esc(file.error || "HTTP " + file.status) + "</span>" + (job.nameFromServer ? "" : " (파일 이름을 추정해서 요청함 — 아래 응답을 개발자에게 전달해 주세요)" + rawExport)
+      );
+    }
 
     downloadInfo("엑셀 읽는 중…");
     await new Promise(function (r) {
