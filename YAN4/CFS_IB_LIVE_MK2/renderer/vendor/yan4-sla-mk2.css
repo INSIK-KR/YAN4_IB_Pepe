@@ -1,0 +1,584 @@
+/* MK2 SLA 스킨 (shadcn 무채색). 원본 CSS·JS 주입 스타일을 덮어쓰므로 !important 를 쓴다. */
+.yna4-shell-page-sla-inner {
+  background: #f4f4f5;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root {
+  color: #09090b;
+  gap: 10px;
+}
+
+/* 도구줄 */
+.yna4-shell-page-sla-inner .yna4-sla-root .yna4-sla-toolbar {
+  background: #fff !important;
+  border: 1px solid #e4e4e7 !important;
+  border-radius: 10px !important;
+  padding: 8px 10px !important;
+  gap: 6px !important;
+}
+
+.yna4-sla-tabs {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 8px;
+  background: #f4f4f5;
+  margin-right: auto;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root button.yna4-sla-tab {
+  font: 600 12px/1 "Segoe UI", "Malgun Gothic", sans-serif;
+  height: 26px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #71717a;
+  cursor: pointer;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root button.yna4-sla-tab:hover {
+  color: #09090b;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root button.yna4-sla-tab--active {
+  background: #fff;
+  color: #09090b;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root button.yna4-sla-btn,
+.yna4-shell-page-sla-inner .yna4-sla-root .yna4-sla-lookback,
+.yna4-shell-page-sla-inner .yna4-sla-root .yna4-sla-toolbar-check {
+  height: 30px !important;
+  min-height: 30px !important;
+  padding: 0 10px !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  color: #09090b !important;
+  background: #fff !important;
+  border: 1px solid #e4e4e7 !important;
+  border-radius: 6px !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root button.yna4-sla-btn:hover:not(:disabled),
+.yna4-shell-page-sla-inner .yna4-sla-root .yna4-sla-toolbar-check:hover {
+  background: #f4f4f5 !important;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root button.yna4-sla-btn--primary {
+  color: #fafafa !important;
+  background: #18181b !important;
+  border-color: #18181b !important;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root button.yna4-sla-btn--primary:hover:not(:disabled) {
+  background: #27272a !important;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root button.yna4-sla-btn--toggle-on {
+  color: #fff !important;
+  background: #059669 !important;
+  border-color: #059669 !important;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root .yna4-sla-status {
+  min-height: 24px !important;
+  padding: 2px 8px !important;
+  border: 0 !important;
+  border-radius: 6px !important;
+  background: #f4f4f5 !important;
+  color: #52525b !important;
+  font-weight: 500;
+}
+
+/* 탭 영역 */
+.yna4-shell-page-sla-inner .yna4-sla-root .yna4-sla-scroll {
+  border: 0 !important;
+  background: transparent !important;
+  padding: 0 !important;
+}
+
+.yna4-sla-pane {
+  display: none;
+}
+
+.yna4-sla-pane--active,
+.yna4-sla-root--capture-all .yna4-sla-pane {
+  display: block;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root .yna4-sla-placeholder {
+  background: #fff;
+  border: 1px solid #e4e4e7;
+  border-radius: 10px;
+  color: #71717a;
+}
+
+/* 개요 */
+.yna4-sla-ov-kpis {
+  display: grid;
+  grid-template-columns: 1.15fr repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.yna4-sla-ov-kpi {
+  background: #fff;
+  border: 1px solid #e4e4e7;
+  border-top-width: 3px;
+  border-radius: 10px;
+  padding: 14px 16px;
+  min-width: 0;
+}
+
+.yna4-sla-ov-kpi-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: #71717a;
+}
+
+.yna4-sla-ov-kpi-value {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: #09090b;
+}
+
+.yna4-sla-ov-kpi-sub {
+  font-size: 12px;
+  color: #71717a;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.yna4-sla-ov-kpi--hero {
+  background: #0f172a;
+  border-color: #0f172a;
+}
+
+.yna4-sla-ov-kpi--hero .yna4-sla-ov-kpi-title,
+.yna4-sla-ov-kpi--hero .yna4-sla-ov-kpi-sub {
+  color: #94a3b8;
+}
+
+.yna4-sla-ov-kpi--hero .yna4-sla-ov-kpi-value {
+  color: #fbbf24;
+}
+
+.yna4-sla-ov-kpi--miss {
+  border-top-color: #dc2626;
+}
+
+.yna4-sla-ov-kpi--miss .yna4-sla-ov-kpi-value {
+  color: #b91c1c;
+}
+
+.yna4-sla-ov-kpi--today {
+  border-top-color: #2563eb;
+}
+
+.yna4-sla-ov-kpi--unload {
+  border-top-color: #6d28d9;
+}
+
+.yna4-sla-ov-kpi--receive {
+  border-top-color: #0d9488;
+}
+
+.yna4-sla-ov-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.yna4-sla-ov-card {
+  background: #fff;
+  border: 1px solid #e4e4e7;
+  border-radius: 10px;
+  padding: 14px 16px;
+  min-width: 0;
+}
+
+.yna4-sla-ov-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.yna4-sla-ov-title {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #09090b;
+}
+
+.yna4-sla-ov-card-head .yna4-sla-ov-title {
+  margin: 0;
+}
+
+.yna4-sla-ov-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #52525b;
+}
+
+.yna4-sla-ov-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.yna4-sla-ov-chart {
+  display: flex;
+  gap: 4px;
+  align-items: stretch;
+}
+
+.yna4-sla-ov-col {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 72px;
+  text-align: center;
+}
+
+.yna4-sla-ov-plot {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  height: 200px;
+  padding: 0 4px;
+  border-bottom: 1px solid #e4e4e7;
+}
+
+.yna4-sla-ov-col--miss .yna4-sla-ov-plot {
+  background: #fef2f2;
+}
+
+.yna4-sla-ov-val {
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 2px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.yna4-sla-ov-col--miss .yna4-sla-ov-val,
+.yna4-sla-ov-col--miss .yna4-sla-ov-lab,
+.yna4-sla-ov-col--miss .yna4-sla-ov-lab2 {
+  color: #b91c1c;
+}
+
+.yna4-sla-ov-lab {
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #27272a;
+  white-space: nowrap;
+}
+
+.yna4-sla-ov-lab2 {
+  font-size: 11px;
+  color: #71717a;
+}
+
+.yna4-sla-ov-note {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #71717a;
+}
+
+.yna4-sla-ov-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.yna4-sla-ov-check {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fafafa;
+}
+
+.yna4-sla-ov-tag {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 5px;
+}
+
+.yna4-sla-ov-tag--bad {
+  background: #dc2626;
+  color: #fff;
+}
+
+.yna4-sla-ov-tag--info {
+  background: #2563eb;
+  color: #fff;
+}
+
+.yna4-sla-ov-tag--warn {
+  background: #fde68a;
+  color: #78350f;
+}
+
+.yna4-sla-ov-tag--muted {
+  background: #e4e4e7;
+  color: #3f3f46;
+}
+
+.yna4-sla-ov-check-body {
+  min-width: 0;
+}
+
+.yna4-sla-ov-check-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #09090b;
+}
+
+.yna4-sla-ov-check-detail {
+  font-size: 12px;
+  color: #71717a;
+}
+
+/* 진척율 패널 */
+.yna4-shell-page-sla-inner .yna4-sla-root .yna4-sla-progress-host {
+  border-bottom: 0 !important;
+  padding-bottom: 0 !important;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root .yna4-sla-progress-wrap {
+  background: #fff !important;
+  border: 1px solid #e4e4e7 !important;
+  border-radius: 10px !important;
+  padding: 12px 14px !important;
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root .yna4-sla-progress-head {
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  color: #09090b !important;
+  margin-bottom: 8px !important;
+}
+
+/* 피벗 표 */
+.yna4-shell-page-sla-inner .yna4-sla-root .yna4-sla-pivot-host {
+  margin-top: 0 !important;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root .yna4-sla-pivot-wrap {
+  background: #fff;
+  border: 1px solid #e4e4e7;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root .yna4-sla-pivot-table-shell--excel {
+  border: 1px solid #e4e4e7 !important;
+  border-radius: 8px !important;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root table.yna4-sla-pivot-table--excel th,
+.yna4-shell-page-sla-inner .yna4-sla-root table.yna4-sla-pivot-table--excel td {
+  border-color: #f4f4f5 !important;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root table.yna4-sla-pivot-table--excel thead th,
+.yna4-shell-page-sla-inner .yna4-sla-root table.yna4-sla-pivot-table--excel thead tr th {
+  background: #fafafa !important;
+  color: #52525b !important;
+  font-weight: 600 !important;
+  border-color: #e4e4e7 !important;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root table.yna4-sla-pivot-table--excel .yna4-sla-pivot-th-corner-line {
+  color: #52525b !important;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root table.yna4-sla-pivot-table--excel thead th.yna4-sla-pivot-th-day--overdue {
+  background: #fef2f2 !important;
+  color: #b91c1c !important;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root table.yna4-sla-pivot-table--excel tbody tr td,
+.yna4-shell-page-sla-inner .yna4-sla-root table.yna4-sla-pivot-table--excel tbody tr td.yna4-sla-pivot-td-zone {
+  background: #fff !important;
+  background-image: none !important;
+  color: #09090b !important;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root table.yna4-sla-pivot-table--excel tbody td.yna4-sla-pivot-num:not(.yna4-sla-pivot-num--hit) {
+  color: #d4d4d8 !important;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root table.yna4-sla-pivot-table--excel tbody td.yna4-sla-pivot-num--hit {
+  font-weight: 600 !important;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root table.yna4-sla-pivot-table--excel tbody td.yna4-sla-pivot-num--overdue-day::before {
+  display: none !important;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root table.yna4-sla-pivot-table--excel tbody td.yna4-sla-pivot-num--overdue-day {
+  color: #991b1b !important;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root table.yna4-sla-pivot-table--excel tbody td.yna4-sla-pivot-num--sla-alert {
+  color: #b91c1c !important;
+  outline: 1px solid #fca5a5;
+  outline-offset: -1px;
+}
+
+/* 행 구분: 왼쪽 색 띠 */
+.yna4-shell-page-sla-inner .yna4-sla-root table.yna4-sla-pivot-table--excel tbody td.yna4-sla-pivot-td-zone {
+  border-left: 3px solid #1d4ed8 !important;
+  font-weight: 600 !important;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root table.yna4-sla-pivot-table--excel tbody tr.yna4-sla-pivot-tr--direct td.yna4-sla-pivot-td-zone {
+  border-left-color: #f59e0b !important;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root table.yna4-sla-pivot-table--excel tbody tr.yna4-sla-pivot-tr--ats td.yna4-sla-pivot-td-zone {
+  border-left-color: #eab308 !important;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root table.yna4-sla-pivot-table--excel tbody tr.yna4-sla-pivot-tr--rocketmart td.yna4-sla-pivot-td-zone {
+  border-left-color: #059669 !important;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root table.yna4-sla-pivot-table--excel tbody tr.yna4-sla-pivot-tr--totestow td.yna4-sla-pivot-td-zone {
+  border-left-color: #a855f7 !important;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root table.yna4-sla-pivot-table--excel tbody tr.yna4-sla-pivot-tr--group td {
+  background: #fafafa !important;
+  color: #a1a1aa !important;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root table.yna4-sla-pivot-table--excel tbody tr.yna4-sla-pivot-tr--group td.yna4-sla-pivot-td-zone {
+  color: #27272a !important;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root table.yna4-sla-pivot-table--excel tbody td.yna4-sla-pivot-total {
+  background: #fafafa !important;
+  font-weight: 700 !important;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root table.yna4-sla-pivot-table--excel tbody tr.yna4-sla-pivot-tr--grand td {
+  background: #f4f4f5 !important;
+  color: #09090b !important;
+  font-weight: 700 !important;
+  border-top: 1px solid #d4d4d8 !important;
+}
+
+/* 이동중 */
+.yna4-shell-page-sla-inner .yna4-sla-root .yna4-sla-moving-wrap {
+  background: #fff;
+  border: 1px solid #e4e4e7;
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root table.yna4-sla-moving-table--excel thead th {
+  background: #fafafa !important;
+  color: #52525b !important;
+  border-color: #e4e4e7 !important;
+}
+
+/* 피벗 보강 */
+.yna4-shell-page-sla-inner .yna4-sla-root table.yna4-sla-pivot-table--excel th,
+.yna4-shell-page-sla-inner .yna4-sla-root table.yna4-sla-pivot-table--excel td {
+  font-size: 12px !important;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root table.yna4-sla-pivot-table--excel tbody td.yna4-sla-pivot-col--moving::before,
+.yna4-shell-page-sla-inner .yna4-sla-root table.yna4-sla-pivot-table--excel tbody td.yna4-sla-pivot-col--adhoc::before,
+.yna4-shell-page-sla-inner .yna4-sla-root table.yna4-sla-pivot-table--excel tbody td.yna4-sla-pivot-col--empty::before {
+  display: none !important;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root table.yna4-sla-pivot-table--excel .yna4-sla-pivot-zone-text--grand {
+  color: #09090b !important;
+}
+
+/* 진척율 표 */
+.yna4-shell-page-sla-inner .yna4-sla-root .yna4-sla-progress-table-shell,
+.yna4-shell-page-sla-inner .yna4-sla-root .yna4-sla-progress-vendors-panel {
+  border: 1px solid #e4e4e7 !important;
+  border-radius: 8px !important;
+  overflow: hidden !important;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root .yna4-sla-progress-table td,
+.yna4-shell-page-sla-inner .yna4-sla-root .yna4-sla-progress-table th {
+  border-color: #f4f4f5 !important;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root .yna4-sla-progress-tr--group-hdr td,
+.yna4-shell-page-sla-inner .yna4-sla-root .yna4-sla-progress-vendor-group-hdr {
+  background: #fff !important;
+  color: #09090b !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  text-align: left !important;
+  box-shadow: none !important;
+  border-bottom: 1px solid #e4e4e7 !important;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root .yna4-sla-progress-tr--col-hdr th,
+.yna4-shell-page-sla-inner .yna4-sla-root .yna4-sla-progress-tr--col-hdr th.yna4-sla-progress-th-pad,
+.yna4-shell-page-sla-inner .yna4-sla-root .yna4-sla-progress-table--vendors th {
+  background: #fafafa !important;
+  color: #71717a !important;
+  font-weight: 600 !important;
+  border-color: #e4e4e7 !important;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root .yna4-sla-progress-tr--total td {
+  background: #f4f4f5 !important;
+  color: #09090b !important;
+  border-top: 1px solid #e4e4e7 !important;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root .yna4-sla-progress-pct-bar {
+  background: #bbf7d0 !important;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root .yna4-sla-progress-tr--total .yna4-sla-progress-pct-bar {
+  background: #86efac !important;
+}
+
+/* 상세 패널 */
+.yna4-shell-page-sla-inner .yna4-sla-root .yna4-sla-pivot-drill-head {
+  font-size: 13px !important;
+  color: #09090b !important;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root table.yna4-sla-pivot-drill-table thead th {
+  background: #fafafa !important;
+  color: #52525b !important;
+  font-weight: 600 !important;
+  border-color: #e4e4e7 !important;
+}
+
+.yna4-shell-page-sla-inner .yna4-sla-root table.yna4-sla-pivot-drill-table td {
+  border-color: #f4f4f5 !important;
+}

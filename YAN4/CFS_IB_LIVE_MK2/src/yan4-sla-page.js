@@ -7432,12 +7432,155 @@
     }
 
     host.appendChild(wrap);
+    slaOverviewSet({
+      pivot: applyMk2PivotHeat(
+        tbody,
+        matrix,
+        timeCols,
+        rowDefs,
+        grand,
+        pivotOverdueStyleCtx.queryAt,
+        refYear
+      ),
+      message: "",
+    });
     } finally {
       pivotOverdueStyleCtx = null;
     }
   }
 
+  /* MK2: 수량이 많을수록 진한 칸. 개요에 넘길 칸 값·MISS 표시도 여기서 그려진 그대로 모은다 */
+  var MK2_HEAT_RGB = {
+    tr: "29,78,216",
+    ats: "234,179,8",
+    dir: "245,158,11",
+    rm: "5,150,105",
+    ag: "168,85,247",
+    miss: "220,38,38",
+  };
+
+  function applyMk2PivotHeat(tbody, matrix, timeCols, rowDefs, grand, queryAt, refYear) {
+    var rows = [];
+    var max = 1;
+    var ri, ci, def, rowData, cells, trEl, tds, td, col, qty, overdue, rgb;
+    var defByKey = Object.create(null);
+    for (ri = 0; ri < rowDefs.length; ri++) {
+      defByKey[rowDefs[ri].key] = rowDefs[ri];
+    }
+    var trs = tbody.querySelectorAll("tr[data-pivot-row-key]");
+    for (ri = 0; ri < trs.length; ri++) {
+      def = defByKey[trs[ri].getAttribute("data-pivot-row-key")];
+      if (!def || def.kind === "group") continue;
+      rowData = matrix[def.key] || {};
+      for (ci = 0; ci < timeCols.length; ci++) {
+        qty = Number(rowData[timeCols[ci]]) || 0;
+        if (qty > max) max = qty;
+      }
+    }
+    for (ri = 0; ri < trs.length; ri++) {
+      trEl = trs[ri];
+      def = defByKey[trEl.getAttribute("data-pivot-row-key")];
+      if (!def || def.kind === "group") continue;
+      rowData = matrix[def.key] || {};
+      cells = Object.create(null);
+      rgb = def.direct
+        ? MK2_HEAT_RGB.dir
+        : def.toteStow
+          ? MK2_HEAT_RGB.ag
+          : def.key === "ROCKETMART"
+            ? MK2_HEAT_RGB.rm
+            : def.ats
+              ? MK2_HEAT_RGB.ats
+              : MK2_HEAT_RGB.tr;
+      tds = trEl.querySelectorAll("td[data-pivot-col]");
+      for (ci = 0; ci < tds.length; ci++) {
+        td = tds[ci];
+        col = td.getAttribute("data-pivot-col");
+        if (col === "__TOTAL__") continue;
+        qty = Number(rowData[col]) || 0;
+        overdue = td.classList.contains("yna4-sla-pivot-num--overdue-day");
+        cells[col] = { qty: qty, overdue: overdue };
+        if (qty > 0) {
+          td.style.setProperty(
+            "background-color",
+            "rgba(" +
+              (overdue ? MK2_HEAT_RGB.miss : rgb) +
+              "," +
+              (0.08 + 0.3 * Math.min(1, qty / max)).toFixed(3) +
+              ")",
+            "important"
+          );
+        }
+      }
+      rows.push({
+        key: def.key,
+        label: def.label,
+        direct: !!def.direct,
+        toteStow: !!def.toteStow,
+        cells: cells,
+      });
+    }
+    var missCols = Object.create(null);
+    for (ci = 0; ci < timeCols.length; ci++) {
+      if (
+        isPivotDayOnlyCol(timeCols[ci]) &&
+        isPivotDayColMissHeader(timeCols[ci], refYear, queryAt)
+      ) {
+        missCols[timeCols[ci]] = 1;
+      }
+    }
+    return {
+      rows: rows,
+      timeCols: timeCols,
+      grand: grand,
+      queryAt: queryAt,
+      missCols: missCols,
+      specials: {
+        moving: PIVOT_COL_MOVING,
+        adhoc: PIVOT_COL_ADHOC,
+        empty: PIVOT_COL_EMPTY,
+      },
+    };
+  }
+
+  /* MK2 개요 */
+  var slaOverviewState = { host: null, pivot: null, progress: null, moving: null, message: "" };
+
+  function slaOverviewSet(patch) {
+    var k;
+    for (k in patch) {
+      if (Object.prototype.hasOwnProperty.call(patch, k)) {
+        slaOverviewState[k] = patch[k];
+      }
+    }
+    if (window.__YAN4_SLA_OVERVIEW__ && slaOverviewState.host) {
+      try {
+        window.__YAN4_SLA_OVERVIEW__.render(slaOverviewState.host, slaOverviewState);
+      } catch (eOv) {
+        console.warn("[SLA] 개요 표시 실패", eOv);
+      }
+    }
+  }
+
+  /* MK2 탭: 전체 캡처·Auto 는 탭과 상관없이 찍히도록 잠깐 모두 펼친다 */
+  async function slaWithAllPanesVisible(pivotHost, progressHost, fn) {
+    var root = pivotHost && pivotHost.closest(".yna4-sla-root");
+    if (root) root.classList.add("yna4-sla-root--capture-all");
+    try {
+      if (progressHost) syncProgressPanelLayout(progressHost);
+      await new Promise(function (resolve) {
+        requestAnimationFrame(function () {
+          requestAnimationFrame(resolve);
+        });
+      });
+      return await fn();
+    } finally {
+      if (root) root.classList.remove("yna4-sla-root--capture-all");
+    }
+  }
+
   function renderPivotPlaceholder(host, message, isErr) {
+    slaOverviewSet({ pivot: null, message: String(message || "") });
     host.innerHTML =
       '<div class="yna4-sla-placeholder' +
       (isErr ? " yna4-sla-placeholder--err" : "") +
@@ -8967,6 +9110,7 @@
 
   function renderProgressPanel(host, bundle) {
     if (!host) return;
+    slaOverviewSet({ progress: bundle && bundle.model ? bundle.model : null });
     host.textContent = "";
     host.style.height = "";
     host.style.width = "";
@@ -11612,6 +11756,7 @@
 
   function renderMovingPanelPlaceholder(host, message, isErr) {
     if (!host) return;
+    slaOverviewSet({ moving: null });
     host.innerHTML =
       '<div class="yna4-sla-moving-wrap">' +
       '<h3 class="yna4-sla-moving-title">이동중</h3>' +
@@ -11703,6 +11848,7 @@
     if (!host) return;
     host.textContent = "";
     var data = panel || { rows: [], ctTotal: 0, vehicleCount: 0 };
+    slaOverviewSet({ moving: data });
     var rows = data.rows || [];
     var wrap = document.createElement("section");
     wrap.className = "yna4-sla-moving-wrap";
@@ -12362,6 +12508,12 @@
 
   /** 진척율·SLA·이동중을 위에서 아래로 한 장에 합쳐 클립보드에 복사 */
   async function slaCaptureAllToClipboard(progressHost, pivotHost, movingHost) {
+    return slaWithAllPanesVisible(pivotHost, progressHost, function () {
+      return slaCaptureAllToClipboardInner(progressHost, pivotHost, movingHost);
+    });
+  }
+
+  async function slaCaptureAllToClipboardInner(progressHost, pivotHost, movingHost) {
     var targets = [
       {
         label: "진척율",
@@ -12526,6 +12678,22 @@
   }
 
   async function captureAndDownloadSlaScroll(
+    statusEl,
+    progressHost,
+    pivotHost,
+    movingHost
+  ) {
+    return slaWithAllPanesVisible(pivotHost, progressHost, function () {
+      return captureAndDownloadSlaScrollInner(
+        statusEl,
+        progressHost,
+        pivotHost,
+        movingHost
+      );
+    });
+  }
+
+  async function captureAndDownloadSlaScrollInner(
     statusEl,
     progressHost,
     pivotHost,
@@ -12852,6 +13020,7 @@
         }
         renderProgressPanel(progressHost, progressBundle);
       } else if (progressHost) {
+        slaOverviewSet({ progress: null });
         progressHost.textContent = "";
         progressHost.style.height = "";
         progressHost.style.width = "";
@@ -13345,6 +13514,15 @@
         link.href =
           chrome.runtime.getURL("yan4-sla-page.css") + "?v=" + SLA_UI_REV;
         (document.head || document.documentElement).appendChild(link);
+        var mk2Id = "yna4-sla-mk2-css";
+        var oldMk2 = document.getElementById(mk2Id);
+        if (oldMk2 && oldMk2.parentNode) oldMk2.parentNode.removeChild(oldMk2);
+        var mk2Link = document.createElement("link");
+        mk2Link.id = mk2Id;
+        mk2Link.rel = "stylesheet";
+        mk2Link.href =
+          chrome.runtime.getURL("yan4-sla-mk2.css") + "?v=" + SLA_UI_REV;
+        (document.head || document.documentElement).appendChild(mk2Link);
       }
     } catch (eCss) {}
   }
@@ -13457,6 +13635,10 @@
     statusEl.setAttribute("role", "status");
     statusEl.textContent = "준비";
 
+    var tabsEl = document.createElement("div");
+    tabsEl.className = "yna4-sla-tabs";
+    tabsEl.setAttribute("role", "tablist");
+    toolbar.appendChild(tabsEl);
     toolbar.appendChild(btnAll);
     toolbar.appendChild(lookbackSel);
     toolbar.appendChild(directDoneLbl);
@@ -13482,9 +13664,45 @@
     var movingHost = document.createElement("div");
     movingHost.className = "yna4-sla-moving-host";
 
-    scroll.appendChild(progressHost);
-    scroll.appendChild(pivotHost);
-    scroll.appendChild(movingHost);
+    var overviewHost = document.createElement("div");
+    overviewHost.className = "yna4-sla-overview-host";
+
+    var paneDefs = [
+      { label: "개요", hosts: [overviewHost, progressHost] },
+      { label: "피벗 표", hosts: [pivotHost] },
+      { label: "이동중", hosts: [movingHost] },
+    ];
+    var paneTabs = [];
+    function selectSlaPane(index) {
+      var pi;
+      for (pi = 0; pi < paneDefs.length; pi++) {
+        paneDefs[pi].el.classList.toggle("yna4-sla-pane--active", pi === index);
+        paneTabs[pi].classList.toggle("yna4-sla-tab--active", pi === index);
+        paneTabs[pi].setAttribute("aria-selected", pi === index ? "true" : "false");
+      }
+      if (index === 0) syncProgressPanelLayout(progressHost);
+    }
+    paneDefs.forEach(function (paneDef, index) {
+      var tab = document.createElement("button");
+      tab.type = "button";
+      tab.className = "yna4-sla-tab";
+      tab.setAttribute("role", "tab");
+      tab.textContent = paneDef.label;
+      tab.addEventListener("click", function () {
+        selectSlaPane(index);
+      });
+      tabsEl.appendChild(tab);
+      paneTabs.push(tab);
+      paneDef.el = document.createElement("div");
+      paneDef.el.className = "yna4-sla-pane";
+      paneDef.hosts.forEach(function (h) {
+        paneDef.el.appendChild(h);
+      });
+      scroll.appendChild(paneDef.el);
+    });
+    selectSlaPane(0);
+    slaOverviewState = { host: overviewHost, pivot: null, progress: null, moving: null, message: "" };
+    slaOverviewSet({});
 
     root.appendChild(toolbar);
     root.appendChild(scroll);

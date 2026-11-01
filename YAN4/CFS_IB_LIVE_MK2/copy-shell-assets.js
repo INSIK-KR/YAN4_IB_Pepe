@@ -27,6 +27,8 @@ const rootFiles = [
   "yan4-ats-page.css",
   "yan4-sla-page.js",
   "yan4-sla-page.css",
+  "yan4-sla-mk2.css",
+  "yan4-sla-overview.js",
   "yan4-stow-error-page.js",
   "yan4-stow-error-page.css",
   "yan4-rcrt-label-print.js",
