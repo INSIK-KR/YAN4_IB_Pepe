@@ -432,10 +432,6 @@
   font-weight: 600 !important;
 }
 
-.yna4-shell-page-sla-inner .yna4-sla-root table.yna4-sla-pivot-table--excel tbody td.yna4-sla-pivot-num--overdue-day::before {
-  display: none !important;
-}
-
 .yna4-shell-page-sla-inner .yna4-sla-root table.yna4-sla-pivot-table--excel tbody td.yna4-sla-pivot-num--overdue-day {
   color: #991b1b !important;
 }
@@ -507,12 +503,6 @@
 .yna4-shell-page-sla-inner .yna4-sla-root table.yna4-sla-pivot-table--excel th,
 .yna4-shell-page-sla-inner .yna4-sla-root table.yna4-sla-pivot-table--excel td {
   font-size: 12px !important;
-}
-
-.yna4-shell-page-sla-inner .yna4-sla-root table.yna4-sla-pivot-table--excel tbody td.yna4-sla-pivot-col--moving::before,
-.yna4-shell-page-sla-inner .yna4-sla-root table.yna4-sla-pivot-table--excel tbody td.yna4-sla-pivot-col--adhoc::before,
-.yna4-shell-page-sla-inner .yna4-sla-root table.yna4-sla-pivot-table--excel tbody td.yna4-sla-pivot-col--empty::before {
-  display: none !important;
 }
 
 .yna4-shell-page-sla-inner .yna4-sla-root table.yna4-sla-pivot-table--excel .yna4-sla-pivot-zone-text--grand {

@@ -35,6 +35,26 @@
     return pad2(p.hour) + ":00";
   }
 
+  /** 시간대 열의 시각(ms). 연도가 없어서 조회 시각과 가장 가까운 해로 본다 */
+  function colMs(p, now) {
+    var ms = new Date(now.getFullYear(), +p.mm - 1, +p.dd, p.hour).getTime();
+    var halfYear = 183 * 864e5;
+    if (ms - now.getTime() > halfYear) {
+      return new Date(now.getFullYear() - 1, +p.mm - 1, +p.dd, p.hour).getTime();
+    }
+    if (now.getTime() - ms > halfYear) {
+      return new Date(now.getFullYear() + 1, +p.mm - 1, +p.dd, p.hour).getTime();
+    }
+    return ms;
+  }
+
+  /** 운영일 시간대 표기: 자정을 넘긴 시간은 "익일" */
+  function operHourLabel(c, operDay) {
+    var start = new Date(operDay.startMs);
+    var nextDay = new Date(c.ms).getDate() !== start.getDate();
+    return (nextDay ? "익일 " : "") + pad2(c.hour) + ":00";
+  }
+
   function colLabel(col) {
     var p = parseCol(col);
     if (!p) return String(col || "");
@@ -50,8 +70,12 @@
    */
   function summarize(pivot, progress, moving) {
     var now = pivot.queryAt instanceof Date ? pivot.queryAt : new Date();
-    var todayMm = pad2(now.getMonth() + 1);
-    var todayDd = pad2(now.getDate());
+    var operDay = pivot.operDay;
+    function inOperDay(p) {
+      if (!p || p.hour == null) return false;
+      var ms = colMs(p, now);
+      return ms >= operDay.startMs && ms <= operDay.endMs;
+    }
     var out = {
       total: Number(pivot.grand) || 0,
       miss: 0,
@@ -89,9 +113,9 @@
           rowMiss += qty;
         }
         p = parseCol(col);
-        if (p && p.hour != null && p.mm === todayMm && p.dd === todayDd) {
+        if (inOperDay(p)) {
           if (!out.topCell || qty > out.topCell.qty) {
-            out.topCell = { qty: qty, col: col, label: row.label };
+            out.topCell = { qty: qty, hour: p.hour, ms: colMs(p, now), label: row.label };
           }
         }
       }
@@ -113,9 +137,9 @@
       if (byCol[col].total <= 0) continue;
       p = parseCol(col);
       if (byCol[col].overdue > 0 && !out.missFromCol) out.missFromCol = col;
-      if (p && p.hour != null && p.mm === todayMm && p.dd === todayDd) {
+      if (inOperDay(p)) {
         out.today += byCol[col].total;
-        out.todayCols.push({ col: col, hour: p.hour, qty: byCol[col].total });
+        out.todayCols.push({ col: col, hour: p.hour, ms: colMs(p, now), qty: byCol[col].total });
       }
       out.columns.push({
         col: col,
@@ -136,9 +160,11 @@
         }
       }
     }
+    var hourStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours()).getTime();
     out.nextCols = out.todayCols.filter(function (c) {
-      return c.hour >= now.getHours();
+      return c.ms >= hourStart;
     });
+    out.operDay = operDay;
     return out;
   }
 
@@ -180,10 +206,10 @@
         title: s.nextCols
           .slice(0, 2)
           .map(function (c) {
-            return pad2(c.hour) + ":00 마감 " + fmt(c.qty);
+            return operHourLabel(c, s.operDay) + " 마감 " + fmt(c.qty);
           })
           .join(" · "),
-        detail: "오늘 남은 시간대 " + s.nextCols.length + "개",
+        detail: "오늘(운영일) 남은 시간대 " + s.nextCols.length + "개",
       });
     }
     if (s.topCell) {
@@ -191,12 +217,12 @@
         tone: "warn",
         tag: "집중",
         title:
-          pad2(parseCol(s.topCell.col).hour) +
-          ":00 " +
+          operHourLabel(s.topCell, s.operDay) +
+          " " +
           s.topCell.label +
           " " +
           fmt(s.topCell.qty),
-        detail: "오늘 시간대 중 가장 큰 칸",
+        detail: "오늘(운영일) 시간대 중 가장 큰 칸",
       });
     }
     var adhoc = s.special[specials.adhoc] || 0;
@@ -244,10 +270,10 @@
       )
     );
     var range = s.todayCols.length
-      ? pad2(s.todayCols[0].hour) +
-        ":00 ~ " +
-        pad2(s.todayCols[s.todayCols.length - 1].hour) +
-        ":00 · " +
+      ? operHourLabel(s.todayCols[0], s.operDay) +
+        " ~ " +
+        operHourLabel(s.todayCols[s.todayCols.length - 1], s.operDay) +
+        " · " +
         s.todayCols.length +
         "개 시간대"
       : "오늘 시간대 없음";

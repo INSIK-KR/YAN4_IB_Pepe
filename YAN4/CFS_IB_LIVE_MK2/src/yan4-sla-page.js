@@ -7535,6 +7535,7 @@
       grand: grand,
       queryAt: queryAt,
       missCols: missCols,
+      operDay: operationalDayBoundsMs(operationalYmdNow(queryAt)),
       specials: {
         moving: PIVOT_COL_MOVING,
         adhoc: PIVOT_COL_ADHOC,
