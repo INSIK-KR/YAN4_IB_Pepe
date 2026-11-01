@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:"
+    />
+    <title>CFS HTP</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <span class="brand">CFS HTP</span>
+      <nav class="tabs">
+        <button class="tab active" data-view="home">홈</button>
+      </nav>
+      <span class="version" id="appVersion"></span>
+    </header>
+    <main>
+      <section class="view" data-view="home">
+        <h1>CFS HTP</h1>
+        <p class="muted">MOS 자료를 받아 가공하는 화면이 들어올 자리입니다.</p>
+      </section>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>

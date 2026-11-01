@@ -1,0 +1,51 @@
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  font-family: "Malgun Gothic", "Segoe UI", sans-serif;
+  background: #f5f6f8;
+  color: #1f2328;
+}
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 48px;
+  padding: 0 16px;
+  background: #1f2a44;
+  color: #fff;
+}
+.brand {
+  font-weight: 700;
+}
+.tabs {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+}
+.tab {
+  border: 0;
+  border-radius: 6px;
+  padding: 6px 12px;
+  background: transparent;
+  color: #c9d1e3;
+  cursor: pointer;
+}
+.tab.active {
+  background: #34436b;
+  color: #fff;
+}
+.version {
+  font-size: 12px;
+  color: #c9d1e3;
+}
+main {
+  padding: 24px;
+}
+.view[hidden] {
+  display: none;
+}
+.muted {
+  color: #6b7280;
+}
