@@ -738,7 +738,40 @@ async function waitFileStable(filePath) {
   return last > 400;
 }
 
+/** SLA 다운로드 동안 CFS 창을 맨 위에 고정 → Chrome 탭이 뒤에서 열림. 성공하면 CFS 로 포커스를 되돌림 */
+function pinMainWindowForDownload() {
+  const win = mainWindow;
+  if (!win || win.isDestroyed() || !win.isVisible() || win.isMinimized()) {
+    return function () {};
+  }
+  if (win.isAlwaysOnTop()) return function () {};
+  try {
+    win.setAlwaysOnTop(true);
+  } catch (e) {
+    return function () {};
+  }
+  return function release(ok) {
+    if (win.isDestroyed()) return;
+    try {
+      win.setAlwaysOnTop(false);
+      if (ok) win.focus();
+    } catch (e) {}
+  };
+}
+
 async function fetchSharePointSlaViaChromeDownload(message) {
+  const release = pinMainWindowForDownload();
+  let result = null;
+  try {
+    result = await fetchSharePointSlaViaChromeDownloadInner(message);
+    return result;
+  } finally {
+    // 실패(로그인 필요 등)면 고정만 풀고 Chrome 이 앞으로 올 수 있게 둠
+    release(!!(result && result.ok));
+  }
+}
+
+async function fetchSharePointSlaViaChromeDownloadInner(message) {
   const url = String(
     (message && message.url) || SHAREPOINT_SLA_DEFAULT_URL
   );
