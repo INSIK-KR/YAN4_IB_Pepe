@@ -7455,7 +7455,11 @@
     return u8.buffer;
   }
 
+  /** 마지막 SLA 파일을 어떻게 받았는지(창 없이 / 평소 크롬) — 상태 표시용 */
+  var lastSlaFetchVia = "";
+
   async function fetchSharePointSlaBuffer() {
+    lastSlaFetchVia = "";
     if (
       typeof chrome !== "undefined" &&
       chrome.runtime &&
@@ -7477,6 +7481,7 @@
               return;
             }
             if (resp && resp.ok && resp.base64) {
+              lastSlaFetchVia = resp.via || "";
               resolve(base64ToArrayBuffer(resp.base64));
               return;
             }
@@ -11850,7 +11855,10 @@
     statusEl.textContent = prefix + "SharePoint SLA 다운로드…";
     var slaBuf = await fetchSharePointSlaBuffer();
     if (stopRequested) return { stopped: true };
-    statusEl.textContent = prefix + "SLA 조회표 인덱싱…";
+    statusEl.textContent =
+      prefix +
+      "SLA 조회표 인덱싱…" +
+      (lastSlaFetchVia ? " (SLA " + lastSlaFetchVia + ")" : "");
     var slaLookup = parseSlaFileLookup(slaBuf);
     lastShrinkSlaLookup = slaLookup;
 
@@ -12940,7 +12948,8 @@
         statusEl.textContent =
           (skipDirect && !combined.empty ? "직납완료 · " : "") +
           (combined.empty ? combined.summary : "완료 · " + combined.summary) +
-          (combined.empty ? "" : " · " + formatPipelineTimestamp());
+          (combined.empty ? "" : " · " + formatPipelineTimestamp()) +
+          (lastSlaFetchVia ? " · SLA " + lastSlaFetchVia : "");
       }
       if (captureAfter && !stopRequested) {
         try {
