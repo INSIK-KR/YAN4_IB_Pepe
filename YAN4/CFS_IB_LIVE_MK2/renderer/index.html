@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CFS IB LIVE MK2_By Pepe</title>
+  <style>
+    :root { --side-w: 176px; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: #e2e8f0;
+      font-family: "Segoe UI", "Malgun Gothic", sans-serif;
+    }
+    @media print {
+      html, body {
+        height: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
+      }
+      #sideNav { display: none !important; }
+      #banner { margin-left: 0 !important; }
+      #shellMount { left: 0 !important; }
+    }
+    #sideNav {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      width: var(--side-w);
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 12px 8px;
+      background: #fafafa;
+      border-right: 1px solid #e5e5e5;
+      color: #0a0a0a;
+      z-index: 2147483647;
+    }
+    #sideNav .side-brand {
+      padding: 4px 8px;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      white-space: nowrap;
+    }
+    #sideNav .side-brand small {
+      margin-left: 4px;
+      font-size: 11px;
+      font-weight: 500;
+      color: #737373;
+    }
+    #sideNav .yna4-shell-page-nav {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    #sideNav .yna4-shell-page-nav button {
+      display: block;
+      width: 100%;
+      height: 32px;
+      padding: 0 8px;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      color: #404040;
+      font: 500 13px/32px "Segoe UI", "Malgun Gothic", sans-serif;
+      text-align: left;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      cursor: pointer;
+    }
+    #sideNav .yna4-shell-page-nav button:hover { background: #f0f0f0; color: #0a0a0a; }
+    #sideNav .yna4-shell-page-nav button.is-active { background: #171717; color: #fafafa; }
+    #banner {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      padding: 6px 10px;
+      margin-left: var(--side-w);
+      background: #ffffff;
+      color: #0a0a0a;
+      border-bottom: 1px solid #e5e5e5;
+      font-size: 12px;
+      flex-shrink: 0;
+      z-index: 2147483647;
+      position: relative;
+    }
+    #banner .ok { color: #16a34a; }
+    #banner .bad { color: #dc2626; }
+    #banner .hint { color: #737373; }
+    #banner .login-group {
+      display: inline-flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      margin-left: auto;
+    }
+    #banner .login-group button {
+      border: 0;
+      border-radius: 4px;
+      padding: 4px 10px;
+      font-weight: 600;
+      cursor: pointer;
+      min-width: 76px;
+      box-sizing: border-box;
+      text-align: center;
+      white-space: nowrap;
+      font-size: 12px;
+      line-height: 1.2;
+    }
+    #banner .login-group button:disabled { opacity: 0.6; }
+    #banner .login-group button.is-busy,
+    #banner .login-group button.is-ok {
+      font-size: 11px;
+      letter-spacing: -0.03em;
+    }
+    #banner .login-group button.is-ok {
+      box-shadow: inset 0 0 0 1px #16a34a;
+    }
+    #banner .center-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-right: 6px;
+      padding-right: 8px;
+      border-right: 1px solid #e5e5e5;
+    }
+    #banner .center-group select {
+      height: 24px;
+      border: 1px solid #d4d4d4;
+      border-radius: 4px;
+      background: #ffffff;
+      color: #0a0a0a;
+      font-size: 12px;
+      padding: 0 4px;
+    }
+    #banner .center-group button {
+      min-width: 48px;
+      background: #38bdf8;
+      color: #0f172a;
+    }
+    #centerStatus { font-weight: 600; white-space: nowrap; }
+    #btnLoginCoupang { background: #fbbf24; color: #0f172a; }
+    #btnLoginPo { background: #a78bfa; color: #0f172a; }
+    #btnLoginMos { background: #2dd4bf; color: #0f172a; }
+    #banner .login-group button#btnOpenSop {
+      background: #fb923c;
+      color: #0f172a;
+      min-width: 0;
+      width: auto;
+      height: auto;
+      padding: 4px 8px;
+      border: 0;
+      font-size: 12px;
+      font-weight: 800;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+    #banner .login-group button#btnOpenSop:hover {
+      background: #f97316;
+      color: #0f172a;
+    }
+    #sopSearchBackdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 2147483646;
+      background: rgba(15, 23, 42, 0.55);
+      align-items: flex-start;
+      justify-content: center;
+      padding: 72px 16px 16px;
+      box-sizing: border-box;
+    }
+    #sopSearchBackdrop.is-open { display: flex; }
+    #sopSearchBackdrop .sop-search-card {
+      width: min(420px, 94vw);
+      background: #fff;
+      border-radius: 10px;
+      padding: 16px 16px 14px;
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+      border: 1px solid #e2e8f0;
+    }
+    #sopSearchBackdrop .sop-search-title {
+      font-size: 14px;
+      font-weight: 800;
+      color: #0f172a;
+      margin: 0 0 10px;
+    }
+    #sopSearchBackdrop .sop-search-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    #sopSearchBackdrop #sopSearchInput {
+      flex: 1;
+      height: 34px;
+      box-sizing: border-box;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      padding: 0 10px;
+      font: 13px/1.2 "Segoe UI", "Malgun Gothic", sans-serif;
+    }
+    #sopSearchBackdrop #sopSearchInput:focus {
+      outline: none;
+      border-color: #fb923c;
+    }
+    #sopSearchBackdrop .sop-search-go {
+      height: 34px;
+      border: 0;
+      border-radius: 8px;
+      padding: 0 14px;
+      background: #fb923c;
+      color: #0f172a;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    #sopSearchBackdrop .sop-search-hint {
+      margin: 8px 0 0;
+      font-size: 11px;
+      color: #64748b;
+    }
+    #sopSearchBackdrop .sop-search-close {
+      margin-top: 12px;
+      border: 1px solid #cbd5e1;
+      background: #f8fafc;
+      color: #334155;
+      border-radius: 8px;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    #shellMount {
+      position: absolute;
+      inset: 36px 0 0 var(--side-w);
+      overflow: hidden;
+      background: #f1f5f9;
+    }
+    #shellMount #yna4UnifiedUiShell_v09 {
+      position: absolute !important;
+      top: 0 !important;
+      left: 0 !important;
+      right: 0 !important;
+      bottom: 0 !important;
+      width: auto !important;
+      max-width: none !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+    }
+  </style>
+</head>
+<body>
+  <aside id="sideNav" aria-label="메뉴">
+    <div class="side-brand">CFS IB LIVE<small>MK2</small></div>
+  </aside>
+  <div id="banner">
+    <span id="sessStatus" class="hint" aria-live="polite"></span>
+    <span class="login-group">
+      <span class="center-group">
+        <span id="centerStatus" class="hint">센터: —</span>
+        <select id="centerSelect" title="전환할 센터"></select>
+        <button type="button" id="btnCenterSwitch" title="inbound 세션 센터 전환">전환</button>
+      </span>
+      <button type="button" id="btnLoginCoupang" title="WMS · inventory/inbound/outbound 세션">WMS</button>
+      <button type="button" id="btnLoginPo" title="PO Management 세션">PO</button>
+      <button type="button" id="btnLoginMos" title="MOS · Gross HTP / Need help">MOS</button>
+      <button type="button" id="btnOpenSop" title="입고 매뉴얼 (SOP)" aria-label="입고 매뉴얼">?</button>
+    </span>
+  </div>
+  <div id="shellMount"></div>
+
+  <script src="./desktop-shim.js"></script>
+  <script src="./vendor/chart.umd.min.js"></script>
+  <script src="./vendor/xlsx.full.min.js"></script>
+  <script src="./vendor/JsBarcode.all.min.js"></script>
+  <script src="./vendor/qrcode.min.js"></script>
+  <script src="./vendor/html2canvas.min.js"></script>
+  <script src="./vendor/gm-bridge.js"></script>
+  <script src="./vendor/yan4-sla-page.js"></script>
+  <script src="./vendor/yan4-ats-page.js"></script>
+  <script src="./vendor/yan4-stow-error-page.js"></script>
+  <script src="./vendor/yan4-rcrt-label-print.js"></script>
+  <script src="./vendor/yan4-bipyo-label-print.js"></script>
+  <script src="./vendor/yan4-location-consolidation-page.js"></script>
+  <script src="./vendor/yan4-damage-verify-page.js"></script>
+  <script src="./vendor/yan4-avail-history-page.js"></script>
+  <script src="./vendor/shell.js"></script>
+  <script src="./boot.js"></script>
+</body>
+</html>

@@ -1,0 +1,54 @@
+{
+  "name": "cfs-ib-live-mk2",
+  "version": "2.0.0",
+  "private": true,
+  "description": "CFS IB LIVE MK2",
+  "author": {
+    "name": "YAN4 IB Pepe"
+  },
+  "main": "main.js",
+  "scripts": {
+    "prestart": "node copy-shell-assets.js",
+    "start": "electron .",
+    "predist": "node copy-shell-assets.js && node make-splash.js && node build-sop-index.js",
+    "sop-index": "node build-sop-index.js",
+    "obfuscate": "node obfuscate-pack.js",
+    "dist": "node build-portable.js"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "javascript-obfuscator": "^4.2.2",
+    "pdfjs-dist": "^4.10.38"
+  },
+  "build": {
+    "appId": "com.cfs.ib.live.mk2",
+    "productName": "CFS IB LIVE MK2",
+    "copyright": "YAN4 IB Pepe",
+    "afterPack": "./after-pack.js",
+    "directories": {
+      "output": "release"
+    },
+    "icon": "build/icon.ico",
+    "files": [
+      "**/*",
+      "!**/*.map"
+    ],
+    "extraResources": [
+      {
+        "from": "assets/sop",
+        "to": "sop"
+      }
+    ],
+    "portable": {
+      "splashImage": "build/splash.bmp"
+    },
+    "win": {
+      "target": [
+        "portable"
+      ],
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": false
+    }
+  }
+}
