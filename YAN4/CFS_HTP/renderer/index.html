@@ -34,7 +34,19 @@
 
       <section class="view" data-view="mos" hidden>
         <div class="card">
-          <h2>MOS 자료 넣기</h2>
+          <h2>MOS에서 받기</h2>
+          <p class="muted">
+            MOS 근무 이력(worker history)을 YAN4 · INBOUND/OTHER/OUTBOUND 전체로 엑셀로 받아 바로 계산합니다. 먼저 오른쪽 위
+            <b>MOS 로그인</b>이 초록색이어야 합니다.
+          </p>
+          <div class="row">
+            <input type="date" id="mosDate" class="date" />
+            <button class="button" id="mosDownload">MOS에서 받기</button>
+          </div>
+          <div id="mosDownloadInfo" class="info"></div>
+        </div>
+        <div class="card">
+          <h2>MOS 자료 넣기 (파일 · 붙여넣기)</h2>
           <p class="muted">
             MOS에서 받은 엑셀(.xlsx·.xlsm·.csv)을 고르거나, MOS 화면에서 표를 복사한 뒤 이 화면에서
             <b>Ctrl+V</b> 하세요. 머리글(Work Date, Employee …)이 있으면 열 순서는 상관없습니다.

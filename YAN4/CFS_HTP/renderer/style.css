@@ -136,6 +136,25 @@ h3 {
 .info {
   margin-top: 10px;
 }
+.info pre {
+  max-height: 200px;
+  overflow: auto;
+  padding: 8px;
+  background: #f5f6f8;
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.date {
+  padding: 5px 8px;
+  border: 1px solid #cfd4dc;
+  border-radius: 6px;
+  font: inherit;
+}
+.button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
 .table-wrap {
   overflow-x: auto;
 }

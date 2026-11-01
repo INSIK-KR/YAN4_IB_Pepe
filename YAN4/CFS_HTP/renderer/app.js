@@ -175,19 +175,135 @@
     if (!file) return;
     $("mosInfo").textContent = "읽는 중… (" + file.name + ")";
     file.arrayBuffer().then(function (buf) {
-      // 큰 통합문서도 MOS 시트만 읽는다
       setTimeout(function () {
         try {
-          const probe = XLSX.read(buf, { type: "array", bookSheets: true });
-          const sheetName = probe.SheetNames.indexOf("MOS") >= 0 ? "MOS" : probe.SheetNames[0];
-          const wb = XLSX.read(buf, { type: "array", sheets: [sheetName], dense: true });
-          const table = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, raw: true, defval: "" });
-          setMos(table, file.name + (sheetName ? " [" + sheetName + "]" : ""));
+          loadWorkbook(buf, file.name);
         } catch (err) {
           $("mosInfo").innerHTML = '<span class="bad">파일을 읽지 못했습니다: ' + esc(err.message) + "</span>";
         }
       }, 30);
     });
+  });
+
+  /** 엑셀/CSV 바이트 → MOS 행. 큰 통합문서도 MOS 시트만 읽는다 */
+  function loadWorkbook(buf, label) {
+    const probe = XLSX.read(buf, { type: "array", bookSheets: true });
+    const sheetName = probe.SheetNames.indexOf("MOS") >= 0 ? "MOS" : probe.SheetNames[0];
+    const wb = XLSX.read(buf, { type: "array", sheets: [sheetName], dense: true });
+    const table = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, raw: true, defval: "" });
+    setMos(table, label + " [" + sheetName + "]");
+    return !!state.mos;
+  }
+
+  // ---------- MOS에서 받기 ----------
+  const MOS_BASE = "https://mos.coupang.net";
+  const MOS_REFERER = MOS_BASE + "/status/worker-history?resource=38";
+  const MOS_CENTER_ID = "1007"; // YAN4
+
+  function todayLocal() {
+    const d = new Date();
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
+
+  function workerHistoryQuery(date) {
+    const p = new URLSearchParams();
+    p.set("startDate", date);
+    p.set("endDate", date);
+    p.set("centerId", MOS_CENTER_ID);
+    p.set("contractType", "ALL");
+    ["INBOUND", "OTHER", "OUTBOUND"].forEach(function (t) {
+      p.append("workTypeCdList", t);
+    });
+    p.set("isAgv", "ALL");
+    return p.toString();
+  }
+
+  /**
+   * exportExcel 응답에서 내려받을 주소를 찾는다.
+   * 응답 모양을 아직 확인하지 못해 downloadSavedFile 주소, 또는 파일 ID(UUID)+파일 이름을 찾아 조합한다.
+   */
+  function findDownloadUrl(text) {
+    const s = String(text || "").replace(/\\\//g, "/");
+    const direct = /(?:https:\/\/mos\.coupang\.net)?(\/common\/export-excel\/downloadSavedFile\/[0-9a-fA-F-]{36}\/[^"'\s]+?\.xlsx)/.exec(s);
+    if (direct) return MOS_BASE + direct[1];
+    const id = /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/.exec(s);
+    const name = /[\w.-]+\.xlsx/.exec(s);
+    if (id && name) return MOS_BASE + "/common/export-excel/downloadSavedFile/" + id[0] + "/" + encodeURIComponent(name[0]);
+    return null;
+  }
+
+  function base64ToArrayBuffer(b64) {
+    const bin = atob(b64);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out.buffer;
+  }
+
+  function downloadInfo(html) {
+    $("mosDownloadInfo").innerHTML = html;
+  }
+
+  async function downloadFromMos() {
+    const date = $("mosDate").value;
+    if (!date) return downloadInfo('<span class="bad">날짜를 고르세요.</span>');
+    const st = await window.cfsHtp.mosStatus();
+    if (!st.loggedIn) return downloadInfo('<span class="bad">MOS 로그인이 필요합니다. 오른쪽 위 MOS 로그인을 눌러주세요.</span>');
+
+    downloadInfo("MOS에 엑셀 만들기 요청 중… (" + esc(date) + ")");
+    const exp = await window.cfsHtp.mosFetch({
+      url: MOS_BASE + "/status/worker-history/exportExcel?" + workerHistoryQuery(date),
+      method: "POST",
+      body: "",
+      contentType: "application/x-www-form-urlencoded; charset=UTF-8",
+      referer: MOS_REFERER,
+      headers: { Origin: MOS_BASE, "X-Requested-With": "XMLHttpRequest", Accept: "application/json, text/javascript, */*; q=0.01" },
+    });
+    if (!exp.ok) return downloadInfo('<span class="bad">엑셀 만들기 실패: ' + esc(exp.error || "HTTP " + exp.status) + "</span>");
+    const url = findDownloadUrl(exp.body);
+    if (!url) {
+      return downloadInfo(
+        '<span class="bad">MOS 응답에서 파일 주소를 찾지 못했습니다. 아래 응답을 개발자에게 전달해 주세요.</span><pre>' +
+          esc(String(exp.body || "").slice(0, 2000)) +
+          "</pre>"
+      );
+    }
+
+    downloadInfo("파일 받는 중… " + esc(decodeURIComponent(url.split("/").pop())));
+    const file = await window.cfsHtp.mosFetch({
+      url: url,
+      method: "GET",
+      referer: MOS_REFERER,
+      binary: true,
+      headers: { Accept: "*/*" },
+    });
+    if (!file.ok || !file.base64) return downloadInfo('<span class="bad">파일 받기 실패: ' + esc(file.error || "HTTP " + file.status) + "</span>");
+
+    downloadInfo("엑셀 읽는 중…");
+    await new Promise(function (r) {
+      setTimeout(r, 30);
+    });
+    const buf = base64ToArrayBuffer(file.base64);
+    let loaded = false;
+    try {
+      loaded = loadWorkbook(buf, "MOS " + date);
+    } catch (err) {
+      return downloadInfo('<span class="bad">받은 파일을 읽지 못했습니다: ' + esc(err.message) + "</span>");
+    }
+    if (!loaded) return downloadInfo('<span class="bad">받은 파일의 열이 예상과 다릅니다. 아래 MOS 자료 넣기 칸의 안내를 확인하세요.</span>');
+    downloadInfo('<span class="good">완료</span> · ' + fmtInt(state.mos.rows.length) + "행 · " + fmtInt(buf.byteLength / 1024) + " KB");
+  }
+
+  $("mosDate").value = todayLocal();
+  $("mosDownload").addEventListener("click", function () {
+    const btn = $("mosDownload");
+    btn.disabled = true;
+    downloadFromMos()
+      .catch(function (err) {
+        downloadInfo('<span class="bad">오류: ' + esc(err && err.message ? err.message : err) + "</span>");
+      })
+      .finally(function () {
+        btn.disabled = false;
+      });
   });
 
   $("mosClear").addEventListener("click", function () {
