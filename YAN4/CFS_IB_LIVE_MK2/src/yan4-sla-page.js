@@ -7441,7 +7441,8 @@
         rowDefs,
         grand,
         pivotOverdueStyleCtx.queryAt,
-        refYear
+        refYear,
+        computeMk2SlaAlertQty(stats, pivotOverdueStyleCtx.queryAt)
       ),
       message: "",
     });
@@ -7460,7 +7461,66 @@
     miss: "220,38,38",
   };
 
-  function applyMk2PivotHeat(tbody, matrix, timeCols, rowDefs, grand, queryAt, refYear) {
+  /* SLA 임박 수량: 피벗 칸을 만든 줄(SKU) 단위로, 임박 판정은 기존 isSlaDeadlineUrgent 그대로 */
+  function computeMk2SlaAlertQty(stats, queryAt) {
+    var out = Object.create(null);
+    var drillCtx = stats && stats.drillCtx;
+    if (!drillCtx) return out;
+    function add(rowKey, col, qty, sku) {
+      if (!(qty > 0)) return;
+      if (!out[rowKey]) out[rowKey] = Object.create(null);
+      if (!out[rowKey][col]) out[rowKey][col] = { qty: 0, skus: Object.create(null) };
+      out[rowKey][col].qty += qty;
+      if (sku) out[rowKey][col].skus[sku] = 1;
+    }
+    var combined = drillCtx.mode === "combined";
+    var xfer = combined ? drillCtx.transfer : drillCtx.mode === "direct" ? null : drillCtx;
+    var direct = combined ? drillCtx.direct : drillCtx.mode === "direct" ? drillCtx : null;
+    var tote =
+      drillCtx.toteStowLines || (xfer && xfer.toteStowLines) || [];
+    var i, item, placed, row, line, rk;
+    if (xfer && xfer.allRows) {
+      for (i = 0; i < xfer.allRows.length; i++) {
+        item = xfer.allRows[i];
+        placed = resolvePivotPlacement(item, xfer.slaLookup, xfer.ctStorage, queryAt);
+        if (!placed) continue;
+        rk = placed.rowMeta.key;
+        if (
+          isSlaDeadlineUrgent(
+            drillSlaPivotAt(item, placed.rowMeta),
+            queryAt,
+            transferThresholdHoursForRowKey(rk)
+          )
+        ) {
+          add(rk, placed.col, Number(item.qty) || 0, normalizeGcKey(item.gc));
+        }
+      }
+    }
+    if (direct && direct.allRows) {
+      for (i = 0; i < direct.allRows.length; i++) {
+        row = direct.allRows[i];
+        if (isSlaDeadlineUrgent(row.slaAt, queryAt, PIVOT_ALERT_HOURS_DEFAULT)) {
+          add(
+            row.rowKey,
+            row.timeCol,
+            Number(row.topSkuGap) || Number(row.pivotQty) || Number(row.remainQty) || 0,
+            row.skuSeq
+          );
+        }
+      }
+    }
+    for (i = 0; i < tote.length; i++) {
+      line = tote[i];
+      rk = toteLineResolvedRowKey(line);
+      if (!rk || !line.agingCol || line.agingCol === PIVOT_COL_EMPTY) continue;
+      if (isSlaDeadlineUrgent(line.agingAt, queryAt, PIVOT_ALERT_HOURS_ROCKETMART)) {
+        add(rk, line.agingCol, Number(line.moveQuantity) || 0, line.skuId || line.toteBarcode);
+      }
+    }
+    return out;
+  }
+
+  function applyMk2PivotHeat(tbody, matrix, timeCols, rowDefs, grand, queryAt, refYear, alertQty) {
     var rows = [];
     var max = 1;
     var ri, ci, def, rowData, cells, trEl, tds, td, col, qty, overdue, rgb;
@@ -7500,10 +7560,12 @@
         if (col === "__TOTAL__") continue;
         qty = Number(rowData[col]) || 0;
         overdue = td.classList.contains("yna4-sla-pivot-num--overdue-day");
+        var alertCell = !overdue && alertQty[def.key] && alertQty[def.key][col];
         cells[col] = {
           qty: qty,
           overdue: overdue,
-          alert: td.classList.contains("yna4-sla-pivot-num--sla-alert"),
+          alertQty: alertCell ? Math.min(alertCell.qty, qty) : 0,
+          alertSkus: alertCell ? Object.keys(alertCell.skus) : [],
         };
         if (qty > 0) {
           td.style.setProperty(
@@ -7580,7 +7642,9 @@
       pivot.grand += newVal - cell.qty;
       cell.qty = newVal;
       cell.overdue = td.classList.contains("yna4-sla-pivot-num--overdue-day");
-      cell.alert = td.classList.contains("yna4-sla-pivot-num--sla-alert");
+      /* 실시간 값은 칸 합계만 오므로 임박 수량은 칸 수량을 넘지 않게만 맞춘다 */
+      cell.alertQty = Math.min(cell.alertQty, newVal);
+      if (newVal <= 0) cell.alertSkus = [];
       slaOverviewSet({});
       return;
     }

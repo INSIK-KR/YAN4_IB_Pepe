@@ -25,6 +25,22 @@
     return "tr";
   }
 
+  var ALERT_GROUPS = [
+    { key: "ambient", label: "상온" },
+    { key: "chilled", label: "냉장" },
+    { key: "frozen", label: "냉동" },
+    { key: "rm", label: "RM" },
+  ];
+
+  function alertGroupOf(rowKey) {
+    var k = String(rowKey || "");
+    if (k === "ROCKETMART") return "rm";
+    if (/AMBIENT/.test(k)) return "ambient";
+    if (/CHILLED/.test(k)) return "chilled";
+    if (/FROZEN/.test(k)) return "frozen";
+    return "";
+  }
+
   function parseCol(col) {
     var m = /^(\d{2})\/(\d{2})(?: (\d{1,2}))?$/.exec(String(col || ""));
     if (!m) return null;
@@ -82,6 +98,8 @@
       missFromCol: "",
       alert: 0,
       alertRows: [],
+      alertByGroup: Object.create(null),
+      alertSkuCount: 0,
       today: 0,
       todayCols: [],
       columns: [],
@@ -94,6 +112,7 @@
     };
     var specials = pivot.specials || {};
     var byCol = Object.create(null);
+    var alertSkuSet = Object.create(null);
     var ci, ri, col, row, cell, qty, chan, p;
 
     for (ci = 0; ci < pivot.timeCols.length; ci++) {
@@ -104,18 +123,25 @@
       chan = channelOf(row);
       var rowMiss = 0;
       var rowAlert = 0;
+      var group = alertGroupOf(row.key);
       for (ci = 0; ci < pivot.timeCols.length; ci++) {
         col = pivot.timeCols[ci];
         cell = row.cells[col];
         qty = cell ? Number(cell.qty) || 0 : 0;
         if (qty <= 0) continue;
+        if (cell.alertQty > 0) {
+          rowAlert += cell.alertQty;
+          if (group) out.alertByGroup[group] = (out.alertByGroup[group] || 0) + cell.alertQty;
+          (cell.alertSkus || []).forEach(function (sku) {
+            alertSkuSet[sku] = 1;
+          });
+        }
         byCol[col].total += qty;
         byCol[col].parts[chan] = (byCol[col].parts[chan] || 0) + qty;
         if (cell.overdue) {
           byCol[col].overdue += qty;
           rowMiss += qty;
         }
-        if (cell.alert) rowAlert += qty;
         p = parseCol(col);
         if (inOperDay(p)) {
           if (!out.topCell || qty > out.topCell.qty) {
@@ -137,6 +163,7 @@
     }
     out.missRows.sort(byQtyDesc);
     out.alertRows.sort(byQtyDesc);
+    out.alertSkuCount = Object.keys(alertSkuSet).length;
 
     for (ci = 0; ci < pivot.timeCols.length; ci++) {
       col = pivot.timeCols[ci];
@@ -203,7 +230,7 @@
             return r.label + " " + fmt(r.qty);
           })
           .join(" · "),
-        detail: "SLA 임박 칸 합계 " + fmt(s.alert) + " 유닛",
+        detail: "SKU " + fmt(s.alertSkuCount) + "개 · " + fmt(s.alert) + " 유닛 · TR·DIR 2시간, RM·AG 8시간 이내",
       });
     }
     if (s.expired.length) {
@@ -292,9 +319,16 @@
         s.total ? "전체의 " + ((s.miss / s.total) * 100).toFixed(1) + "%" : "-"
       )
     );
-    row.appendChild(
-      kpi("yna4-sla-ov-kpi--alert", "SLA 임박", fmt(s.alert), "TR·DIR 2시간 · RM·AG 8시간 이내")
-    );
+    var alertBox = kpi("yna4-sla-ov-kpi--alert", "SLA 임박", fmt(s.alert), "");
+    alertBox.title = "SKU별 수량 · TR·DIR 2시간, RM·AG 8시간 이내 (MISS 칸 제외)";
+    var alertSub = alertBox.querySelector(".yna4-sla-ov-kpi-sub");
+    alertSub.className = "yna4-sla-ov-kpi-temps";
+    ALERT_GROUPS.forEach(function (g) {
+      var t = el("span", "yna4-sla-ov-kpi-temp", g.label + " ");
+      t.appendChild(el("b", "", fmt(s.alertByGroup[g.key] || 0)));
+      alertSub.appendChild(t);
+    });
+    row.appendChild(alertBox);
     var un = s.progress && s.progress.unload && s.progress.unload.total;
     var re = s.progress && s.progress.receive && s.progress.receive.total;
     row.appendChild(
