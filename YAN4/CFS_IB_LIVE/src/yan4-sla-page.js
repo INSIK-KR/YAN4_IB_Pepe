@@ -7512,34 +7512,84 @@
     return buf;
   }
 
+  /** 504 뒤 다시 요청하기 전 대기(ms) — 같은 버전에서도 서버가 엑셀을 제때 못 만들 때가 있음 */
+  var EXCEL_504_RETRY_WAITS_MS = [3000, 8000];
+
+  function isHttp504Error(e) {
+    return /HTTP 504\b/.test(String((e && e.message) || e || ""));
+  }
+
+  /** 이관 엑셀 한 구간 — 504 면 잠깐 쉬고 다시. 끝내 504 면 그대로 던짐 */
+  async function fetchExcelWith504Retry(preset, start, end, statusEl, label, maxRetries) {
+    var retries =
+      maxRetries != null ? maxRetries : EXCEL_504_RETRY_WAITS_MS.length;
+    var qs = buildExcelQueryString({
+      status: preset.api,
+      start: start,
+      end: end,
+      toCenterCode: poFcCode(),
+      searchDateType: preset.searchDateType || SEARCH_DATE_UPLOAD,
+    });
+    var attempt = 0;
+    while (true) {
+      try {
+        return await fetchExcelArrayBuffer(qs);
+      } catch (e) {
+        if (!isHttp504Error(e) || attempt >= retries || stopRequested) {
+          throw e;
+        }
+        if (statusEl) {
+          statusEl.textContent = label + " · 서버 504 — 다시 시도 " + (attempt + 1) + "…";
+        }
+        await sleep(EXCEL_504_RETRY_WAITS_MS[attempt]);
+        attempt++;
+      }
+    }
+  }
+
   async function fetchTransferRowsAll(statusEl, dr) {
     var chunks = splitInclusiveRanges(dr.startYmd, dr.endYmd, CHUNK_MAX_DAYS);
     var allRows = [];
-    var si, ci, preset, buf, part;
+    var si, ci, di, preset, buf, part, label, days;
     for (si = 0; si < STATUS_PRESETS.length; si++) {
       if (stopRequested) break;
       preset = STATUS_PRESETS[si];
       for (ci = 0; ci < chunks.length; ci++) {
         if (stopRequested) break;
-        if (statusEl) {
-          statusEl.textContent =
-            preset.label +
-            " WMS " +
-            (ci + 1) +
-            "/" +
-            chunks.length +
-            "…";
+        label = preset.label + " WMS " + (ci + 1) + "/" + chunks.length;
+        if (statusEl) statusEl.textContent = label + "…";
+        try {
+          // 3일 구간은 재시도 없이 — 504 는 서버가 오래 붙잡다 주므로 바로 하루씩으로 (진열대기 최근 구간이 주로 큼)
+          buf = await fetchExcelWith504Retry(
+            preset,
+            chunks[ci].start,
+            chunks[ci].end,
+            statusEl,
+            label,
+            0
+          );
+          part = parseTransferSheetRows(buf, preset.label);
+          allRows = allRows.concat(part);
+        } catch (e504) {
+          // 3일치가 계속 504 면 하루씩 — 엑셀이 작아져 서버가 제때 만듦 (기간은 그대로)
+          if (!isHttp504Error(e504) || chunks[ci].start === chunks[ci].end) throw e504;
+          days = splitInclusiveRanges(chunks[ci].start, chunks[ci].end, 1);
+          for (di = 0; di < days.length; di++) {
+            if (stopRequested) break;
+            var dayLabel = label + " · 하루씩 " + (di + 1) + "/" + days.length;
+            if (statusEl) statusEl.textContent = dayLabel + "…";
+            buf = await fetchExcelWith504Retry(
+              preset,
+              days[di].start,
+              days[di].end,
+              statusEl,
+              dayLabel
+            );
+            part = parseTransferSheetRows(buf, preset.label);
+            allRows = allRows.concat(part);
+            await sleep(80);
+          }
         }
-        var qs = buildExcelQueryString({
-          status: preset.api,
-          start: chunks[ci].start,
-          end: chunks[ci].end,
-          toCenterCode: poFcCode(),
-          searchDateType: preset.searchDateType || SEARCH_DATE_UPLOAD,
-        });
-        buf = await fetchExcelArrayBuffer(qs);
-        part = parseTransferSheetRows(buf, preset.label);
-        allRows = allRows.concat(part);
         await sleep(80);
       }
     }
