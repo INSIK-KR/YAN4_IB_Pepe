@@ -1,6 +1,6 @@
 # YAN4 IB Shell Desktop (1단계)
 
-> **MK2**: 디자인 개편용 복사본. 원본은 `../CFS_IB_LIVE` (계속 업데이트). 데이터 코드(WMS 요청·계산)는 되도록 원본과 같게 유지하고 수정은 양쪽에 반영. 저장 폴더는 `%LOCALAPPDATA%CFSIBLiveMK2`.
+> **MK2**: 디자인 개편용 복사본. 원본은 `../CFS_IB_LIVE` (계속 업데이트). 데이터 코드(WMS 요청·계산)는 되도록 원본과 같게 유지하고 수정은 양쪽에 반영. 저장 폴더는 `%LOCALAPPDATA%\CFSIBLiveMK2`.
 
 확장 **통합 패널**을 Electron portable EXE로 이식한 앱입니다.  
 ATS Live(1.0.0)와 **별도**입니다.
