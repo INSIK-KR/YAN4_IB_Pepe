@@ -601,4 +601,4 @@ function computeStatus(rows, inputs) {
   };
 }
 
-export { HOURS, SHIFT_GROUPS, TASKS, MOS_COLUMNS, parseMosTable, tsvToTable, computeStatus, total };
+export { HOURS, SHIFT_GROUPS, TASKS, LOC, MOS_COLUMNS, parseMosTable, tsvToTable, computeStatus, total, manHourKey, workedFraction };

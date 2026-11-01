@@ -1,20 +1,18 @@
-import { Fragment, useMemo, useState, type ReactNode } from "react";
-import { ArrowDownRight, ArrowUpRight, ChevronDown, Database, Users } from "lucide-react";
+import { Fragment, useState } from "react";
+import { ChevronDown, Users } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import HourlyTable, { type HourlyRow } from "@/components/HourlyTable";
-import { computeStatus } from "@/lib/htp-calc.mjs";
+import type { StatusModel } from "@/lib/htp-calc.mjs";
 import { fmt1, fmtInt, fmtPct } from "@/lib/format";
 import type { Inputs } from "@/lib/inputs";
 import type { MosData } from "@/lib/mos";
 import { cn } from "@/lib/utils";
 
-type Props = { mos: MosData | null; inputs: Inputs; onGoMos: () => void };
-type Model = ReturnType<typeof computeStatus>;
+type Props = { model: StatusModel; mos: MosData; inputs: Inputs };
 type Hourly = Record<number, number>;
 
 const SHIFTS3 = [
@@ -27,45 +25,11 @@ function sumHours(values: Hourly, hours: number[]) {
   return hours.reduce((s, h) => s + (values[h] || 0), 0);
 }
 
-function Kpi({ title, value, sub, tone }: { title: string; value: ReactNode; sub?: ReactNode; tone?: "good" | "bad" }) {
-  return (
-    <Card size="sm">
-      <CardHeader>
-        <CardDescription>{title}</CardDescription>
-        <div
-          className={cn("text-3xl leading-tight font-semibold tracking-tight tabular-nums", tone === "good" && "text-emerald-600", tone === "bad" && "text-red-600")}
-        >
-          {value}
-        </div>
-      </CardHeader>
-      {sub && <CardContent className="text-xs text-muted-foreground">{sub}</CardContent>}
-    </Card>
-  );
-}
-
 /** 작은 표 공통 셀 */
 const num = "text-right tabular-nums";
 
-export default function StatusPage({ mos, inputs, onGoMos }: Props) {
+export default function StatusPage({ model: m, mos, inputs }: Props) {
   const [shift, setShift] = useState("all");
-  const m: Model | null = useMemo(() => (mos ? computeStatus(mos.rows, inputs) : null), [mos, inputs]);
-
-  if (!mos || !m) {
-    return (
-      <Card className="mx-auto mt-16 max-w-md text-center">
-        <CardHeader>
-          <CardTitle>MOS 자료가 없습니다</CardTitle>
-          <CardDescription>MOS 데이터 탭에서 MOS에서 받거나, 파일을 넣거나, 복사한 표를 붙여넣으세요.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button onClick={onGoMos}>
-            <Database />
-            MOS 데이터로 가기
-          </Button>
-        </CardContent>
-      </Card>
-    );
-  }
 
   const target = inputs.target;
   const s = m.summary;
@@ -145,13 +109,12 @@ export default function StatusPage({ mos, inputs, onGoMos }: Props) {
 
   const delayPeople = m.checkInDelay.filter((p) => p.manHour > 0).sort((a, b) => b.manHour - a.manHour);
   const sop = inputs.sop;
-  const gap = s.htpGap;
 
   return (
     <div className="grid gap-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">입고 HTP 현황</h1>
+          <h1 className="text-xl font-semibold tracking-tight">상세 표</h1>
           <p className="text-sm text-muted-foreground">
             운영일 {mos.workDate} · {mos.source}
           </p>
@@ -164,27 +127,6 @@ export default function StatusPage({ mos, inputs, onGoMos }: Props) {
             </ToggleGroupItem>
           ))}
         </ToggleGroup>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <Kpi
-          title="HTP Actual"
-          value={fmt1(s.htpActual)}
-          tone={gap === null ? undefined : gap >= 0 ? "good" : "bad"}
-          sub={
-            <span className="flex items-center gap-1">
-              Target {fmt1(s.target)} ·{" "}
-              <span className={cn("inline-flex items-center font-medium", gap !== null && (gap >= 0 ? "text-emerald-600" : "text-red-600"))}>
-                {gap !== null && (gap >= 0 ? <ArrowUpRight className="size-3.5" /> : <ArrowDownRight className="size-3.5" />)}
-                Gap {fmt1(gap)}
-              </span>
-            </span>
-          }
-        />
-        <Kpi title="진열" value={fmtInt(m.taskSummary[2].total)} sub={"Plan D-1 " + fmtInt(s.sopD1)} />
-        <Kpi title="하차" value={fmtInt(m.taskSummary[0].total)} sub={"직납 " + fmtInt(sumHours(m.hourly.unloadDirect, m.hours)) + " · 이관 " + fmtInt(sumHours(m.hourly.unloadTransfer, m.hours))} />
-        <Kpi title="매입" value={fmtInt(m.taskSummary[1].total)} sub={"팔레트 " + fmtInt(sumHours(m.hourly.receivePallet, m.hours))} />
-        <Kpi title="IB MIX" value={fmtPct(s.ibMix)} sub={"S&OP D-0 " + fmtInt(s.sopD0) + " · OB Plan " + fmtInt(s.obPlan)} />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">

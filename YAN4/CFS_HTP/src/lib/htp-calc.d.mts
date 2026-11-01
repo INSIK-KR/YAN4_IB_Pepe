@@ -97,3 +97,6 @@ export function parseMosTable(table: unknown[][]): ParsedMos;
 export function tsvToTable(text: string): string[][];
 export function computeStatus(rows: MosRow[], inputs?: unknown): StatusModel;
 export function total(hourly: Hourly): number;
+export const LOC: Record<string, string[]>;
+export function manHourKey(r: MosRow): string;
+export function workedFraction(r: MosRow): number;

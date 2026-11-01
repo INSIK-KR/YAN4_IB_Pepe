@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Activity, Database, LogIn, CheckCircle2 } from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -9,19 +10,25 @@ import { bridge, type MosSession } from "@/lib/bridge";
 import { defaultInputs, mergeInputs, type Inputs } from "@/lib/inputs";
 import type { MosData } from "@/lib/mos";
 import { fmtInt } from "@/lib/format";
+import { computeStatus } from "@/lib/htp-calc.mjs";
+import { preparePivotRows, type PivotConfig } from "@/lib/pivot.mjs";
+import { defaultPivot, PIVOT_PRESETS, type PresetKey } from "@/lib/pivot-presets";
+import OverviewPage from "@/pages/OverviewPage";
+import PivotPage from "@/pages/PivotPage";
 import StatusPage from "@/pages/StatusPage";
 import MosPage from "@/pages/MosPage";
 import InputsPage from "@/pages/InputsPage";
 
-type Tab = "status" | "mos" | "inputs";
+type Tab = "overview" | "pivot" | "status" | "mos" | "inputs";
 
 export default function App() {
-  const [tab, setTab] = useState<Tab>("status");
+  const [tab, setTab] = useState<Tab>("overview");
   const [version, setVersion] = useState("");
   const [session, setSession] = useState<MosSession>({ loggedIn: false, cookieCount: 0 });
   const [mos, setMos] = useState<MosData | null>(null);
   const [inputs, setInputsState] = useState<Inputs>(defaultInputs);
   const [inputsLoaded, setInputsLoaded] = useState(false);
+  const [pivot, setPivot] = useState<PivotConfig>(defaultPivot);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
@@ -48,9 +55,38 @@ export default function App() {
     saveTimer.current = setTimeout(() => bridge?.saveInputs(next), 300);
   }, []);
 
+  const model = useMemo(() => (mos ? computeStatus(mos.rows, inputs) : null), [mos, inputs]);
+  const prepared = useMemo(() => (mos ? preparePivotRows(mos.rows) : []), [mos]);
+  const openTab = useCallback((next: Tab) => {
+    setTab(next);
+    window.scrollTo(0, 0);
+  }, []);
+  const openPivot = useCallback(
+    (key: PresetKey) => {
+      setPivot(PIVOT_PRESETS.find((p) => p.key === key)!.config);
+      openTab("pivot");
+    },
+    [openTab]
+  );
+
+  const noData = (
+    <Card className="mx-auto mt-16 max-w-md text-center">
+      <CardHeader>
+        <CardTitle>MOS 자료가 없습니다</CardTitle>
+        <CardDescription>MOS 데이터 탭에서 MOS에서 받거나, 파일을 넣거나, 복사한 표를 붙여넣으세요.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Button onClick={() => setTab("mos")}>
+          <Database />
+          MOS 데이터로 가기
+        </Button>
+      </CardContent>
+    </Card>
+  );
+
   return (
     <TooltipProvider>
-      <div className="min-h-screen bg-muted/40">
+      <div className="min-h-screen bg-slate-100">
         <header className="sticky top-0 z-30 border-b bg-background/95 backdrop-blur">
           <div className="flex h-14 items-center gap-6 px-6">
             <div className="flex items-center gap-2 font-semibold tracking-tight">
@@ -59,7 +95,9 @@ export default function App() {
             </div>
             <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
               <TabsList>
-                <TabsTrigger value="status">Status</TabsTrigger>
+                <TabsTrigger value="overview">개요</TabsTrigger>
+                <TabsTrigger value="pivot">피벗</TabsTrigger>
+                <TabsTrigger value="status">상세 표</TabsTrigger>
                 <TabsTrigger value="mos">MOS 데이터</TabsTrigger>
                 <TabsTrigger value="inputs">입력</TabsTrigger>
               </TabsList>
@@ -89,8 +127,21 @@ export default function App() {
           </div>
         </header>
 
-        <main className="mx-auto max-w-[1920px] p-6">
-          {tab === "status" && <StatusPage mos={mos} inputs={inputs} onGoMos={() => setTab("mos")} />}
+        <main className="mx-auto max-w-[1920px] p-4">
+          {(tab === "overview" || tab === "pivot" || tab === "status") && (!mos || !model) && noData}
+          {tab === "overview" && mos && model && (
+            <OverviewPage
+              model={model}
+              prepared={prepared}
+              mos={mos}
+              inputs={inputs}
+              onOpenPivot={openPivot}
+              onOpenDetail={() => openTab("status")}
+              onOpenInputs={() => openTab("inputs")}
+            />
+          )}
+          {tab === "pivot" && mos && <PivotPage prepared={prepared} config={pivot} onChange={setPivot} />}
+          {tab === "status" && mos && model && <StatusPage model={model} mos={mos} inputs={inputs} />}
           {tab === "mos" && <MosPage mos={mos} onLoaded={setMos} onClear={() => setMos(null)} loggedIn={session.loggedIn} />}
           {tab === "inputs" && inputsLoaded && <InputsPage inputs={inputs} onChange={setInputs} />}
         </main>

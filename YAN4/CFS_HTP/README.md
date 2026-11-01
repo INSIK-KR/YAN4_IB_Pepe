@@ -24,7 +24,9 @@ npm run dist
 React + Tailwind + shadcn/ui (`components.json`, 부품은 `src/components/ui`). 글꼴은 Pretendard.
 
 
-- **Status**: 엑셀 Status 시트와 같은 계산 (HTP Actual·Gap, S&OP, 업무별 근무조 비중, H/C, 근무조 시뮬레이션, 시간대별 하차·매입·진열·생산성, 진열 구성, 공정별 MH, 체크인 지연)
+- **개요**: 중요 지표(HTP·진열·하차·매입·MH), 시간대별 진열·생산성 차트, 지금 확인할 것, 근무조별, 입고 흐름, S&OP와 실적, 진열 구성, 공정별 MH, 이관 차량
+- **피벗**: 입고 공정 자료를 행·하위 행·열·값(수량, MH, 인원, 시간당 수량)과 필터로 묶어 보기. 표 복사로 엑셀에 붙여넣기 가능
+- **상세 표**: 엑셀 Status 시트와 같은 계산 (HTP Actual·Gap, S&OP, 업무별 근무조 비중, H/C, 근무조 시뮬레이션, 시간대별 하차·매입·진열·생산성, 진열 구성, 공정별 MH, 체크인 지연)
 - **MOS 데이터**: [MOS에서 받기](로그인 세션으로 exportExcel → getAsyncFileSaveStatus → downloadSavedFile), 엑셀/CSV 파일 끌어놓기, 복사한 표 Ctrl+V. 통합문서에 `MOS` 시트가 있으면 그 시트만 읽음
 - **입력**: Target, S&OP, 진열 비율, Facility 인원, H/C, 이관 차량 하차 정보. 사용자 데이터 폴더의 `inputs.json`에 저장
 
@@ -32,8 +34,9 @@ React + Tailwind + shadcn/ui (`components.json`, 부품은 `src/components/ui`).
 
 - `main.js` — 메인 프로세스 (창, 단일 인스턴스, 입력값 저장, MOS 로그인 창, MOS 요청)
 - `preload.js` — 화면에 `window.cfsHtp` 노출
-- `src/` — 화면 (Vite root). `pages/` Status·MOS 데이터·입력, `components/HourlyTable.tsx` 시간대별 표
+- `src/` — 화면 (Vite root). `pages/` 개요·피벗·상세 표·MOS 데이터·입력, `components/HourlyChart.tsx` 개요 차트, `components/HourlyTable.tsx` 시간대별 표
 - `src/lib/htp-calc.mjs` — 엑셀 계산(Caculation·ManHour·MosDelay → Status)을 옮긴 모듈. 타입은 `htp-calc.d.mts`
+- `src/lib/pivot.mjs` — 피벗 계산. 타입은 `pivot.d.mts`, 자주 쓰는 조합은 `pivot-presets.ts`
 - `src/lib/mos.ts` — MOS 자료 읽기와 MOS에서 받기
 - `src/public/vendor/xlsx.full.min.js` — SheetJS (CFS IB LIVE와 같은 파일)
 - `tools/verify.mjs` — 계산 결과를 엑셀 Status 값과 대조
