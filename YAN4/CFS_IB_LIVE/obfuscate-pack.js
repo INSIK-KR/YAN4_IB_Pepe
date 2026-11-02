@@ -5,6 +5,7 @@
  * Source tree (main.js, renderer/) stays readable for npm start.
  */
 const fs = require("fs");
+require("./build-fs-retry");
 const path = require("path");
 const JavaScriptObfuscator = require("javascript-obfuscator");
 
