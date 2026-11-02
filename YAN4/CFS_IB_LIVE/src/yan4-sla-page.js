@@ -47,6 +47,18 @@
     GWJ1: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=a4eaa0dd-ddd6-461d-9b05-276fa82682d2",
     GWJ3: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=abd65e66-46ee-4dfe-a136-21198d6f5b08",
     SEN2: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=0de8964f-92b5-48db-9478-eac3f56611d4",
+    INC11: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=776f9fe8-5e03-4e6e-baf2-b81d5ac49278",
+    INC12: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=e4f1b9e9-7430-4a32-9f51-878afdb71ca0",
+    INC15: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=a015d6b2-5632-49b8-811f-ca70f6601e46",
+    INC37: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=662a0e18-76ec-4ad7-8279-9a2502c9deff",
+    PYT2: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=3c254c1c-4a83-46d9-9280-60bcf2993e36",
+    SIH1: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=117dfce4-ddef-4117-a16d-b8d6ff5ae74c",
+    YON5: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=1132bba8-cdd0-4e03-97ca-41f0b6d17e7b",
+    CHW2: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=f13e9227-35fd-4ae9-99a1-b1bf518d6f20",
+    DAE4: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=29a72471-f9b4-4495-b0eb-d92a396818cb",
+    DAJ1: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=31c138ab-ed5e-4a9b-8cfe-bc7975c36e78",
+    GMH1: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=ed19d375-e2b1-44ea-bec7-f53fd451834b",
+    GON1: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=9908c4f9-4603-460f-bf8e-43e4f1821eb0",
   };
   var SHAREPOINT_SLA_REFERER =
     "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/Shared%20Documents/Forms/AllItems.aspx";
