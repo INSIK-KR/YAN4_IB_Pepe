@@ -2,7 +2,7 @@
 
 const fs = require("fs");
 const path = require("path");
-const { app, BrowserWindow, ipcMain, session } = require("electron");
+const { app, BrowserWindow, ipcMain, net, session } = require("electron");
 
 const APP_TITLE = "CFS HTP";
 // MOS 로그인 쿠키 등을 앱 재시작 후에도 유지하기 위한 영구 세션
@@ -27,19 +27,43 @@ function looksLoggedIn(url) {
   return !/\/(login|signin|sso|auth|idp)(\/|\?|$)/i.test(u);
 }
 
-/** 로그인 화면만 열어도, 세션이 끝나도 쿠키는 남으므로 MOS 화면이 실제로 열리는지 요청해 본다 */
-async function probeMosLogin() {
+function hostAndPath(url) {
   try {
-    const res = await getSes().fetch(MOS_PROBE_URL, {
-      headers: { Accept: "text/html,application/xhtml+xml,*/*;q=0.8", "User-Agent": CHROME_UA },
-    });
-    if (res.status >= 500) return { loggedIn: false, error: "HTTP " + res.status };
-    if (res.status !== 200 || !looksLoggedIn(res.url)) return { loggedIn: false };
-    const html = await res.text();
-    return { loggedIn: !/type\s*=\s*["']?password/i.test(html) };
-  } catch (e) {
-    return { loggedIn: false, error: e && e.message ? e.message : String(e) };
+    const u = new URL(url);
+    return u.host + u.pathname;
+  } catch (_e) {
+    return String(url);
   }
+}
+
+/**
+ * 로그인 화면만 열어도, 세션이 끝나도 쿠키는 남으므로 MOS 화면이 실제로 열리는지 요청해 본다.
+ * session.fetch 는 최종 주소를 알려주지 않아(res.url 이 빈 값) 이동을 직접 따라가는 net.request 를 쓴다.
+ */
+function probeMosLogin() {
+  return new Promise(function (resolve) {
+    const req = net.request({ url: MOS_PROBE_URL, session: getSes(), useSessionCookies: true, redirect: "manual" });
+    req.setHeader("Accept", "text/html,application/xhtml+xml,*/*;q=0.8");
+    req.setHeader("User-Agent", CHROME_UA);
+    req.on("redirect", function (_status, _method, redirectUrl) {
+      if (looksLoggedIn(redirectUrl)) {
+        req.followRedirect();
+        return;
+      }
+      resolve({ loggedIn: false, detail: hostAndPath(redirectUrl) });
+      req.abort();
+    });
+    req.on("response", function (res) {
+      const status = res.statusCode;
+      if (status >= 500) resolve({ loggedIn: false, error: "HTTP " + status });
+      else resolve({ loggedIn: status === 200, detail: status === 200 ? undefined : "HTTP " + status });
+      req.abort();
+    });
+    req.on("error", function (e) {
+      resolve({ loggedIn: false, error: e && e.message ? e.message : String(e) });
+    });
+    req.end();
+  });
 }
 
 let sessionCheckSeq = 0;
@@ -52,7 +76,7 @@ async function mosSessionStatus() {
     count = cookies ? cookies.length : 0;
   } catch (_e) {}
   const probe = count > 0 ? await probeMosLogin() : { loggedIn: false };
-  const payload = { loggedIn: probe.loggedIn, cookieCount: count, error: probe.error };
+  const payload = { loggedIn: probe.loggedIn, cookieCount: count, error: probe.error, detail: probe.detail };
   // 늦게 끝난 이전 확인이 최신 결과를 덮지 않게 한다
   if (seq === sessionCheckSeq && mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send("cfs-htp-mos-session", payload);

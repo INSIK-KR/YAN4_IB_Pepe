@@ -122,7 +122,7 @@ export default function App() {
                     {session.loggedIn ? "MOS 로그인됨" : "MOS 로그인"}
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>{session.error ? "MOS 연결 확인 실패: " + session.error : "MOS 로그인 창 열기"}</TooltipContent>
+                <TooltipContent>{session.error ? "MOS 연결 확인 실패: " + session.error : session.detail ? "로그인 필요 (" + session.detail + ")" : "MOS 로그인 창 열기"}</TooltipContent>
               </Tooltip>
               {version && <span className="text-xs text-muted-foreground">v{version}</span>}
             </div>
