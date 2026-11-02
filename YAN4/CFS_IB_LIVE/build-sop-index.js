@@ -7,6 +7,21 @@
 const fs = require("fs");
 const path = require("path");
 
+/** 프로젝트 폴더 파일이 0.1초쯤 잠겨 open 이 UNKNOWN 으로 실패할 때가 있음 → 잠시 뒤 다시 씀 */
+async function writeFileWithRetry(file, text) {
+  for (var attempt = 1; ; attempt++) {
+    try {
+      fs.writeFileSync(file, text, "utf8");
+      return;
+    } catch (e) {
+      if (attempt >= 10) throw e;
+      await new Promise(function (r) {
+        setTimeout(r, 200);
+      });
+    }
+  }
+}
+
 async function main() {
   const root = __dirname;
   const pdfPath = path.join(root, "assets", "sop", "Fresh-Inbound-SOP.pdf");
@@ -43,7 +58,7 @@ async function main() {
     pageCount: pages.length,
     pages: pages,
   };
-  fs.writeFileSync(outPath, JSON.stringify(payload), "utf8");
+  await writeFileWithRetry(outPath, JSON.stringify(payload));
   var kb = (fs.statSync(outPath).size / 1024).toFixed(1);
   console.log(
     "\n[build-sop-index] OK",
