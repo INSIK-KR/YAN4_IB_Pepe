@@ -1,6 +1,6 @@
 // preload.js 가 노출하는 window.cfsHtp (Electron 밖에서 열면 없음)
 
-export type MosSession = { loggedIn: boolean; cookieCount: number };
+export type MosSession = { loggedIn: boolean; cookieCount: number; error?: string };
 
 export type MosFetchMessage = {
   url: string;

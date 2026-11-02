@@ -14,7 +14,7 @@ type Props = { prepared: PreparedRow[]; config: PivotConfig; onChange: (next: Pi
 type Sort = { col: string; dir: "desc" | "asc" } | null;
 
 const NONE = "__none__";
-const FILTER_FIELDS: PivotFieldKey[] = ["group", "task", "channel", "temp", "pick", "shiftGroup"];
+const FILTER_FIELDS: PivotFieldKey[] = ["group", "task", "channel", "temp", "locType", "pick", "shiftGroup"];
 const TOTAL_COL = "__total__";
 
 function labelOf(field: PivotFieldKey | "") {

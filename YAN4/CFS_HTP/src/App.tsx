@@ -44,8 +44,10 @@ export default function App() {
       },
       () => setInputsLoaded(true)
     );
-    bridge.mosStatus().then(setSession);
-    return bridge.onMosSession(setSession);
+    // 결과는 onMosSession 으로 온다 (늦게 끝난 확인이 새 결과를 덮지 않게 한 곳에서만 받음)
+    const off = bridge.onMosSession(setSession);
+    void bridge.mosStatus();
+    return off;
   }, []);
 
   // 입력값은 고칠 때마다 0.3초 모아서 저장
@@ -73,7 +75,7 @@ export default function App() {
     <Card className="mx-auto mt-16 max-w-md text-center">
       <CardHeader>
         <CardTitle>MOS 자료가 없습니다</CardTitle>
-        <CardDescription>MOS 데이터 탭에서 MOS에서 받거나, 파일을 넣거나, 복사한 표를 붙여넣으세요.</CardDescription>
+        <CardDescription>MOS 데이터 탭에서 날짜를 골라 MOS에서 받으세요.</CardDescription>
       </CardHeader>
       <CardContent>
         <Button onClick={() => setTab("mos")}>
@@ -120,7 +122,7 @@ export default function App() {
                     {session.loggedIn ? "MOS 로그인됨" : "MOS 로그인"}
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>MOS 로그인 창 열기</TooltipContent>
+                <TooltipContent>{session.error ? "MOS 연결 확인 실패: " + session.error : "MOS 로그인 창 열기"}</TooltipContent>
               </Tooltip>
               {version && <span className="text-xs text-muted-foreground">v{version}</span>}
             </div>

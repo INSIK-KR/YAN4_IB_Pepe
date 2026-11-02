@@ -12,6 +12,7 @@ const CHROME_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 const MOS_ORIGIN = "https://mos.coupang.net/";
 const MOS_LOGIN_URL = "https://mos.coupang.net/kpi/gross-uph?resource=95";
+const MOS_PROBE_URL = "https://mos.coupang.net/status/worker-history?resource=38";
 
 let mainWindow = null;
 let mosLoginWindow = null;
@@ -20,24 +21,43 @@ function getSes() {
   return session.fromPartition(PARTITION);
 }
 
-/** MOS 쿠키 개수로 로그인 여부를 본다 (CFS IB LIVE refreshSessionStatus 와 같은 기준) */
+function looksLoggedIn(url) {
+  const u = String(url || "");
+  if (u.indexOf("https://mos.coupang.net") !== 0) return false;
+  return !/\/(login|signin|sso|auth|idp)(\/|\?|$)/i.test(u);
+}
+
+/** 로그인 화면만 열어도, 세션이 끝나도 쿠키는 남으므로 MOS 화면이 실제로 열리는지 요청해 본다 */
+async function probeMosLogin() {
+  try {
+    const res = await getSes().fetch(MOS_PROBE_URL, {
+      headers: { Accept: "text/html,application/xhtml+xml,*/*;q=0.8", "User-Agent": CHROME_UA },
+    });
+    if (res.status >= 500) return { loggedIn: false, error: "HTTP " + res.status };
+    if (res.status !== 200 || !looksLoggedIn(res.url)) return { loggedIn: false };
+    const html = await res.text();
+    return { loggedIn: !/type\s*=\s*["']?password/i.test(html) };
+  } catch (e) {
+    return { loggedIn: false, error: e && e.message ? e.message : String(e) };
+  }
+}
+
+let sessionCheckSeq = 0;
+
 async function mosSessionStatus() {
+  const seq = ++sessionCheckSeq;
   let count = 0;
   try {
     const cookies = await getSes().cookies.get({ url: MOS_ORIGIN });
     count = cookies ? cookies.length : 0;
   } catch (_e) {}
-  const payload = { loggedIn: count > 0, cookieCount: count };
-  if (mainWindow && !mainWindow.isDestroyed()) {
+  const probe = count > 0 ? await probeMosLogin() : { loggedIn: false };
+  const payload = { loggedIn: probe.loggedIn, cookieCount: count, error: probe.error };
+  // 늦게 끝난 이전 확인이 최신 결과를 덮지 않게 한다
+  if (seq === sessionCheckSeq && mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send("cfs-htp-mos-session", payload);
   }
   return payload;
-}
-
-function looksLoggedIn(url) {
-  const u = String(url || "");
-  if (u.indexOf("https://mos.coupang.net") !== 0) return false;
-  return !/\/(login|signin|sso|auth|idp)(\/|\?|$)/i.test(u);
 }
 
 function openMosLoginWindow() {
@@ -155,6 +175,10 @@ function createMainWindow() {
   // npm run dev 로 띄운 Vite 서버가 있으면 그 화면을, 아니면 빌드된 dist 를 연다
   if (process.env.CFS_HTP_DEV_URL) mainWindow.loadURL(process.env.CFS_HTP_DEV_URL);
   else mainWindow.loadFile(path.join(__dirname, "dist", "index.html"));
+  // 세션이 끝났을 수 있어 창으로 돌아올 때마다 다시 확인
+  mainWindow.on("focus", function () {
+    void mosSessionStatus();
+  });
   mainWindow.on("closed", function () {
     mainWindow = null;
   });

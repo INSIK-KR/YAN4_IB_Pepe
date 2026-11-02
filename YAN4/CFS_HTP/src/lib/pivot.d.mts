@@ -1,7 +1,7 @@
 // pivot.mjs 타입
 import type { MosRow } from "./htp-calc.mjs";
 
-export type PivotFieldKey = "group" | "task" | "channel" | "temp" | "pick" | "shiftGroup" | "hourName" | "contract" | "location" | "employee";
+export type PivotFieldKey = "group" | "task" | "channel" | "temp" | "locType" | "zone" | "pick" | "shiftGroup" | "hourName" | "contract" | "location" | "employee";
 export type PivotMeasureKey = "qty" | "mh" | "hc" | "uph";
 export type PreparedRow = Record<PivotFieldKey, string> & { qty: number; mh: number };
 export type PivotConfig = {

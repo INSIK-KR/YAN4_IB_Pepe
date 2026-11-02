@@ -2,7 +2,7 @@
  * MOS 행을 원하는 행·열로 묶어 보는 피벗 계산.
  * 입고 공정(TASKS)만 대상으로 하고, MH는 ManHour 시트와 같이 중복 행을 한 번만 센다 (체크인 지연 MH 미포함).
  */
-import { HOURS, SHIFT_GROUPS, TASKS, LOC, manHourKey, workedFraction } from "./htp-calc.mjs";
+import { HOURS, SHIFT_GROUPS, TASKS, manHourKey, workedFraction } from "./htp-calc.mjs";
 
 const TASK_ORDER = TASKS.map(function (t) {
   return t.label;
@@ -15,18 +15,41 @@ TASKS.forEach(function (t) {
   if (GROUP_ORDER.indexOf(group) < 0) GROUP_ORDER.push(group);
 });
 
-const TEMP_BY_LOC = {};
-[
-  ["상온", LOC.ambientEach.concat(LOC.ambientPallet)],
-  // 2CM 은 엑셀 묶음(LOC)에는 없지만 냉장으로 본다
-  ["냉장", LOC.chilledEach.concat(LOC.chilledPallet, ["2CM"])],
-  ["냉동", LOC.frozenEach.concat(LOC.frozenPallet)],
-  ["로켓마트", LOC.rocketEach.concat(LOC.rocketPallet)],
-].forEach(function (entry) {
-  entry[1].forEach(function (code) {
-    TEMP_BY_LOC[code] = entry[0];
-  });
+// Location → [온도대, 선반·팔레트]. 1CT·1CPT·2CP·2CPZ 는 표에 없지만 엑셀 묶음(LOC)에 있어 넣어 둔다
+const ZONE_BY_LOC = {
+  "1A": ["상온", "선반"],
+  "1AP": ["상온", "팔레트"],
+  "1APR": ["로켓마트", "팔레트"],
+  "1AR": ["로켓마트", "선반"],
+  "1PC": ["냉장", "선반"],
+  "1C": ["냉장", "팔레트"],
+  "1CE": ["냉장", "선반"],
+  "1CM": ["냉장", "선반"],
+  "1CP": ["냉장", "팔레트"],
+  "1CPE": ["냉장", "팔레트"],
+  "1CPM": ["냉장", "팔레트"],
+  "1F": ["냉동", "선반"],
+  "1FM": ["냉동", "선반"],
+  "1FP": ["냉동", "팔레트"],
+  "1FPM": ["냉동", "팔레트"],
+  "1CEZ": ["냉장", "선반"],
+  "1CPZ": ["냉장", "팔레트"],
+  "1FPZ": ["냉동", "팔레트"],
+  "2C": ["냉장", "선반"],
+  "2CM": ["냉장", "선반"],
+  "1CT": ["냉장", "선반"],
+  "1CPT": ["냉장", "팔레트"],
+  "2CP": ["냉장", "팔레트"],
+  "2CPZ": ["냉장", "팔레트"],
+};
+const NO_ZONE = ["기타", "기타"];
+const TEMP_ORDER = ["상온", "냉장", "냉동", "로켓마트", "기타"];
+const LOC_TYPE_ORDER = ["선반", "팔레트", "기타"];
+const ZONE_ORDER = [];
+TEMP_ORDER.slice(0, 4).forEach(function (t) {
+  ZONE_ORDER.push(t + " 선반", t + " 팔레트");
 });
+ZONE_ORDER.push("기타");
 
 const CHANNEL = { NORMAL: "직납", TRANSFER: "이관" };
 // 하차는 MOS Inbound Type 이 비어 있어 공정으로 구분한다
@@ -49,7 +72,9 @@ const PIVOT_FIELDS = [
   { key: "group", label: "공정 묶음", order: GROUP_ORDER },
   { key: "task", label: "공정", order: TASK_ORDER },
   { key: "channel", label: "직납·이관", order: ["직납", "이관", "기타"] },
-  { key: "temp", label: "온도대", order: ["상온", "냉장", "냉동", "로켓마트", "기타"] },
+  { key: "temp", label: "온도대", order: TEMP_ORDER },
+  { key: "locType", label: "선반·팔레트", order: LOC_TYPE_ORDER },
+  { key: "zone", label: "온도대·유형", order: ZONE_ORDER },
   { key: "pick", label: "개별·팔레트", order: ["개별", "케이스", "팔레트", "기타"] },
   {
     key: "shiftGroup",
@@ -84,11 +109,14 @@ function preparePivotRows(rows) {
       seen.add(key);
       mh = (workedFraction(r) * 24 * 8) / 9;
     }
+    const zone = ZONE_BY_LOC[r.location] || NO_ZONE;
     out.push({
       group: t.group,
       task: t.label,
       channel: TASK_CHANNEL[t.label] || CHANNEL[r.inboundType] || "기타",
-      temp: TEMP_BY_LOC[r.location] || "기타",
+      temp: zone[0],
+      locType: zone[1],
+      zone: zone === NO_ZONE ? "기타" : zone[0] + " " + zone[1],
       pick: PICK[r.pickType] || "기타",
       shiftGroup: shiftOfHour(r.hour),
       hourName: hourName(r.hour),

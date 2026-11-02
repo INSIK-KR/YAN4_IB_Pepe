@@ -1,5 +1,5 @@
-// MOS 자료 읽기 (엑셀·붙여넣기)와 MOS에서 받기 (exportExcel → getAsyncFileSaveStatus → downloadSavedFile)
-import { parseMosTable, tsvToTable } from "@/lib/htp-calc.mjs";
+// MOS에서 받기 (exportExcel → getAsyncFileSaveStatus → downloadSavedFile)
+import { parseMosTable } from "@/lib/htp-calc.mjs";
 import { bridge } from "@/lib/bridge";
 
 export type MosRow = ReturnType<typeof parseMosTable>["rows"][number];
@@ -14,7 +14,7 @@ function fromTable(table: unknown[][], source: string): LoadResult {
 }
 
 /** 엑셀/CSV 바이트 → MOS 행. 큰 통합문서도 MOS 시트만 읽는다 */
-export function loadWorkbook(buf: ArrayBuffer, label: string): LoadResult {
+function loadWorkbook(buf: ArrayBuffer, label: string): LoadResult {
   const XLSX = window.XLSX;
   if (!XLSX) return { ok: false, error: "엑셀 읽기 모듈을 불러오지 못했습니다." };
   const probe = XLSX.read(buf, { type: "array", bookSheets: true });
@@ -22,10 +22,6 @@ export function loadWorkbook(buf: ArrayBuffer, label: string): LoadResult {
   const wb = XLSX.read(buf, { type: "array", sheets: [sheetName], dense: true });
   const table = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, raw: true, defval: "" });
   return fromTable(table, label + " [" + sheetName + "]");
-}
-
-export function loadPastedText(text: string): LoadResult {
-  return fromTable(tsvToTable(text), "붙여넣기");
 }
 
 // ---------- MOS에서 받기 ----------
@@ -77,6 +73,7 @@ export type DownloadResult = { ok: true; data: MosData; bytes: number } | { ok: 
 export async function downloadFromMos(date: string, onProgress: (msg: string) => void): Promise<DownloadResult> {
   if (!bridge) return { ok: false, error: "앱(exe)에서만 MOS에서 받을 수 있습니다." };
   const st = await bridge.mosStatus();
+  if (st.error) return { ok: false, error: "MOS에 연결하지 못했습니다: " + st.error };
   if (!st.loggedIn) return { ok: false, error: "MOS 로그인이 필요합니다. 오른쪽 위 MOS 로그인을 눌러주세요." };
 
   onProgress("MOS에 엑셀 만들기 요청 중…");
@@ -92,6 +89,7 @@ export async function downloadFromMos(date: string, onProgress: (msg: string) =>
   if (!exp.ok) return { ok: false, error: "엑셀 만들기 실패: " + (exp.error || "HTTP " + exp.status) };
   const rawExport = "exportExcel 응답:\n" + String(exp.body || "").slice(0, 2000);
   const job = parseExportResponse(exp.body || "", requestedAt);
+  if (!job && /<html/i.test(exp.body || "")) return { ok: false, error: "MOS 로그인이 끊긴 것 같습니다. 오른쪽 위 MOS 로그인을 다시 해주세요." };
   if (!job) return { ok: false, error: "MOS 응답에서 파일 ID를 찾지 못했습니다. 아래 내용을 개발자에게 전달해 주세요.", detail: rawExport };
 
   for (let i = 0; ; i++) {
