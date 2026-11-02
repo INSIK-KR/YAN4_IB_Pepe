@@ -54,7 +54,7 @@ node tools/verify.mjs <MOS 시트를 탭 구분으로 내보낸 파일> <Status 
 
 - Status L5:P11(근무조별 인원 환산)은 엑셀에 값이 고정돼 있어, R열과 같은 식(시간대 MH 합 ÷ 8)으로 계산
 - 이관 차량 대수·하차 PLT(Status 12~17행)는 엑셀 수식이 피벗의 엉뚱한 열(RM·총합계·빈 열)을 가리키고 있어, 입력한 차량 목록에서 도착 시간대·온도별로 직접 집계
-- 개요·피벗의 온도대와 선반·팔레트는 Location 표(`src/lib/pivot.mjs` ZONE_BY_LOC)를 따름. 상세 표의 진열 구성은 엑셀 묶음(LOC) 그대로라 2CM이 없고 1C가 개별 쪽임
+- 개요·피벗의 온도대와 선반·팔레트는 Location 표(`src/lib/pivot.mjs` ZONE_BY_LOC)를 따름. 코드에 P가 있으면 팔레트. 상세 표의 진열 구성은 엑셀 묶음(LOC) 그대로라 2CM이 없음
 
 ## 아직 안 옮긴 부분 (Status 오른쪽)
 

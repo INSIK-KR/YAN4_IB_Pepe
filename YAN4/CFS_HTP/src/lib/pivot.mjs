@@ -15,14 +15,14 @@ TASKS.forEach(function (t) {
   if (GROUP_ORDER.indexOf(group) < 0) GROUP_ORDER.push(group);
 });
 
-// Location → [온도대, 선반·팔레트]. 1CT·1CPT·2CP·2CPZ 는 표에 없지만 엑셀 묶음(LOC)에 있어 넣어 둔다
+// Location → [온도대, 선반·팔레트]. 코드에 P가 있으면 팔레트. 1CT·1CPT·2CP·2CPZ 는 표에 없지만 엑셀 묶음(LOC)에 있어 넣어 둔다
 const ZONE_BY_LOC = {
   "1A": ["상온", "선반"],
   "1AP": ["상온", "팔레트"],
   "1APR": ["로켓마트", "팔레트"],
   "1AR": ["로켓마트", "선반"],
-  "1PC": ["냉장", "선반"],
-  "1C": ["냉장", "팔레트"],
+  "1PC": ["냉장", "팔레트"],
+  "1C": ["냉장", "선반"],
   "1CE": ["냉장", "선반"],
   "1CM": ["냉장", "선반"],
   "1CP": ["냉장", "팔레트"],
