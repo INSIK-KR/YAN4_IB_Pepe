@@ -6,6 +6,7 @@
  * 3) Copy only the .exe into ./release/
  */
 const fs = require("fs");
+require("./build-fs-retry");
 const path = require("path");
 const { spawnSync } = require("child_process");
 

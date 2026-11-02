@@ -4,6 +4,7 @@
  * Copy src/ assets into renderer/ for the desktop shell.
  */
 const fs = require("fs");
+require("./build-fs-retry");
 const path = require("path");
 
 const extRoot = path.join(__dirname, "src");
