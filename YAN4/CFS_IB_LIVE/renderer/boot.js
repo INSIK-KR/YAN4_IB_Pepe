@@ -261,11 +261,20 @@
         });
     }
 
-    api.list.forEach(function (c) {
-      var opt = document.createElement("option");
-      opt.value = c[0];
-      opt.textContent = c[1] + " (" + c[0] + ")";
-      sel.appendChild(opt);
+    api.regions.forEach(function (region) {
+      var group = document.createElement("optgroup");
+      group.label = region[0];
+      region[1].forEach(function (code) {
+        var c = api.list.find(function (row) {
+          return row[1] === code;
+        });
+        if (!c) return;
+        var opt = document.createElement("option");
+        opt.value = c[0];
+        opt.textContent = c[1] + " (" + c[0] + ")";
+        group.appendChild(opt);
+      });
+      sel.appendChild(group);
     });
     paintIdle();
     refreshCurrent();
