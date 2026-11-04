@@ -6,7 +6,7 @@
 
   var SLA_UI_REV = "280";
   var DIRECT_PENDING_NUM_COLOR = "#b45309";
-  var PROGRESS_VENDOR_OFFSET_PX = 100;
+  var PROGRESS_VENDOR_OFFSET_PX = 0;
   var SLA_DIRECT_DONE_SKIP_KEY = "yna4-sla-direct-done-skip";
   var SLA_LOOKBACK_DAYS_KEY = "yna4-sla-lookback-days";
   var SLA_AUTO_INTERVAL_MIN = 30;
@@ -279,6 +279,10 @@
   var PO_MGMT_ORIGIN = "https://po-management.coupang.net";
   var PO_LIST_DOWNLOAD_PATH = "/po/sku/list-download";
   var PO_LIST_REFERER = PO_MGMT_ORIGIN + "/po/sku/list";
+  var INBOUND_SCHEDULE_URL =
+    "https://shipments.coupang.net/ibs/inbound-booking-schedule";
+  var INBOUND_SCHEDULE_REFERER =
+    "https://shipments.coupang.net/app/inbound-schedule";
   var PO_FC_CODE = "YAN4";
 
   /** 상단 센터 전환(가용화 모듈 __CFS_CENTER__) 기준 센터명 — 없으면 YAN4 */
@@ -862,7 +866,12 @@
               resolve(String(res.body || ""));
               return;
             }
-            reject(new Error((res && res.error) || "inbound fetch 실패"));
+            reject(
+              new Error(
+                (res && res.error) ||
+                  (res && res.status ? "HTTP " + res.status : "inbound fetch 실패")
+              )
+            );
           }
         );
         return;
@@ -7830,6 +7839,8 @@
       ["purchaseOrderSeq", "발주번호"],
       ["skuSeq", "SKU ID"],
       ["skuName", "SKU 이름"],
+      // 업체 ID 는 업체명 앞이어야 제목과 값 순서가 맞음 (PO 사이트와 같은 순서)
+      ["vendorId", "업체 ID"],
       ["vendorName", "업체명"],
       ["temperature", "온도"],
       ["purchaseOrderSkuStatus", "스큐상태"],
@@ -8012,6 +8023,7 @@
     var names = {
       purchaseOrderSeq: ["발주번호"],
       vendorName: ["업체명"],
+      vendorId: ["업체 ID"],
       temperature: ["온도"],
       skuSeq: ["sku id", "skuid", "skuseq"],
       skuName: ["sku 이름", "sku이름", "skuname", "상품명", "sku name"],
@@ -8862,6 +8874,7 @@
         skuSeq: normalizeCellText(poCellAt(cells, idx.skuSeq)),
         skuName: normalizeCellText(poCellAt(cells, idx.skuName)),
         vendorName: vendorName,
+        vendorId: normalizeCellText(poCellAt(cells, idx.vendorId)),
         temperature: tempZone,
         status: status,
         purchaseOrderCount: parsePoQty(
@@ -8957,8 +8970,13 @@
       vendor = row.vendorName;
       if (!vendor) continue;
       at = row.unloadAt.getTime();
-      if (!byVendor[vendor] || at < byVendor[vendor].unloadAt.getTime()) {
-        byVendor[vendor] = { vendorName: vendor, unloadAt: row.unloadAt };
+      if (!byVendor[vendor]) {
+        byVendor[vendor] = { vendorName: vendor, unloadAt: row.unloadAt, vendorIds: [] };
+      } else if (at < byVendor[vendor].unloadAt.getTime()) {
+        byVendor[vendor].unloadAt = row.unloadAt;
+      }
+      if (row.vendorId && byVendor[vendor].vendorIds.indexOf(row.vendorId) < 0) {
+        byVendor[vendor].vendorIds.push(row.vendorId);
       }
     }
     var out = Object.keys(byVendor).map(function (k) {
@@ -8968,6 +8986,103 @@
       return a.unloadAt.getTime() - b.unloadAt.getTime();
     });
     return out;
+  }
+
+  function addInboundBooking(map, key, status, time) {
+    if (!key) return;
+    if (!map[key]) map[key] = { ARRIVED: [], BOOKED: [] };
+    if (map[key][status].indexOf(time) < 0) map[key][status].push(time);
+  }
+
+  /** 쉽먼트 입차예약 응답 → 업체 ID·업체명별 예약시간. 빈 슬롯·재고이관은 업체가 없어 빠짐 */
+  function parseInboundBookingSchedule(text) {
+    var obj = JSON.parse(String(text || ""));
+    if (!obj || obj.success !== true || !obj.body) {
+      throw new Error("쉽먼트 응답 오류");
+    }
+    var byId = Object.create(null);
+    var byName = Object.create(null);
+    var times = obj.body.inboundBookingTimeList || [];
+    var ti, si, mi, raw, time, slots, slot, status, milkrun;
+    for (ti = 0; ti < times.length; ti++) {
+      raw = String(times[ti].inboundTime || "").trim();
+      if (!/^\d{4}$/.test(raw)) continue;
+      time = raw.slice(0, 2) + ":" + raw.slice(2);
+      slots = times[ti].inboundBookingSlotList || [];
+      for (si = 0; si < slots.length; si++) {
+        slot = slots[si];
+        status = slot.bookingStatus;
+        if (status !== "ARRIVED" && status !== "BOOKED") continue;
+        addInboundBooking(byId, slot.vendorId, status, time);
+        addInboundBooking(byName, normKey(slot.vendorName), status, time);
+        milkrun = slot.milkrunVendorIdList || [];
+        for (mi = 0; mi < milkrun.length; mi++) {
+          addInboundBooking(byId, milkrun[mi], status, time);
+        }
+      }
+    }
+    return { byId: byId, byName: byName };
+  }
+
+  /** 로그인 페이지(HTML)·401·403 은 로그인 문제, 나머지는 실제 원인을 보여 준다 */
+  function inboundBookingErrorText(err) {
+    var msg = String((err && err.message) || err || "");
+    if ((err && err.name === "SyntaxError") || /HTTP 40[13]\b/.test(msg)) {
+      return "쉽먼트 로그인 필요";
+    }
+    return "쉽먼트 조회 실패 (" + msg + ")";
+  }
+
+  /** 입차예약이 안 나와도 하차시간 표는 그대로 보여 준다 */
+  async function fetchInboundBookingPack(operYmd) {
+    var q = new URLSearchParams({
+      centerCode: poFcCode(),
+      scheduleDate: String(operYmd || "").replace(/\D/g, ""),
+    });
+    try {
+      var text = await inboundGet(INBOUND_SCHEDULE_URL + "?" + q.toString(), {
+        referer: INBOUND_SCHEDULE_REFERER,
+        accept: "application/json, text/plain, */*",
+      });
+      return parseInboundBookingSchedule(text);
+    } catch (eBooking) {
+      console.warn("[YAN4 입차예약]", eBooking);
+      return { error: inboundBookingErrorText(eBooking) };
+    }
+  }
+
+  /** 업체 ID로 찾고, ID가 없는 줄만 업체명으로. 도착 건을 먼저 쓰고 없으면 예약 건 */
+  function inboundBookingTimesForVendor(vendor, pack) {
+    var hits = [];
+    var ids = vendor.vendorIds || [];
+    var i;
+    for (i = 0; i < ids.length; i++) {
+      if (pack.byId[ids[i]]) hits.push(pack.byId[ids[i]]);
+    }
+    if (!ids.length && pack.byName[normKey(vendor.vendorName)]) {
+      hits.push(pack.byName[normKey(vendor.vendorName)]);
+    }
+    function pick(status) {
+      var out = [];
+      hits.forEach(function (h) {
+        h[status].forEach(function (t) {
+          if (out.indexOf(t) < 0) out.push(t);
+        });
+      });
+      return out.sort();
+    }
+    var arrived = pick("ARRIVED");
+    return arrived.length ? arrived : pick("BOOKED");
+  }
+
+  function applyInboundBookingTimes(model, pack) {
+    if (!pack || pack.error) {
+      model.bookingError = pack ? pack.error : "";
+      return;
+    }
+    (model.vendors || []).forEach(function (v) {
+      v.bookingTimes = inboundBookingTimesForVendor(v, pack);
+    });
   }
 
   function buildProgressPanelModel(poRows, shrinkRows, operYmd, shrinkReceiveBySku) {
@@ -9151,7 +9266,7 @@
 
     var right = document.createElement("div");
     right.className = "yna4-sla-progress-right";
-    right.appendChild(buildProgressVendorSection(model.vendors));
+    right.appendChild(buildProgressVendorSection(model.vendors, model.bookingError));
 
     grid.appendChild(left);
     grid.appendChild(right);
@@ -9383,14 +9498,16 @@
     return sec;
   }
 
-  function buildProgressVendorSection(vendors) {
+  function buildProgressVendorSection(vendors, bookingError) {
     var sec = document.createElement("div");
     sec.className = "yna4-sla-progress-section yna4-sla-progress-section--vendors";
     var panel = document.createElement("div");
     panel.className = "yna4-sla-progress-vendors-panel";
     var groupHdr = document.createElement("div");
     groupHdr.className = "yna4-sla-progress-vendor-group-hdr";
-    groupHdr.textContent = "하차시간";
+    groupHdr.textContent = bookingError
+      ? "입고예약 및 하차시간 · " + bookingError
+      : "입고예약 및 하차시간";
     panel.appendChild(groupHdr);
     var scroll = document.createElement("div");
     scroll.className = "yna4-sla-progress-vendors-scroll";
@@ -9400,7 +9517,8 @@
     var thead = document.createElement("thead");
     thead.innerHTML =
       "<tr><th class='yna4-sla-progress-vendor-th-label'>업체명</th>" +
-      "<th>하차시간</th></tr>";
+      "<th class='yna4-sla-progress-vendor-th-booking'>예약시간</th>" +
+      "<th class='yna4-sla-progress-vendor-th-unload'>하차시간</th></tr>";
     table.appendChild(thead);
     var tbody = document.createElement("tbody");
     var vi, tr, row;
@@ -9411,6 +9529,10 @@
       tr.innerHTML =
         "<td class='yna4-sla-progress-td-label'>" +
         escapeHtml(row.vendorName) +
+        "</td><td class='yna4-sla-progress-num yna4-sla-progress-booking'>" +
+        (row.bookingTimes && row.bookingTimes.length
+          ? escapeHtml(row.bookingTimes.join(", "))
+          : "-") +
         "</td><td class='yna4-sla-progress-num'>" +
         formatProgressDateTime(row.unloadAt) +
         "</td>";
@@ -9419,7 +9541,7 @@
     if (!vendors.length) {
       tr = document.createElement("tr");
       tr.innerHTML =
-        "<td colspan='2' class='yna4-sla-progress-shrink-empty'>당일 하차시간 없음</td>";
+        "<td colspan='3' class='yna4-sla-progress-shrink-empty'>당일 하차시간 없음</td>";
       tbody.appendChild(tr);
     }
     table.appendChild(tbody);
@@ -9447,6 +9569,9 @@
       ")";
     var poPack = await fetchPoSkuLinesAll(statusEl, dr);
     if (stopRequested) return { stopped: true };
+    statusEl.textContent = prefix + "쉽먼트 입차예약…";
+    var bookingPack = await fetchInboundBookingPack(dr.operationalYmd);
+    if (stopRequested) return { stopped: true };
     var shrinkRows = rememberShrinkTargetRows(
       buildShrinkTargetRowsFromData(
         lastShrinkSlaLookup,
@@ -9460,6 +9585,7 @@
       dr.operationalYmd,
       poPack.shrinkReceiveBySku
     );
+    applyInboundBookingTimes(model, bookingPack);
     return {
       model: model,
       poRows: poPack.rows,
@@ -13394,7 +13520,7 @@
       ".yna4-sla-pivot-host{margin-top:8px!important}" +
       ".yna4-sla-progress-host+.yna4-sla-pivot-host{margin-top:8px!important}" +
       ".yna4-sla-progress-head{display:block!important;font-size:10px;font-weight:700;color:#64748b;margin-bottom:4px;line-height:1.3}" +
-      ".yna4-sla-progress-grid{display:grid!important;grid-template-columns:minmax(0,1fr) 196px!important;gap:8px!important;align-items:start!important;width:100%!important;box-sizing:border-box!important}" +
+      ".yna4-sla-progress-grid{display:grid!important;grid-template-columns:minmax(0,1fr) 340px!important;gap:8px!important;align-items:start!important;width:100%!important;box-sizing:border-box!important}" +
       ".yna4-sla-progress-left,.yna4-sla-progress-right{display:flex!important;flex-direction:column!important;min-width:0!important;width:100%!important}" +
       ".yna4-sla-progress-right{align-self:start!important;height:auto!important}" +
       ".yna4-sla-progress-section{display:block!important;margin-bottom:0!important;visibility:visible!important;opacity:1!important;width:100%!important}" +
@@ -13407,10 +13533,11 @@
       ".yna4-sla-progress-table--combined{width:100%!important;table-layout:fixed!important}" +
       ".yna4-sla-progress-table--vendors{font:10px/1.25 Segoe UI,Malgun Gothic,sans-serif!important;width:100%!important;table-layout:fixed!important}" +
       ".yna4-sla-progress-table--vendors th,.yna4-sla-progress-table--vendors td{padding:2px 4px!important}" +
-      ".yna4-sla-progress-table--vendors thead th{position:sticky!important;top:0!important;z-index:1!important;background:#475569!important;color:#fff!important;font-size:9px!important;text-align:center!important;font-weight:700!important}" +
-      ".yna4-sla-progress-table--vendors .yna4-sla-progress-vendor-th-label{text-align:left!important}" +
-      ".yna4-sla-progress-table--vendors .yna4-sla-progress-td-label{max-width:120px;overflow:hidden;text-overflow:ellipsis}" +
-      ".yna4-sla-progress-table--vendors .yna4-sla-progress-num{font-size:9px!important}" +
+      ".yna4-sla-progress-table--vendors thead th{position:sticky!important;top:0!important;z-index:1!important;background:#475569!important;color:#fff!important;font-size:9px!important;text-align:left!important;font-weight:700!important}" +
+      ".yna4-sla-progress-table--vendors .yna4-sla-progress-vendor-th-booking,.yna4-sla-progress-table--vendors .yna4-sla-progress-vendor-th-unload{width:76px!important}" +
+      ".yna4-sla-progress-table--vendors .yna4-sla-progress-td-label{max-width:none!important;white-space:normal!important;overflow-wrap:anywhere!important}" +
+      ".yna4-sla-progress-table--vendors .yna4-sla-progress-num{font-size:9px!important;text-align:left!important}" +
+      ".yna4-sla-progress-table--vendors .yna4-sla-progress-booking{white-space:normal!important}" +
       ".yna4-sla-progress-table thead{display:table-header-group!important}" +
       ".yna4-sla-progress-table tbody{display:table-row-group!important}" +
       ".yna4-sla-progress-table tr{display:table-row!important}" +

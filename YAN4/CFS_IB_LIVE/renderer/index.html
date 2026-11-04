@@ -33,6 +33,18 @@
       position: relative;
     }
     #banner strong { color: #fbbf24; }
+    /* 글자가 길어도 상단바가 2줄로 늘어나지 않게 남는 폭 안에서 자름 */
+    /* 페이지 버튼은 shell.js 가 상태 글자 뒤에 끼워 넣어서 순서로 제목 옆에 둠 */
+    #banner .yna4-shell-page-nav { order: 1; }
+    #banner .login-group { order: 3; }
+    #sessStatus {
+      order: 2;
+      flex: 1 1 0;
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
     #banner .ok { color: #86efac; }
     #banner .bad { color: #fca5a5; }
     #banner .hint { color: #94a3b8; }
@@ -148,6 +160,7 @@
     #btnLoginCoupang { background: #fbbf24; color: #0f172a; }
     #btnLoginPo { background: #a78bfa; color: #0f172a; }
     #btnLoginMos { background: #2dd4bf; color: #0f172a; }
+    #btnLoginShipments { background: #60a5fa; color: #0f172a; }
     #banner .login-group button#btnOpenSop {
       background: #fb923c;
       color: #0f172a;
@@ -267,6 +280,7 @@
       <button type="button" id="btnLoginCoupang" title="WMS · inventory/inbound/outbound 세션">WMS</button>
       <button type="button" id="btnLoginPo" title="PO Management 세션">PO</button>
       <button type="button" id="btnLoginMos" title="MOS · Gross HTP / Need help">MOS</button>
+      <button type="button" id="btnLoginShipments" title="SHPT · 쉽먼트 입차예약시간">SHPT</button>
       <button type="button" id="btnOpenSop" title="입고 매뉴얼 (SOP)" aria-label="입고 매뉴얼">?</button>
     </span>
   </div>

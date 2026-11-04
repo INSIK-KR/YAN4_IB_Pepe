@@ -62,6 +62,10 @@ const LOGIN_TARGETS = {
     url: "https://mos.coupang.net/kpi/gross-uph?resource=95",
     title: "CFS — MOS 로그인 (Gross HTP / Need help)",
   },
+  shipments: {
+    url: "https://shipments.coupang.net/app/inbound-schedule",
+    title: "CFS — 쉽먼트 로그인 (입차예약)",
+  },
 };
 
 (function configureUserData() {
@@ -100,7 +104,7 @@ let sopLaunchQuery = "";
 let loginWindows = Object.create(null);
 let lastSessionAt = 0;
 let lastCookieCount = 0;
-let lastSessionDetail = { coupang: 0, sharepoint: 0, po: 0, mos: 0 };
+let lastSessionDetail = { coupang: 0, sharepoint: 0, po: 0, mos: 0, shipments: 0 };
 let storageCache = null;
 
 function getSes() {
@@ -175,14 +179,24 @@ async function refreshSessionStatus() {
     const m = await ses.cookies.get({ url: "https://mos.coupang.net/" });
     mosN = m ? m.length : 0;
   } catch (e6) {}
+  let shipmentsN = 0;
+  try {
+    // 로그인 전 페이지에도 다른 쿠키가 붙어서 인증 쿠키만 센다
+    const s = await ses.cookies.get({
+      url: "https://shipments.coupang.net/",
+      name: "X-SE-Auth",
+    });
+    shipmentsN = s ? s.length : 0;
+  } catch (e7) {}
 
   lastSessionDetail = {
     coupang: coupangN,
     sharepoint: sharepointN,
     po: poN,
     mos: mosN,
+    shipments: shipmentsN,
   };
-  lastCookieCount = coupangN + sharepointN + poN + mosN;
+  lastCookieCount = coupangN + sharepointN + poN + mosN + shipmentsN;
   if (lastCookieCount > 0) lastSessionAt = Date.now();
   const payload = {
     sessionAt: lastSessionAt,
@@ -220,6 +234,9 @@ function looksLoggedIn(kind, url) {
   }
   if (kind === "mos") {
     return u.indexOf("mos.coupang.net") >= 0;
+  }
+  if (kind === "shipments") {
+    return u.indexOf("shipments.coupang.net") >= 0;
   }
   return false;
 }
@@ -273,19 +290,28 @@ function openLoginWindow(kind) {
       const url = win.webContents.getURL();
       if (!looksLoggedIn(key, url)) return;
       await refreshSessionStatus();
-      // Coupang·PO·MOS: 로그인 완료 후 자동 닫기 (SharePoint는 MFA 등으로 수동)
-      if ((key === "coupang" || key === "po" || key === "mos") && !closedOnce) {
-        // PO·MOS는 로그인 페이지도 같은 도메인일 수 있어 쿠키 확인 후 닫기
+      // Coupang·PO·MOS·쉽먼트: 로그인 완료 후 자동 닫기 (SharePoint는 MFA 등으로 수동)
+      if (
+        (key === "coupang" || key === "po" || key === "mos" || key === "shipments") &&
+        !closedOnce
+      ) {
+        // PO·MOS·쉽먼트는 로그인 페이지도 같은 도메인일 수 있어 쿠키 확인 후 닫기
         if (key === "po" && !(lastSessionDetail && lastSessionDetail.po > 0)) {
           return;
         }
         if (key === "mos" && !(lastSessionDetail && lastSessionDetail.mos > 0)) {
           return;
         }
+        if (
+          key === "shipments" &&
+          !(lastSessionDetail && lastSessionDetail.shipments > 0)
+        ) {
+          return;
+        }
         closedOnce = true;
         setTimeout(function () {
           if (win && !win.isDestroyed()) win.close();
-        }, key === "po" || key === "mos" ? 800 : 500);
+        }, key === "po" || key === "mos" || key === "shipments" ? 800 : 500);
       }
     } catch (e) {}
   };
@@ -366,6 +392,7 @@ function allowedFetchUrl(url) {
   return (
     host === "mos.coupang.net" ||
     host === "po-management.coupang.net" ||
+    host === "shipments.coupang.net" ||
     host === "coupang.com" ||
     host.endsWith(".coupang.com") ||
     host.endsWith(".sharepoint.com")
@@ -627,7 +654,7 @@ async function printPageToPdfFile(opts) {
       return { ok: false, error: "PDF가 비어 있습니다" };
     }
     fs.writeFileSync(dest, buffer);
-    notifyDownloadProgress("PDF 저장됨: " + path.basename(dest));
+    notifyDownloadProgress("PDF 저장 완료", "PDF 저장됨: " + path.basename(dest));
     if (opts.open !== false) {
       await sleep(400);
       try {
@@ -667,10 +694,12 @@ function attachSilentDownloads() {
   }
 }
 
-function notifyDownloadProgress(text) {
+/** text: 상단바에 보이는 짧은 글. detail: 마우스를 올리면 보이는 전체 설명 */
+function notifyDownloadProgress(text, detail) {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send("yan4-shell-download-progress", {
       text: String(text || ""),
+      detail: String(detail || text || ""),
     });
   }
 }
@@ -793,6 +822,7 @@ async function fetchSharePointSlaViaChromeDownloadInner(message) {
 
   const startedAt = Date.now();
   notifyDownloadProgress(
+    "Chrome에서 " + label + " 받는 중…",
     "Chrome으로 " +
       label +
       " 다운로드 중… (Chrome에서 SharePoint 로그인 상태여야 함)"
@@ -807,6 +837,7 @@ async function fetchSharePointSlaViaChromeDownloadInner(message) {
       lastHintAt = now;
       const left = Math.max(0, Math.ceil((deadline - now) / 1000));
       notifyDownloadProgress(
+        label + " 대기 " + left + "s",
         "Downloads에서 엑셀 대기 중… " + left + "s (Chrome 로그인·다운로드 확인)"
       );
     }
@@ -843,6 +874,7 @@ async function fetchSharePointSlaViaChromeDownloadInner(message) {
           };
         }
         notifyDownloadProgress(
+          label + " 받기 완료",
           label +
             " 파일 수집됨: " +
             hit.name +
