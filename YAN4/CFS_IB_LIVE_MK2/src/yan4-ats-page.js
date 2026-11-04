@@ -89,6 +89,7 @@
     "GC-",
     "1007-RCRT2-",
     "1007-RCRT22-",
+    "1007-RCRT44-",
     "1007-RCRT4-",
     "1007-RCRT3-",
     "1007-RCRT88-",
@@ -170,6 +171,287 @@
   ];
   var GWJ1_TOTE_MOVE_PREFIXES = ["177-RCRT3-9-"];
   var GWJ3_TOTE_MOVE_PREFIXES = ["140-RCRT3-5-"];
+  /** 나머지 센터 버퍼·직납·에이징. 직납은 yan4-sla-page.js 목록과 같음. 없는 칸은 빈 목록 */
+  var ATS_CENTER_PACKS = {
+    /* 온도 구분 없이 RCRT1 만 사용. 4CZ 는 에그 버퍼, AML·CML 은 자동화 설비 */
+    INC11: {
+      frozen: [],
+      chilled: [
+        "123-ZC",
+        "123-ZCM",
+        "123-ZSR",
+        "123-4CZ",
+        "123-65ZP",
+        "123-CML1",
+        "123-CML2",
+        "123-CML3",
+      ],
+      ambient: [
+        "123-ZA",
+        "123-ZAM",
+        "123-ZAP",
+        "123-AML1",
+        "123-AML2",
+        "123-AML3",
+      ],
+      rocket: [],
+      egg: [
+        "123-4CZ",
+      ],
+      direct: [
+        "123-RCRT1-",
+      ],
+      tote: [],
+    },
+    INC12: {
+      frozen: [],
+      chilled: [],
+      ambient: [],
+      rocket: [],
+      direct: [
+        "166-RCRT21-",
+        "166-RCRT22-",
+        "166-RCRT23-",
+        "166-RCRT24-",
+        "166-RCRT25-",
+        "166-RCRT41-",
+        "166-RCRT42-",
+        "166-RCRT43-",
+        "166-RCRT44-",
+        "166-RCRT45-",
+        "166-RCRT31-",
+        "166-RCRT32-",
+        "166-RCRT33-",
+        "166-RCRT34-",
+        "166-RCRT35-",
+        "166-RCRT51-",
+        "166-RCRT52-",
+        "166-RCRT53-",
+        "166-RCRT54-",
+        "166-RCRT55-",
+        "166-RCRT61-",
+        "166-RCRT62-",
+        "166-RCRT63-",
+        "166-RCRT64-",
+        "166-RCRT65-",
+      ],
+      tote: [],
+    },
+    INC15: {
+      frozen: [
+        "124-ZF",
+      ],
+      chilled: [
+        "124-1DB",
+      ],
+      ambient: [
+        "124-ZR",
+      ],
+      rocket: [],
+      direct: [
+        "124-RCRT10-",
+        "124-RCRT1-",
+        "124-RCRT18-",
+      ],
+      tote: [],
+    },
+    INC22: {
+      frozen: [],
+      chilled: [],
+      ambient: [],
+      rocket: [],
+      direct: [
+        "167-RCRT21-",
+        "167-RCRT31-",
+        "167-RCRT22-",
+        "167-RCRT32-",
+        "167-RCRT23-",
+        "167-RCRT33-",
+      ],
+      tote: [],
+    },
+    INC37: {
+      frozen: [],
+      chilled: [],
+      ambient: [],
+      rocket: [],
+      direct: [
+        "184-RCRT10-",
+        "184-RCRT1-",
+        "184-RCRT18-",
+      ],
+      tote: [],
+    },
+    PYT2: {
+      frozen: [
+        "91-61Z",
+        "91-71ZA",
+      ],
+      chilled: [
+        "91-31Z",
+        "91-31ZA",
+        "91-51Z",
+        "91-52N",
+        "91-52M",
+      ],
+      ambient: [
+        "91-11B",
+      ],
+      rocket: [],
+      direct: [
+        "91-RCRT1-",
+      ],
+      tote: [],
+    },
+    SIH1: {
+      frozen: [],
+      chilled: [
+        "145-1CMZ",
+      ],
+      ambient: [],
+      rocket: [
+        "145-1APZ",
+      ],
+      direct: [
+        "145-RCRT22-",
+        "145-RCRT11-",
+        "145-RCRT33-",
+      ],
+      tote: [
+        "145-RCRT9-",
+        "145-RCRT18-",
+      ],
+    },
+    YON5: {
+      frozen: [
+        "135-ZFSL",
+        "135-5ZA",
+        "135-5ZAL",
+        "135-5ZAP",
+        "135-5ZLP",
+        "135-6ZAP",
+        "135-1ZFS",
+        "135-1ZFP",
+      ],
+      chilled: [
+        "135-1A1Z",
+        "135-1ALZ",
+        "135-1AZ",
+        "135-ZDLP",
+        "135-3ZDP",
+        "135-6ZDM",
+        "135-7ZDM",
+      ],
+      ambient: [
+        "135-3ZMP",
+      ],
+      rocket: [
+        "135-2ZBP",
+      ],
+      direct: [
+        "135-RCRT21-",
+        "135-RCRT22-",
+        "135-RCRT23-",
+        "135-RCRT24-",
+        "135-RCRT25-",
+        "135-RCRT26-",
+        "135-RCRT27-",
+        "135-RCRT29-",
+        "135-RCRT11-",
+        "135-RCRT12-",
+        "135-RCRT13-",
+        "135-RCRT14-",
+        "135-RCRT15-",
+        "135-RCRT16-",
+        "135-RCRT17-",
+        "135-RCRT19-",
+        "135-RCRT31-",
+        "135-RCRT32-",
+        "135-RCRT33-",
+        "135-RCRT34-",
+        "135-RCRT35-",
+        "135-RCRT36-",
+        "135-RCRT37-",
+        "135-RCRT39-",
+      ],
+      tote: [
+        "135-RCRT18-",
+        "135-RCRT40-",
+      ],
+    },
+    GON1: {
+      frozen: [
+        "105-3CR",
+        "105-3CW",
+        "105-3CX",
+        "105-3ZD",
+        "105-3ZDP",
+      ],
+      chilled: [
+        "105-2DZ",
+        "105-2MW",
+      ],
+      ambient: [],
+      rocket: [],
+      direct: [
+        "105-RCRT3-",
+        "105-RCRT2-",
+        "105-RCRT4-",
+      ],
+      tote: [],
+    },
+    CHW2: {
+      frozen: [
+        "148-1K1K",
+      ],
+      chilled: [
+        "148-2G1Z",
+        "148-2G2Z",
+      ],
+      ambient: [],
+      rocket: [],
+      direct: [
+        "148-RCRT9-1-",
+        "148-RCRT9-2-",
+        "148-RCRT9-11-",
+        "148-RCRT9-3-",
+        "148-RCRT9-4-",
+        "148-RCRT9-5-",
+        "148-RCRT9-6-",
+        "148-RCRT9-7-",
+        "148-RCRT9-12-",
+        "148-RCRT9-13-",
+        "148-RCRT9-14-",
+        "148-RCRT9-8-",
+        "148-RCRT9-9-",
+        "148-RCRT9-16-",
+      ],
+      tote: [],
+    },
+    DAJ1: {
+      frozen: [],
+      chilled: [
+        "182-3A1Z",
+      ],
+      ambient: [],
+      rocket: [],
+      direct: [
+        "182-RCRT3-1-",
+        "182-RCRT3-2-",
+        "182-RCRT3-3-",
+        "182-RCRT3-4-",
+        "182-RCRT3-5-",
+        "182-RCRT3-6-",
+        "182-RCRT3-7-",
+        "182-RCRT3-8-",
+        "182-RCRT3-9-",
+        "182-RCRT3-10-",
+      ],
+      tote: [
+        "182-RCRT4-",
+      ],
+    },
+  };
 
   function atsCenterBufferPack(center) {
     if (center === "BUC2") {
@@ -202,7 +484,7 @@
         tote: GWJ3_TOTE_MOVE_PREFIXES,
       };
     }
-    return null;
+    return ATS_CENTER_PACKS[center] || null;
   }
 
   function atsLocPrefixesForActiveCenter() {
@@ -1863,6 +2145,7 @@
     { prefix: "1007-2CPZ", label: "냉장버퍼존 확인" },
     { prefix: "1007-1CEZ", label: "에그버퍼존 확인" },
     { prefix: "1007-RCRT22-", label: "프로젝트 직납" },
+    { prefix: "1007-RCRT44-", label: "프로젝트 직납" },
     { prefix: "1007-RCRT88-", label: "SR 및 프리팩존 확인" },
     { prefix: "1007-RCRT18-", label: "토트재고이동중 확인" },
     { prefix: "1007-RCRT18", label: "토트재고이동중 확인" },
@@ -1883,6 +2166,8 @@
     var pack = atsCenterBufferPack(transferToCenter());
     var extra = [];
     if (pack) {
+      /* 에그는 냉장 목록에도 있음. 같은 길이면 먼저 넣은 쪽이 이김 */
+      pushAtsCtPrefixes(extra, pack.egg || [], "에그버퍼존 확인");
       pushAtsCtPrefixes(extra, pack.frozen, "냉동버퍼존 확인");
       pushAtsCtPrefixes(extra, pack.chilled, "냉장버퍼존 확인");
       pushAtsCtPrefixes(extra, pack.ambient, "상온버퍼존 확인");

@@ -105,7 +105,7 @@
   var TOTE_MOVE_PAGE_SIZE = 200;
   var TOTE_STOW_CHUNK_MAX_DAYS = 3;
   var TOTE_STOW_BARCODE_TOKENS = ["RCRT18", "RCRT88"];
-  /** BUC2 에이징 FULLNAME. 다른 센터는 RCRT18·RCRT88 */
+  /** BUC2 에이징 FULLNAME */
   var BUC2_AGING_BARCODE_TOKENS = [
     "RCRT39",
     "RCRT49",
@@ -117,6 +117,21 @@
   var GWJ1_AGING_LOC_PREFIXES = ["177-RCRT3-9-"];
   /** GWJ3은 140-RCRT3-5-1~999 만 */
   var GWJ3_AGING_LOC_PREFIXES = ["140-RCRT3-5-"];
+  /** 센터별 에이징 토큰. 빈 목록은 에이징 없는 센터. 표에 없는 센터는 RCRT18·RCRT88 */
+  var AGING_BARCODE_TOKENS_BY_CENTER = {
+    BUC2: BUC2_AGING_BARCODE_TOKENS,
+    SIH1: ["RCRT9", "RCRT18"],
+    YON5: ["RCRT18", "RCRT40"],
+    DAJ1: ["RCRT4"],
+    INC11: [],
+    INC12: [],
+    INC15: [],
+    INC22: [],
+    INC37: [],
+    PYT2: [],
+    GON1: [],
+    CHW2: [],
+  };
   var TOTE_STOW_ZONE_LABEL = "AG";
   var TOTE_STOW_TEMP_LABELS = {
     Ambient: "Ambient",
@@ -1250,8 +1265,7 @@
   }
 
   function agingBarcodeTokensForActiveCenter() {
-    if (poFcCode() === "BUC2") return BUC2_AGING_BARCODE_TOKENS;
-    return TOTE_STOW_BARCODE_TOKENS;
+    return AGING_BARCODE_TOKENS_BY_CENTER[poFcCode()] || TOTE_STOW_BARCODE_TOKENS;
   }
 
   function toteBarcodeMatchesSlaZones(barcode) {
@@ -2251,8 +2265,8 @@
 
   /**
    * 센터별 직납 RCRT 로케이션 접두어 (직납 드릴 RCRT·SLA FULLNAME·inventory 조회 공통).
-   * YAN4 는 사용자 지정, GWJ1·GWJ3·BUC2 는 ATS 화면(yan4-ats-page.js) 직납 목록과 같음.
-   * 에이징(YAN4 RCRT18/88, GWJ1 177-RCRT3-9-, GWJ3 140-RCRT3-5-)은 포함하지 않음. 목록 없는 센터는 없음.
+   * YAN4 는 사용자 지정, 나머지는 ATS 화면(yan4-ats-page.js) 직납 목록과 같음.
+   * 에이징(AGING_BARCODE_TOKENS_BY_CENTER, GWJ1 177-RCRT3-9-, GWJ3 140-RCRT3-5-)은 포함하지 않음. 목록 없는 센터는 없음.
    */
   var DIRECT_RCRT_PREFIXES_BY_CENTER = {
     YAN4: [
@@ -2302,6 +2316,121 @@
       "81-RCRT72-",
       "81-RCRT73-",
       "81-RCRT74-",
+    ],
+    INC11: [
+      "123-RCRT1-",
+    ],
+    INC12: [
+      "166-RCRT21-",
+      "166-RCRT22-",
+      "166-RCRT23-",
+      "166-RCRT24-",
+      "166-RCRT25-",
+      "166-RCRT41-",
+      "166-RCRT42-",
+      "166-RCRT43-",
+      "166-RCRT44-",
+      "166-RCRT45-",
+      "166-RCRT31-",
+      "166-RCRT32-",
+      "166-RCRT33-",
+      "166-RCRT34-",
+      "166-RCRT35-",
+      "166-RCRT51-",
+      "166-RCRT52-",
+      "166-RCRT53-",
+      "166-RCRT54-",
+      "166-RCRT55-",
+      "166-RCRT61-",
+      "166-RCRT62-",
+      "166-RCRT63-",
+      "166-RCRT64-",
+      "166-RCRT65-",
+    ],
+    INC15: [
+      "124-RCRT10-",
+      "124-RCRT1-",
+      "124-RCRT18-",
+    ],
+    INC22: [
+      "167-RCRT21-",
+      "167-RCRT31-",
+      "167-RCRT22-",
+      "167-RCRT32-",
+      "167-RCRT23-",
+      "167-RCRT33-",
+    ],
+    INC37: [
+      "184-RCRT10-",
+      "184-RCRT1-",
+      "184-RCRT18-",
+    ],
+    PYT2: [
+      "91-RCRT1-",
+    ],
+    SIH1: [
+      "145-RCRT22-",
+      "145-RCRT11-",
+      "145-RCRT33-",
+    ],
+    YON5: [
+      "135-RCRT21-",
+      "135-RCRT22-",
+      "135-RCRT23-",
+      "135-RCRT24-",
+      "135-RCRT25-",
+      "135-RCRT26-",
+      "135-RCRT27-",
+      "135-RCRT29-",
+      "135-RCRT11-",
+      "135-RCRT12-",
+      "135-RCRT13-",
+      "135-RCRT14-",
+      "135-RCRT15-",
+      "135-RCRT16-",
+      "135-RCRT17-",
+      "135-RCRT19-",
+      "135-RCRT31-",
+      "135-RCRT32-",
+      "135-RCRT33-",
+      "135-RCRT34-",
+      "135-RCRT35-",
+      "135-RCRT36-",
+      "135-RCRT37-",
+      "135-RCRT39-",
+    ],
+    GON1: [
+      "105-RCRT3-",
+      "105-RCRT2-",
+      "105-RCRT4-",
+    ],
+    CHW2: [
+      "148-RCRT9-1-",
+      "148-RCRT9-2-",
+      "148-RCRT9-11-",
+      "148-RCRT9-3-",
+      "148-RCRT9-4-",
+      "148-RCRT9-5-",
+      "148-RCRT9-6-",
+      "148-RCRT9-7-",
+      "148-RCRT9-12-",
+      "148-RCRT9-13-",
+      "148-RCRT9-14-",
+      "148-RCRT9-8-",
+      "148-RCRT9-9-",
+      "148-RCRT9-16-",
+    ],
+    DAJ1: [
+      "182-RCRT3-1-",
+      "182-RCRT3-2-",
+      "182-RCRT3-3-",
+      "182-RCRT3-4-",
+      "182-RCRT3-5-",
+      "182-RCRT3-6-",
+      "182-RCRT3-7-",
+      "182-RCRT3-8-",
+      "182-RCRT3-9-",
+      "182-RCRT3-10-",
     ],
   };
 
