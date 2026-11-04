@@ -55,7 +55,7 @@
 
   /** 상단 센터 전환 목록 (리전별) — CENTERS 는 전체 유지: 이름 변환·가용화내역 조회에 씀 */
   var CENTER_REGIONS = [
-    ["Region1", ["BUC2", "INC11", "INC12", "INC15", "INC37", "PYT2"]],
+    ["Region1", ["BUC2", "INC11", "INC12", "INC15", "INC22", "INC37", "PYT2"]],
     ["Region2", ["GWJ1", "GWJ3", "SEN2", "SIH1", "YAN4", "YON5"]],
     ["Region3", ["CHW2", "DAE4", "DAJ1", "GMH1", "GON1"]],
   ];
