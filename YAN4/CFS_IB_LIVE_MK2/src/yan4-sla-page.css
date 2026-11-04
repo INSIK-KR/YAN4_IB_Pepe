@@ -1781,7 +1781,7 @@
 
 .yna4-sla-progress-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 196px;
+  grid-template-columns: minmax(0, 1fr) 340px;
   gap: 8px;
   align-items: start;
   width: 100%;
@@ -2093,22 +2093,30 @@
   background: #475569;
   color: #fff;
   font-size: 9px;
-  text-align: center;
+  text-align: left;
   font-weight: 700;
 }
 
-.yna4-sla-progress-table--vendors .yna4-sla-progress-vendor-th-label {
-  text-align: left;
+.yna4-sla-progress-table--vendors .yna4-sla-progress-vendor-th-booking,
+.yna4-sla-progress-table--vendors .yna4-sla-progress-vendor-th-unload {
+  width: 76px;
 }
 
+/* 예약이 여러 건이면 줄바꿈 */
+.yna4-sla-progress-table--vendors .yna4-sla-progress-booking {
+  white-space: normal;
+}
+
+/* 긴 업체명은 자르지 않고 줄바꿈 */
 .yna4-sla-progress-table--vendors .yna4-sla-progress-td-label {
-  max-width: 120px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  max-width: none;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .yna4-sla-progress-table--vendors .yna4-sla-progress-num {
   font-size: 9px;
+  text-align: left;
 }
 
 .yna4-sla-progress-shrink-empty {

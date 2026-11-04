@@ -9,18 +9,20 @@
   var lastDetail = { coupang: 0, sharepoint: 0, po: 0, mos: 0 };
   var busyKind = "";
   /** 이번 실행에서 로그인 창을 닫아 확인된 서비스만 「로그인완료」 */
-  var confirmedOk = { coupang: false, po: false, mos: false };
+  var confirmedOk = { coupang: false, po: false, mos: false, shipments: false };
 
   var LOGIN_BTNS = [
     { id: "btnLoginCoupang", kind: "coupang", idle: "WMS", detailKey: "coupang" },
     { id: "btnLoginPo", kind: "po", idle: "PO", detailKey: "po" },
     { id: "btnLoginMos", kind: "mos", idle: "MOS", detailKey: "mos" },
+    { id: "btnLoginShipments", kind: "shipments", idle: "SHPT", detailKey: "shipments" },
   ];
 
   function clearStatusBanner() {
     if (!statusEl) return;
     statusEl.className = "hint";
     statusEl.textContent = "";
+    statusEl.title = "";
   }
 
   function paintLoginButtons() {
@@ -46,7 +48,9 @@
             ? "WMS · inventory/inbound/outbound 세션"
             : spec.kind === "po"
               ? "PO Management 세션"
-              : "MOS · Gross HTP / Need help";
+              : spec.kind === "shipments"
+                ? "SHPT · 쉽먼트 입차예약시간"
+                : "MOS · Gross HTP / Need help";
       }
     }
   }
@@ -71,7 +75,9 @@
           ? "po"
           : kind === "mos"
             ? "mos"
-            : "";
+            : kind === "shipments"
+              ? "shipments"
+              : "";
     if (!key) return;
     var n = Number(lastDetail[key]) || 0;
     confirmedOk[key] = n > 0;
@@ -322,6 +328,7 @@
       if (!statusEl || !payload || !payload.text) return;
       statusEl.className = "ok";
       statusEl.textContent = String(payload.text);
+      statusEl.title = String(payload.detail || payload.text);
     });
   }
 })();
