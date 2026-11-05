@@ -57,7 +57,7 @@
   var CENTER_REGIONS = [
     ["Region1", ["BUC2", "INC11", "INC12", "INC15", "INC22", "INC37", "PYT2"]],
     ["Region2", ["GWJ1", "GWJ3", "SEN2", "SIH1", "YAN4", "YON5"]],
-    ["Region3", ["CHW2", "DAE4", "DAJ1", "GMH1", "GON1"]],
+    ["Region3", ["CHW2", "DAE4", "DAJ1", "GMH1", "GON1", "GYS1"]],
   ];
 
   var paneStatusEl = null;

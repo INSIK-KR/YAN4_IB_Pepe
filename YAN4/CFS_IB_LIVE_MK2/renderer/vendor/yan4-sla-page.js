@@ -123,6 +123,7 @@
     SIH1: ["RCRT9", "RCRT18"],
     YON5: ["RCRT18", "RCRT40"],
     DAJ1: ["RCRT4"],
+    GMH1: ["RCRT55"],
     INC11: [],
     INC12: [],
     INC15: [],
@@ -131,6 +132,8 @@
     PYT2: [],
     GON1: [],
     CHW2: [],
+    GYS1: [],
+    DAE4: [],
   };
   var TOTE_STOW_ZONE_LABEL = "AG";
   var TOTE_STOW_TEMP_LABELS = {
@@ -2440,6 +2443,39 @@
       "182-RCRT3-8-",
       "182-RCRT3-9-",
       "182-RCRT3-10-",
+    ],
+    GYS1: [
+      "1015-RCRT9-7-",
+      "1015-RCRT9-1-",
+      "1015-RCRT9-2-",
+      "1015-RCRT9-3-",
+      "1015-RCRT9-4-",
+      "1015-RCRT9-5-",
+      "1015-RCRT9-6-",
+      "1015-RCRT9-8-",
+    ],
+    DAE4: [
+      "121-RCRT9-7-",
+      "121-RCRT9-11-",
+      "121-RCRT9-1-",
+      "121-RCRT9-2-",
+      "121-RCRT9-3-",
+      "121-RCRT9-4-",
+      "121-RCRT9-5-",
+      "121-RCRT9-6-",
+      "121-RCRT9-8-",
+      "121-RCRT9-9-",
+    ],
+    GMH1: [
+      "78-RCRT9-1-",
+      "78-RCRT9-2-",
+      "78-RCRT9-3-",
+      "78-RCRT9-4-",
+      "78-RCRT9-5-",
+      "78-RCRT9-6-",
+      "78-RCRT9-7-",
+      "78-RCRT9-8-",
+      "78-RCRT9-9-",
     ],
   };
 
@@ -9226,6 +9262,14 @@
     if (map[key][status].indexOf(time) < 0) map[key][status].push(time);
   }
 
+  function addInboundBookingVendor(list, id, name) {
+    if (!id && !name) return;
+    var dup = list.some(function (x) {
+      return id ? x.id === id : !x.id && normKey(x.name) === normKey(name);
+    });
+    if (!dup) list.push({ id: id || "", name: String(name || "").trim() });
+  }
+
   /** 쉽먼트 입차예약 응답 → 업체 ID·업체명별 예약시간. 빈 슬롯·재고이관은 업체가 없어 빠짐 */
   function parseInboundBookingSchedule(text) {
     var obj = JSON.parse(String(text || ""));
@@ -9234,6 +9278,7 @@
     }
     var byId = Object.create(null);
     var byName = Object.create(null);
+    var vendors = [];
     var times = obj.body.inboundBookingTimeList || [];
     var ti, si, mi, raw, time, slots, slot, status, milkrun;
     for (ti = 0; ti < times.length; ti++) {
@@ -9247,13 +9292,15 @@
         if (status !== "ARRIVED" && status !== "BOOKED") continue;
         addInboundBooking(byId, slot.vendorId, status, time);
         addInboundBooking(byName, normKey(slot.vendorName), status, time);
+        addInboundBookingVendor(vendors, slot.vendorId, slot.vendorName);
         milkrun = slot.milkrunVendorIdList || [];
         for (mi = 0; mi < milkrun.length; mi++) {
           addInboundBooking(byId, milkrun[mi], status, time);
+          addInboundBookingVendor(vendors, milkrun[mi], "");
         }
       }
     }
-    return { byId: byId, byName: byName };
+    return { byId: byId, byName: byName, vendors: vendors };
   }
 
   /** 로그인 페이지(HTML)·401·403 은 로그인 문제, 나머지는 실제 원인을 보여 준다 */
@@ -9307,13 +9354,62 @@
     return arrived.length ? arrived : pick("BOOKED");
   }
 
-  function applyInboundBookingTimes(model, pack) {
+  /** 하차 전인 예약 업체를 표에 추가. 밀크런은 쉽먼트에 업체명이 없어 PO에서 찾고, 없으면 ID */
+  function addBookedVendorsWithoutUnload(vendors, pack, poRows) {
+    var nameById = Object.create(null);
+    (poRows || []).forEach(function (row) {
+      if (row.vendorId && row.vendorName && !nameById[row.vendorId]) {
+        nameById[row.vendorId] = row.vendorName;
+      }
+    });
+    var addedByName = Object.create(null);
+    (pack.vendors || []).forEach(function (entry) {
+      var name = entry.name || nameById[entry.id] || entry.id;
+      var key = normKey(name);
+      var hasRow = vendors.some(function (v) {
+        var ids = v.vendorIds || [];
+        if (entry.id && ids.indexOf(entry.id) >= 0) return true;
+        return (!entry.id || !ids.length) && normKey(v.vendorName) === key;
+      });
+      if (hasRow) return;
+      if (!addedByName[key]) {
+        addedByName[key] = { vendorName: name, unloadAt: null, vendorIds: [] };
+      }
+      if (entry.id) addedByName[key].vendorIds.push(entry.id);
+    });
+    Object.keys(addedByName).forEach(function (key) {
+      vendors.push(addedByName[key]);
+    });
+  }
+
+  /** 운영일 시작(7시)부터 지난 분. 예약시간이 있으면 예약시간, 없으면 하차시간 기준 */
+  function progressVendorSortMinutes(v) {
+    var m = 0;
+    if (v.bookingTimes && v.bookingTimes.length) {
+      m =
+        Number(v.bookingTimes[0].slice(0, 2)) * 60 +
+        Number(v.bookingTimes[0].slice(3));
+    } else if (v.unloadAt) {
+      m = v.unloadAt.getHours() * 60 + v.unloadAt.getMinutes();
+    }
+    return (m - OPERATIONAL_DAY_START_HOUR * 60 + 1440) % 1440;
+  }
+
+  function applyInboundBookingTimes(model, pack, poRows) {
     if (!pack || pack.error) {
       model.bookingError = pack ? pack.error : "";
       return;
     }
-    (model.vendors || []).forEach(function (v) {
+    model.vendors = model.vendors || [];
+    addBookedVendorsWithoutUnload(model.vendors, pack, poRows);
+    model.vendors.forEach(function (v) {
       v.bookingTimes = inboundBookingTimesForVendor(v, pack);
+    });
+    model.vendors.sort(function (a, b) {
+      return (
+        progressVendorSortMinutes(a) - progressVendorSortMinutes(b) ||
+        String(a.vendorName).localeCompare(String(b.vendorName))
+      );
     });
   }
 
@@ -9774,7 +9870,7 @@
     if (!vendors.length) {
       tr = document.createElement("tr");
       tr.innerHTML =
-        "<td colspan='3' class='yna4-sla-progress-shrink-empty'>당일 하차시간 없음</td>";
+        "<td colspan='3' class='yna4-sla-progress-shrink-empty'>당일 예약·하차 없음</td>";
       tbody.appendChild(tr);
     }
     table.appendChild(tbody);
@@ -9818,7 +9914,7 @@
       dr.operationalYmd,
       poPack.shrinkReceiveBySku
     );
-    applyInboundBookingTimes(model, bookingPack);
+    applyInboundBookingTimes(model, bookingPack, poPack.rows);
     return {
       model: model,
       poRows: poPack.rows,
