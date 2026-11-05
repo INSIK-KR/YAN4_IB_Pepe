@@ -451,6 +451,73 @@
         "182-RCRT4-",
       ],
     },
+    GYS1: {
+      frozen: [
+        "1015-02BP",
+      ],
+      chilled: [],
+      ambient: [],
+      rocket: [],
+      direct: [
+        "1015-RCRT9-7-",
+        "1015-RCRT9-1-",
+        "1015-RCRT9-2-",
+        "1015-RCRT9-3-",
+        "1015-RCRT9-4-",
+        "1015-RCRT9-5-",
+        "1015-RCRT9-6-",
+        "1015-RCRT9-8-",
+      ],
+      tote: [],
+    },
+    DAE4: {
+      frozen: [],
+      chilled: [],
+      ambient: [],
+      rocket: [
+        "121-2NZ",
+      ],
+      direct: [
+        "121-RCRT9-7-",
+        "121-RCRT9-11-",
+        "121-RCRT9-1-",
+        "121-RCRT9-2-",
+        "121-RCRT9-3-",
+        "121-RCRT9-4-",
+        "121-RCRT9-5-",
+        "121-RCRT9-6-",
+        "121-RCRT9-8-",
+        "121-RCRT9-9-",
+      ],
+      tote: [],
+    },
+    GMH1: {
+      frozen: [],
+      chilled: [
+        "78-1B",
+        "78-1ZC",
+        "78-3ZB",
+      ],
+      ambient: [
+        "78-1ZD",
+        "78-3ZA",
+      ],
+      rocket: [],
+      direct: [
+        "78-RCRT9-1-",
+        "78-RCRT9-2-",
+        "78-RCRT9-3-",
+        "78-RCRT9-4-",
+        "78-RCRT9-5-",
+        "78-RCRT9-6-",
+        "78-RCRT9-7-",
+        "78-RCRT9-8-",
+        "78-RCRT9-9-",
+      ],
+      tote: [
+        "78-RCRT55-",
+      ],
+    },
   };
 
   function atsCenterBufferPack(center) {
