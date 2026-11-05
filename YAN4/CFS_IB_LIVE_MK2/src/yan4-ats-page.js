@@ -6,7 +6,7 @@
   "use strict";
 
   /** DOM/문구 변경 시 증가 — 확장만 새로고침해도 예전 ATS 마크업 자동 재구성 */
-  var ATS_UI_REV = "77";
+  var ATS_UI_REV = "78";
   window.__YAN4_ATS_UI_REV__ = ATS_UI_REV;
 
   var OUTBOUND_DASH = "https://outbound.coupang.com/workflow/nob/dashboard";
@@ -5084,6 +5084,10 @@
       ".yna4-ats-deadline-chips{display:flex!important;flex-flow:row nowrap!important;align-items:center;gap:4px;flex:1 1 auto;min-width:0;width:100%;max-width:100%;padding:2px 0;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:thin;background:transparent;border:none}" +
       ".yna4-shell-page-ats-inner button.yna4-ats-deadline-chip{display:inline-flex!important;flex-shrink:0!important;white-space:nowrap!important}" +
       ".yna4-shell-page-ats-inner button.yna4-ats-btn{font-family:Segoe UI,Malgun Gothic,sans-serif;font-size:10px!important;font-weight:600;line-height:1.15;-webkit-text-fill-color:currentColor;color:#334155!important;background:#fff;border:1px solid #cbd5e1;border-radius:10px!important;padding:2px 6px!important;min-height:22px!important;box-sizing:border-box;appearance:none;-webkit-appearance:none}" +
+      ".yna4-shell-page-ats-inner button.yna4-ats-btn--auto{min-width:74px;font-variant-numeric:tabular-nums;color:#b91c1c!important;-webkit-text-fill-color:#b91c1c!important;background:#fff!important;border-color:#f87171!important}" +
+      ".yna4-shell-page-ats-inner button.yna4-ats-btn--auto:hover:not(:disabled){background:#fef2f2!important}" +
+      ".yna4-shell-page-ats-inner button.yna4-ats-btn--auto.yna4-ats-btn--auto-on{color:#fff!important;-webkit-text-fill-color:#fff!important;background:#dc2626!important;border-color:#b91c1c!important}" +
+      ".yna4-shell-page-ats-inner select.yna4-ats-auto-interval{font-family:Segoe UI,Malgun Gothic,sans-serif;font-size:10px;font-weight:600;line-height:1.15;color:#334155;background:#fff;border:1px solid #cbd5e1;border-radius:10px;padding:2px 4px;min-height:22px;box-sizing:border-box;cursor:pointer}" +
       ".yna4-shell-page-ats-inner button.yna4-ats-btn--primary{color:#fff!important;-webkit-text-fill-color:#fff!important;background:#dc2626!important;border-color:#b91c1c!important}" +
       ".yna4-shell-page-ats-inner button.yna4-ats-btn--cutline{color:#fff!important;-webkit-text-fill-color:#fff!important;background:#2563eb!important;border-color:#1d4ed8!important;font-weight:700!important}" +
       ".yna4-shell-page-ats-inner button.yna4-ats-btn--gloc{color:#fff!important;-webkit-text-fill-color:#fff!important;background:#0f766e!important;border-color:#0d9488!important}" +
@@ -5134,8 +5138,37 @@
     return true;
   }
 
+  var ATS_AUTO_INTERVALS_MIN = [10, 20, 30];
+  var ATS_AUTO_INTERVAL_STORAGE_KEY = "yna4_ats_auto_interval_min_v1";
+  /** AUTO 상태는 화면을 다시 그려도 유지 (앱을 다시 켜면 꺼진 상태) */
+  var atsAuto = { on: false, nextAt: 0, timer: null };
+
+  function loadAtsAutoIntervalMin() {
+    try {
+      var n = Number(localStorage.getItem(ATS_AUTO_INTERVAL_STORAGE_KEY));
+      if (ATS_AUTO_INTERVALS_MIN.indexOf(n) >= 0) return n;
+    } catch (e) {}
+    return ATS_AUTO_INTERVALS_MIN[0];
+  }
+
+  function saveAtsAutoIntervalMin(n) {
+    try {
+      localStorage.setItem(ATS_AUTO_INTERVAL_STORAGE_KEY, String(n));
+    } catch (e) {}
+  }
+
+  function formatAtsAutoRemain(ms) {
+    var totalSec = Math.max(0, Math.ceil(ms / 1000));
+    var s = totalSec % 60;
+    return Math.floor(totalSec / 60) + ":" + (s < 10 ? "0" : "") + s;
+  }
+
   window.__YAN4_INIT_SHELL_PAGE_ATS__ = function (hostEl) {
     if (!hostEl) return;
+    if (atsAuto.timer) {
+      clearInterval(atsAuto.timer);
+      atsAuto.timer = null;
+    }
     loadAtsReplenishDoneFromStorage();
     stopRequested = false;
     hostEl.textContent = "";
@@ -5168,6 +5201,26 @@
     btnRun.className = "yna4-ats-btn yna4-ats-btn--primary";
     btnRun.setAttribute("data-yna4-ats-run", "1");
     btnRun.textContent = "조회실행";
+
+    var btnAuto = document.createElement("button");
+    btnAuto.type = "button";
+    btnAuto.className = "yna4-ats-btn yna4-ats-btn--auto";
+    btnAuto.setAttribute("data-yna4-ats-auto", "1");
+    btnAuto.setAttribute("aria-pressed", "false");
+    btnAuto.textContent = "AUTO";
+    btnAuto.title = "켜면 고른 간격마다 조회실행 (다시 누르면 끔)";
+
+    var selAutoInterval = document.createElement("select");
+    selAutoInterval.className = "yna4-ats-auto-interval";
+    selAutoInterval.setAttribute("aria-label", "자동 조회 간격");
+    selAutoInterval.title = "자동 조회 간격";
+    ATS_AUTO_INTERVALS_MIN.forEach(function (min) {
+      var opt = document.createElement("option");
+      opt.value = String(min);
+      opt.textContent = min + "MIN";
+      selAutoInterval.appendChild(opt);
+    });
+    selAutoInterval.value = String(loadAtsAutoIntervalMin());
 
     var btnGloc = document.createElement("button");
     btnGloc.type = "button";
@@ -5220,6 +5273,8 @@
     toolbarActions.className = "yna4-ats-toolbar-actions";
     toolbarActions.appendChild(btnLoadCutlines);
     toolbarActions.appendChild(btnRun);
+    toolbarActions.appendChild(btnAuto);
+    toolbarActions.appendChild(selAutoInterval);
     // 일괄 재고조회 버튼 제거 — 대시보드에서 행(SKU) 클릭으로 개별 조회
     toolbarRowMain.appendChild(toolbarActions);
     toolbarRowMain.appendChild(statusEl);
@@ -6198,9 +6253,69 @@
     }
 
     root.addEventListener("click", onAtsClick, true);
+    function atsAutoIntervalMs() {
+      return (Number(selAutoInterval.value) || ATS_AUTO_INTERVALS_MIN[0]) * 60000;
+    }
+
+    function paintAtsAuto() {
+      btnAuto.classList.toggle("yna4-ats-btn--auto-on", atsAuto.on);
+      btnAuto.setAttribute("aria-pressed", atsAuto.on ? "true" : "false");
+      if (!atsAuto.on) btnAuto.textContent = "AUTO";
+      else if (pipelineBusy || atsAuto.nextAt === Infinity) btnAuto.textContent = "AUTO …";
+      else btnAuto.textContent = "AUTO " + formatAtsAutoRemain(atsAuto.nextAt - Date.now());
+    }
+
+    /** 시간이 되면 조회실행. 이미 조회 중이면 끝난 뒤에 다시 센다 */
+    async function tickAtsAuto() {
+      if (atsAuto.on && !pipelineBusy && Date.now() >= atsAuto.nextAt) {
+        atsAuto.nextAt = Infinity;
+        paintAtsAuto();
+        try {
+          await runPipeline();
+        } finally {
+          atsAuto.nextAt = Date.now() + atsAutoIntervalMs();
+        }
+      }
+      paintAtsAuto();
+    }
+
+    function startAtsAutoTicker() {
+      if (atsAuto.timer) clearInterval(atsAuto.timer);
+      atsAuto.timer = setInterval(function () {
+        void tickAtsAuto();
+      }, 1000);
+      paintAtsAuto();
+    }
+
+    btnAuto.addEventListener("click", function (ev) {
+      ev.preventDefault();
+      atsAuto.on = !atsAuto.on;
+      if (atsAuto.on) {
+        atsAuto.nextAt = Date.now() + atsAutoIntervalMs();
+        startAtsAutoTicker();
+      } else {
+        if (atsAuto.timer) clearInterval(atsAuto.timer);
+        atsAuto.timer = null;
+        paintAtsAuto();
+      }
+    });
+    selAutoInterval.addEventListener("change", function () {
+      saveAtsAutoIntervalMin(Number(selAutoInterval.value));
+      if (atsAuto.on && atsAuto.nextAt !== Infinity) {
+        atsAuto.nextAt = Date.now() + atsAutoIntervalMs();
+      }
+      paintAtsAuto();
+    });
+    if (atsAuto.on) startAtsAutoTicker();
+
     btnRun.addEventListener("click", function (ev) {
       ev.preventDefault();
-      void runPipeline();
+      void runPipeline().then(function () {
+        // 손으로 조회한 뒤에도 AUTO 간격을 처음부터 다시 센다
+        if (atsAuto.on && atsAuto.nextAt !== Infinity) {
+          atsAuto.nextAt = Date.now() + atsAutoIntervalMs();
+        }
+      });
     });
     btnLoadCutlines.addEventListener("click", function (ev) {
       ev.preventDefault();
