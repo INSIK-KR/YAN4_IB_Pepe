@@ -83,6 +83,16 @@
     confirmedOk[key] = n > 0;
   }
 
+  /** 상단에서 고른 센터. 쉽먼트 로그인 확인에 쓴다 */
+  function activeCenterName() {
+    try {
+      var api = window.__CFS_CENTER__;
+      return api ? api.name(api.activeId()) : "";
+    } catch (e) {
+      return "";
+    }
+  }
+
   function bindLogin(spec) {
     var btn = document.getElementById(spec.id);
     if (!btn || !window.yan4ShellDesktop) return;
@@ -91,7 +101,7 @@
       paintLoginButtons();
       btn.disabled = true;
       window.yan4ShellDesktop
-        .openLogin(spec.kind)
+        .openLogin(spec.kind, activeCenterName())
         .then(function () {
           return window.yan4ShellDesktop.sessionStatus();
         })

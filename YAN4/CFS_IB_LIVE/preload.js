@@ -12,8 +12,8 @@ contextBridge.exposeInMainWorld("yan4ShellDesktop", {
   sessionStatus: function () {
     return ipcRenderer.invoke("yan4-shell-session-status");
   },
-  openLogin: function (kind) {
-    return ipcRenderer.invoke("yan4-shell-open-login", kind || "coupang");
+  openLogin: function (kind, center) {
+    return ipcRenderer.invoke("yan4-shell-open-login", kind || "coupang", center);
   },
   openUrl: function (url) {
     return ipcRenderer.invoke("yan4-shell-open-url", url);
