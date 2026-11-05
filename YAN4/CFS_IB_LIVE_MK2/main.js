@@ -241,6 +241,27 @@ function looksLoggedIn(kind, url) {
   return false;
 }
 
+/** 만료된 X-SE-Auth 쿠키가 남아 있을 수 있어 쉽먼트 API가 실제로 답하는지 확인 */
+async function shipmentsSessionWorks(center) {
+  const centerCode = /^[A-Z][A-Z0-9]*$/.test(String(center || "")) ? center : "YAN4";
+  try {
+    const d = new Date();
+    const ymd =
+      String(d.getFullYear()) +
+      String(d.getMonth() + 1).padStart(2, "0") +
+      String(d.getDate()).padStart(2, "0");
+    const res = await getSes().fetch(
+      "https://shipments.coupang.net/ibs/inbound-booking-schedule?centerCode=" + centerCode + "&scheduleDate=" + ymd,
+      { headers: { Accept: "application/json, text/plain, */*" } }
+    );
+    if (!res.ok) return false;
+    const body = JSON.parse(await res.text());
+    return !!body && body.success === true;
+  } catch (e) {
+    return false;
+  }
+}
+
 function restoreMainAfterLoginClose() {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   try {
@@ -250,7 +271,7 @@ function restoreMainAfterLoginClose() {
   } catch (e) {}
 }
 
-function openLoginWindow(kind) {
+function openLoginWindow(kind, center) {
   if (CFS_IS_PS && kind && kind !== "coupang") {
     return {
       ok: false,
@@ -306,6 +327,9 @@ function openLoginWindow(kind) {
           key === "shipments" &&
           !(lastSessionDetail && lastSessionDetail.shipments > 0)
         ) {
+          return;
+        }
+        if (key === "shipments" && !(await shipmentsSessionWorks(center))) {
           return;
         }
         closedOnce = true;
@@ -1257,8 +1281,8 @@ ipcMain.handle("yan4-shell-session-status", async function () {
   return refreshSessionStatus();
 });
 
-ipcMain.handle("yan4-shell-open-login", async function (_e, kind) {
-  return openLoginWindow(kind || "coupang");
+ipcMain.handle("yan4-shell-open-login", async function (_e, kind, center) {
+  return openLoginWindow(kind || "coupang", center);
 });
 
 ipcMain.handle("yan4-shell-open-url", async function (_e, url) {

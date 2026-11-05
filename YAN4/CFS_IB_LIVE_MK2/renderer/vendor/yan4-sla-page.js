@@ -59,6 +59,8 @@
     DAJ1: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=31c138ab-ed5e-4a9b-8cfe-bc7975c36e78",
     GMH1: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=ed19d375-e2b1-44ea-bec7-f53fd451834b",
     GON1: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=9908c4f9-4603-460f-bf8e-43e4f1821eb0",
+    GYS1: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=dc23aa0e-817a-4720-96c0-87c576d12818",
+    INC22: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=a05cb054-53ad-44be-b983-3a4f835b2cbf",
   };
   var SHAREPOINT_SLA_REFERER =
     "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/Shared%20Documents/Forms/AllItems.aspx";
@@ -286,6 +288,10 @@
     "https://shipments.coupang.net/ibs/inbound-booking-schedule";
   var INBOUND_SCHEDULE_REFERER =
     "https://shipments.coupang.net/app/inbound-schedule";
+  var INBOUND_TRUCK_DETAIL_URL =
+    "https://shipments.coupang.net/ibs/inbound-booking/truck/";
+  var INBOUND_TRUCK_DETAIL_REFERER =
+    "https://shipments.coupang.net/app/inbound-booking/truck/detail?id=";
   var PO_FC_CODE = "YAN4";
 
   /** 상단 센터 전환(가용화 모듈 __CFS_CENTER__) 기준 센터명 — 없으면 YAN4 */
@@ -9227,24 +9233,31 @@
     return idx;
   }
 
-  function buildProgressVendorRows(poRows, operYmd) {
+  /** 업체 ID별 한 줄. ID가 없는 줄만 업체명으로 묶는다 */
+  function buildProgressVendorRows(poRows, operYmd, vendorIdByPo) {
     var byVendor = Object.create(null);
-    var i, row, vendor, at;
+    var i, row, vendor, vendorId, key, at;
     for (i = 0; i < poRows.length; i++) {
       row = poRows[i];
       if (!progressPoStatusOk(row.status)) continue;
       if (!row.unloadAt || isNaN(row.unloadAt.getTime())) continue;
       if (operYmd && !instantInOperationalDay(row.unloadAt, operYmd)) continue;
       vendor = row.vendorName;
-      if (!vendor) continue;
+      // 트럭 상세로 이은 발주(CPLB 등)는 PO 업체 대신 예약 업체로 묶는다
+      vendorId =
+        (vendorIdByPo && vendorIdByPo[String(row.purchaseOrderSeq || "")]) ||
+        row.vendorId;
+      if (!vendor && !vendorId) continue;
+      key = vendorId ? "id:" + vendorId : "name:" + normKey(vendor);
       at = row.unloadAt.getTime();
-      if (!byVendor[vendor]) {
-        byVendor[vendor] = { vendorName: vendor, unloadAt: row.unloadAt, vendorIds: [] };
-      } else if (at < byVendor[vendor].unloadAt.getTime()) {
-        byVendor[vendor].unloadAt = row.unloadAt;
-      }
-      if (row.vendorId && byVendor[vendor].vendorIds.indexOf(row.vendorId) < 0) {
-        byVendor[vendor].vendorIds.push(row.vendorId);
+      if (!byVendor[key]) {
+        byVendor[key] = {
+          vendorName: vendor || vendorId,
+          unloadAt: row.unloadAt,
+          vendorIds: vendorId ? [vendorId] : [],
+        };
+      } else if (at < byVendor[key].unloadAt.getTime()) {
+        byVendor[key].unloadAt = row.unloadAt;
       }
     }
     var out = Object.keys(byVendor).map(function (k) {
@@ -9264,10 +9277,12 @@
 
   function addInboundBookingVendor(list, id, name) {
     if (!id && !name) return;
-    var dup = list.some(function (x) {
+    var text = String(name || "").trim();
+    var hit = list.filter(function (x) {
       return id ? x.id === id : !x.id && normKey(x.name) === normKey(name);
-    });
-    if (!dup) list.push({ id: id || "", name: String(name || "").trim() });
+    })[0];
+    if (!hit) list.push({ id: id || "", name: text });
+    else if (!hit.name) hit.name = text;
   }
 
   /** 쉽먼트 입차예약 응답 → 업체 ID·업체명별 예약시간. 빈 슬롯·재고이관은 업체가 없어 빠짐 */
@@ -9279,6 +9294,7 @@
     var byId = Object.create(null);
     var byName = Object.create(null);
     var vendors = [];
+    var trucks = [];
     var times = obj.body.inboundBookingTimeList || [];
     var ti, si, mi, raw, time, slots, slot, status, milkrun;
     for (ti = 0; ti < times.length; ti++) {
@@ -9293,6 +9309,9 @@
         addInboundBooking(byId, slot.vendorId, status, time);
         addInboundBooking(byName, normKey(slot.vendorName), status, time);
         addInboundBookingVendor(vendors, slot.vendorId, slot.vendorName);
+        if (slot.vendorId && slot.deliveryTruckSeq) {
+          trucks.push({ vendorId: slot.vendorId, seq: String(slot.deliveryTruckSeq) });
+        }
         milkrun = slot.milkrunVendorIdList || [];
         for (mi = 0; mi < milkrun.length; mi++) {
           addInboundBooking(byId, milkrun[mi], status, time);
@@ -9300,7 +9319,7 @@
         }
       }
     }
-    return { byId: byId, byName: byName, vendors: vendors };
+    return { byId: byId, byName: byName, vendors: vendors, trucks: trucks };
   }
 
   /** 로그인 페이지(HTML)·401·403 은 로그인 문제, 나머지는 실제 원인을 보여 준다 */
@@ -9330,6 +9349,36 @@
     }
   }
 
+  /** 업체 ID가 PO에 없는 예약(CPLB 등)은 트럭 상세의 발주번호로 PO 하차내역과 잇는다 */
+  async function fetchInboundTruckPoLinks(pack, poRows, statusEl, prefix) {
+    if (!pack || pack.error || !pack.trucks) return;
+    var poVendorIds = Object.create(null);
+    (poRows || []).forEach(function (row) {
+      if (row.vendorId) poVendorIds[row.vendorId] = true;
+    });
+    var todo = pack.trucks.filter(function (t) {
+      return !poVendorIds[t.vendorId];
+    });
+    pack.vendorIdByPo = Object.create(null);
+    var i, text;
+    for (i = 0; i < todo.length; i++) {
+      if (stopRequested) return;
+      if (statusEl) {
+        statusEl.textContent =
+          (prefix || "") + "쉽먼트 트럭 상세 " + (i + 1) + "/" + todo.length;
+      }
+      try {
+        text = await inboundGet(INBOUND_TRUCK_DETAIL_URL + encodeURIComponent(todo[i].seq), {
+          referer: INBOUND_TRUCK_DETAIL_REFERER + encodeURIComponent(todo[i].seq),
+          accept: "application/json, text/plain, */*",
+        });
+        addTruckPoLinks(pack.vendorIdByPo, todo[i].vendorId, text);
+      } catch (eTruck) {
+        console.warn("[YAN4 트럭 상세]", todo[i].seq, eTruck);
+      }
+    }
+  }
+
   /** 업체 ID로 찾고, ID가 없는 줄만 업체명으로. 도착 건을 먼저 쓰고 없으면 예약 건 */
   function inboundBookingTimesForVendor(vendor, pack) {
     var hits = [];
@@ -9354,6 +9403,19 @@
     return arrived.length ? arrived : pick("BOOKED");
   }
 
+  /** 트럭 상세 응답의 발주번호 → 예약 업체 ID */
+  function addTruckPoLinks(map, vendorId, text) {
+    var obj = JSON.parse(String(text || ""));
+    if (!obj || obj.success !== true || !obj.body) {
+      throw new Error("쉽먼트 트럭 상세 오류");
+    }
+    (obj.body.truckBookingPoInfoModelList || []).forEach(function (po) {
+      if (po && po.purchaseOrderSeq != null) {
+        map[String(po.purchaseOrderSeq)] = vendorId;
+      }
+    });
+  }
+
   /** 하차 전인 예약 업체를 표에 추가. 밀크런은 쉽먼트에 업체명이 없어 PO에서 찾고, 없으면 ID */
   function addBookedVendorsWithoutUnload(vendors, pack, poRows) {
     var nameById = Object.create(null);
@@ -9362,7 +9424,6 @@
         nameById[row.vendorId] = row.vendorName;
       }
     });
-    var addedByName = Object.create(null);
     (pack.vendors || []).forEach(function (entry) {
       var name = entry.name || nameById[entry.id] || entry.id;
       var key = normKey(name);
@@ -9372,13 +9433,23 @@
         return (!entry.id || !ids.length) && normKey(v.vendorName) === key;
       });
       if (hasRow) return;
-      if (!addedByName[key]) {
-        addedByName[key] = { vendorName: name, unloadAt: null, vendorIds: [] };
-      }
-      if (entry.id) addedByName[key].vendorIds.push(entry.id);
+      vendors.push({
+        vendorName: name,
+        unloadAt: null,
+        vendorIds: entry.id ? [entry.id] : [],
+      });
     });
-    Object.keys(addedByName).forEach(function (key) {
-      vendors.push(addedByName[key]);
+  }
+
+  /** 업체명은 쉽먼트 기준. 쉽먼트에 이름이 없으면(밀크런·예약 없는 업체) PO 이름 그대로 */
+  function useShipmentsVendorNames(vendors, pack) {
+    var nameById = Object.create(null);
+    (pack.vendors || []).forEach(function (entry) {
+      if (entry.id && entry.name) nameById[entry.id] = entry.name;
+    });
+    vendors.forEach(function (v) {
+      var id = (v.vendorIds || [])[0];
+      if (id && nameById[id]) v.vendorName = nameById[id];
     });
   }
 
@@ -9395,13 +9466,17 @@
     return (m - OPERATIONAL_DAY_START_HOUR * 60 + 1440) % 1440;
   }
 
-  function applyInboundBookingTimes(model, pack, poRows) {
+  function applyInboundBookingTimes(model, pack, poRows, operYmd) {
     if (!pack || pack.error) {
       model.bookingError = pack ? pack.error : "";
       return;
     }
+    if (pack.vendorIdByPo && Object.keys(pack.vendorIdByPo).length) {
+      model.vendors = buildProgressVendorRows(poRows || [], operYmd, pack.vendorIdByPo);
+    }
     model.vendors = model.vendors || [];
     addBookedVendorsWithoutUnload(model.vendors, pack, poRows);
+    useShipmentsVendorNames(model.vendors, pack);
     model.vendors.forEach(function (v) {
       v.bookingTimes = inboundBookingTimesForVendor(v, pack);
     });
@@ -9901,6 +9976,8 @@
     statusEl.textContent = prefix + "쉽먼트 입차예약…";
     var bookingPack = await fetchInboundBookingPack(dr.operationalYmd);
     if (stopRequested) return { stopped: true };
+    await fetchInboundTruckPoLinks(bookingPack, poPack.rows, statusEl, prefix);
+    if (stopRequested) return { stopped: true };
     var shrinkRows = rememberShrinkTargetRows(
       buildShrinkTargetRowsFromData(
         lastShrinkSlaLookup,
@@ -9914,7 +9991,7 @@
       dr.operationalYmd,
       poPack.shrinkReceiveBySku
     );
-    applyInboundBookingTimes(model, bookingPack, poPack.rows);
+    applyInboundBookingTimes(model, bookingPack, poPack.rows, dr.operationalYmd);
     return {
       model: model,
       poRows: poPack.rows,
