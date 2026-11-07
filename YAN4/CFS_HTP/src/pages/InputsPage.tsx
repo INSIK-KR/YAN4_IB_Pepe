@@ -1,5 +1,5 @@
 import { Fragment } from "react";
-import { Plus, Trash2, Truck, Target, Users } from "lucide-react";
+import { Eraser, Plus, Trash2, Truck, Target, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -18,7 +18,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { tsvToTable } from "@/lib/htp-calc.mjs";
-import { VEHICLE_TEMPS, type Inputs, type ShiftKey, type SopSide, type Vehicle } from "@/lib/inputs";
+import { defaultInputs, VEHICLE_TEMPS, type Inputs, type ShiftKey, type SopSide, type Vehicle } from "@/lib/inputs";
 
 type Props = { inputs: Inputs; onChange: (next: Inputs) => void };
 
@@ -75,8 +75,40 @@ export default function InputsPage({ inputs, onChange }: Props) {
     toast.success("이관 차량 " + added.length + "건을 붙여넣었습니다");
   }
 
+  // 날마다 새로 넣는 값만 비운다. Target HTP·진열 비율은 기준값이라 그대로 둔다
+  function clearDaily() {
+    const blank = defaultInputs();
+    onChange({ ...blank, target: inputs.target, rates: inputs.rates });
+    toast.success("입력을 지웠습니다", { description: "Target HTP와 진열 비율은 그대로 두었습니다." });
+  }
+
   return (
     <div className="grid gap-6">
+      <div className="flex justify-end">
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button size="sm" variant="outline">
+              <Eraser />
+              입력 전체 지우기
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>입력을 모두 지울까요?</AlertDialogTitle>
+              <AlertDialogDescription>
+                OB Plan, S&amp;OP, Facility 인원, H/C, 이관 차량 {inputs.vehicles.length}건을 지웁니다. Target HTP와 진열 비율은 그대로 둡니다. 지운 값은 되돌릴 수
+                없습니다.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>취소</AlertDialogCancel>
+              <AlertDialogAction variant="destructive" onClick={clearDaily}>
+                전체 지우기
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
         <Card>
           <CardHeader>

@@ -29,7 +29,7 @@ React + Tailwind + shadcn/ui (`components.json`, 부품은 `src/components/ui`).
 - **피벗**: 입고 공정 자료를 행·하위 행·열·값(수량, MH, 인원, 시간당 수량)과 필터로 묶어 보기. 표 복사로 엑셀에 붙여넣기 가능
 - **상세 표**: 엑셀 Status 시트와 같은 계산 (HTP Actual·Gap, S&OP, 업무별 근무조 비중, H/C, 근무조 시뮬레이션, 시간대별 하차·매입·진열·생산성, 진열 구성, 공정별 MH, 체크인 지연)
 - **MOS 데이터**: 날짜를 골라 MOS에서 받기(로그인 세션으로 exportExcel → getAsyncFileSaveStatus → downloadSavedFile), 받은 자료 미리보기
-- **입력**: Target, S&OP, 진열 비율, Facility 인원, H/C, 이관 차량 하차 정보. 사용자 데이터 폴더의 `inputs.json`에 저장
+- **입력**: Target, S&OP, 진열 비율, Facility 인원, H/C, 이관 차량 하차 정보. 사용자 데이터 폴더의 `inputs.json`에 저장. 입력 전체 지우기는 Target HTP·진열 비율만 남김
 
 ## 구조
 
