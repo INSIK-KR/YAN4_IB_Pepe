@@ -160,6 +160,7 @@ export default function OverviewPage({ model: m, prepared, mos, inputs, onOpenPi
       onClick: () => onOpenPivot("taskChannel"),
     });
   }
+  if (!target) checks.push({ tone: "muted", tag: "입력", title: "Target HTP가 비어 있습니다", detail: "입력 탭에 넣으면 목표 대비 실적이 나옵니다", onClick: onOpenInputs });
   if (!s.sopD1) checks.push({ tone: "muted", tag: "입력", title: "S&OP가 비어 있습니다", detail: "입력 탭에 넣으면 Plan 대비 실적이 나옵니다", onClick: onOpenInputs });
 
   const vehicles = inputs.vehicles.filter((v) => v.arrival);
@@ -273,20 +274,20 @@ export default function OverviewPage({ model: m, prepared, mos, inputs, onOpenPi
               <div className="flex items-baseline justify-between gap-2">
                 <span className="text-sm font-semibold">{g.label}</span>
                 <span className="flex items-center gap-1 text-sm font-bold tabular-nums">
-                  {g.htp !== null && (g.htp >= target ? <ArrowUpRight className="size-4 text-emerald-600" /> : <ArrowDownRight className="size-4 text-red-600" />)}
+                  {g.htp !== null && target > 0 && (g.htp >= target ? <ArrowUpRight className="size-4 text-emerald-600" /> : <ArrowDownRight className="size-4 text-red-600" />)}
                   {g.htp === null ? "-" : fmt1(g.htp)}
                 </span>
               </div>
               <div className="relative">
-                <Bar value={g.htp || 0} max={maxShiftHtp} color={g.htp !== null && g.htp >= target ? "#059669" : "#dc2626"} />
-                <span className="absolute -top-0.5 h-3 w-0.5 bg-foreground/60" style={{ left: `${(target / maxShiftHtp) * 100}%` }} title={`Target ${fmt1(target)}`} />
+                <Bar value={g.htp || 0} max={maxShiftHtp} color={!target ? "#94a3b8" : g.htp !== null && g.htp >= target ? "#059669" : "#dc2626"} />
+                {target > 0 && <span className="absolute -top-0.5 h-3 w-0.5 bg-foreground/60" style={{ left: `${(target / maxShiftHtp) * 100}%` }} title={`Target ${fmt1(target)}`} />}
               </div>
               <div className="text-xs text-muted-foreground tabular-nums">
                 진열 {fmtInt(g.stow)} ({fmtPct(stowTotal ? g.stow / stowTotal : null)}) · MH {fmtInt(g.mh)}
               </div>
             </div>
           ))}
-          <p className="text-xs text-muted-foreground">막대 위 세로 표시 = Target {fmt1(target)}</p>
+          {target > 0 && <p className="text-xs text-muted-foreground">막대 위 세로 표시 = Target {fmt1(target)}</p>}
         </Section>
 
         <Section title="입고 흐름" sub="오늘 처리량" action={<LinkButton onClick={() => onOpenPivot("taskChannel")}>피벗으로 보기</LinkButton>}>

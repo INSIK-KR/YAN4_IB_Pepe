@@ -75,11 +75,10 @@ export default function InputsPage({ inputs, onChange }: Props) {
     toast.success("이관 차량 " + added.length + "건을 붙여넣었습니다");
   }
 
-  // 날마다 새로 넣는 값만 비운다. Target HTP·진열 비율은 기준값이라 그대로 둔다
-  function clearDaily() {
-    const blank = defaultInputs();
-    onChange({ ...blank, target: inputs.target, rates: inputs.rates });
-    toast.success("입력을 지웠습니다", { description: "Target HTP와 진열 비율은 그대로 두었습니다." });
+  // 기본값(Target 223.2 등)으로 되돌리지 않고 모든 칸을 비운다
+  function clearAll() {
+    onChange({ ...defaultInputs(), target: 0, rates: { day: 0, swing: 0, night: 0 } });
+    toast.success("입력을 모두 지웠습니다");
   }
 
   return (
@@ -96,13 +95,12 @@ export default function InputsPage({ inputs, onChange }: Props) {
             <AlertDialogHeader>
               <AlertDialogTitle>입력을 모두 지울까요?</AlertDialogTitle>
               <AlertDialogDescription>
-                OB Plan, S&amp;OP, Facility 인원, H/C, 이관 차량 {inputs.vehicles.length}건을 지웁니다. Target HTP와 진열 비율은 그대로 둡니다. 지운 값은 되돌릴 수
-                없습니다.
+                Target HTP, OB Plan, S&amp;OP, 진열 비율, Facility 인원, H/C, 이관 차량 {inputs.vehicles.length}건을 모두 지웁니다. 지운 값은 되돌릴 수 없습니다.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>취소</AlertDialogCancel>
-              <AlertDialogAction variant="destructive" onClick={clearDaily}>
+              <AlertDialogAction variant="destructive" onClick={clearAll}>
                 전체 지우기
               </AlertDialogAction>
             </AlertDialogFooter>

@@ -566,7 +566,8 @@ function computeStatus(rows, inputs) {
     summary: {
       target: target,
       htpActual: htpActual,
-      htpGap: htpActual === null ? null : htpActual - target,
+      // Target 이 비어 있으면 Gap 을 내지 않는다
+      htpGap: htpActual === null || !target ? null : htpActual - target,
       obPlan: obPlan,
       sopD1: sopD1,
       sopD0: sopD0,
