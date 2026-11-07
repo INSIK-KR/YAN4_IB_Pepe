@@ -12,14 +12,16 @@ import type { MosData } from "@/lib/mos";
 import { fmtInt } from "@/lib/format";
 import { computeStatus } from "@/lib/htp-calc.mjs";
 import { preparePivotRows, type PivotConfig } from "@/lib/pivot.mjs";
+import { computeStowProductivity } from "@/lib/stow-prod.mjs";
 import { defaultPivot, PIVOT_PRESETS, type PresetKey } from "@/lib/pivot-presets";
 import OverviewPage from "@/pages/OverviewPage";
 import PivotPage from "@/pages/PivotPage";
+import StowPage from "@/pages/StowPage";
 import StatusPage from "@/pages/StatusPage";
 import MosPage from "@/pages/MosPage";
 import InputsPage from "@/pages/InputsPage";
 
-type Tab = "overview" | "pivot" | "status" | "mos" | "inputs";
+type Tab = "overview" | "stow" | "pivot" | "status" | "mos" | "inputs";
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("overview");
@@ -59,6 +61,7 @@ export default function App() {
 
   const model = useMemo(() => (mos ? computeStatus(mos.rows, inputs) : null), [mos, inputs]);
   const prepared = useMemo(() => (mos ? preparePivotRows(mos.rows) : []), [mos]);
+  const stow = useMemo(() => (mos ? computeStowProductivity(mos.rows) : null), [mos]);
   const openTab = useCallback((next: Tab) => {
     setTab(next);
     window.scrollTo(0, 0);
@@ -98,6 +101,7 @@ export default function App() {
             <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
               <TabsList>
                 <TabsTrigger value="overview">개요</TabsTrigger>
+                <TabsTrigger value="stow">진열 생산성</TabsTrigger>
                 <TabsTrigger value="pivot">피벗</TabsTrigger>
                 <TabsTrigger value="status">상세 표</TabsTrigger>
                 <TabsTrigger value="mos">MOS 데이터</TabsTrigger>
@@ -130,7 +134,7 @@ export default function App() {
         </header>
 
         <main className="mx-auto max-w-[1920px] p-4">
-          {(tab === "overview" || tab === "pivot" || tab === "status") && (!mos || !model) && noData}
+          {(tab === "overview" || tab === "stow" || tab === "pivot" || tab === "status") && (!mos || !model) && noData}
           {tab === "overview" && mos && model && (
             <OverviewPage
               model={model}
@@ -142,6 +146,7 @@ export default function App() {
               onOpenInputs={() => openTab("inputs")}
             />
           )}
+          {tab === "stow" && mos && stow && <StowPage stow={stow} mos={mos} />}
           {tab === "pivot" && mos && <PivotPage prepared={prepared} config={pivot} onChange={setPivot} />}
           {tab === "status" && mos && model && <StatusPage model={model} mos={mos} inputs={inputs} />}
           {tab === "mos" && <MosPage mos={mos} onLoaded={setMos} onClear={() => setMos(null)} loggedIn={session.loggedIn} />}

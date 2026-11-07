@@ -21,6 +21,12 @@ contextBridge.exposeInMainWorld("cfsHtp", {
   mosFetch: function (message) {
     return ipcRenderer.invoke("cfs-htp-mos-fetch", message);
   },
+  capture: function (rect, name) {
+    return ipcRenderer.invoke("cfs-htp-capture", rect, name);
+  },
+  showCapture: function () {
+    return ipcRenderer.invoke("cfs-htp-capture-show");
+  },
   onMosSession: function (cb) {
     const handler = function (_e, payload) {
       cb(payload);

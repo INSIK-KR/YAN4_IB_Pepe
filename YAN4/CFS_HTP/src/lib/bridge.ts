@@ -28,6 +28,8 @@ type Bridge = {
   mosLogin(): Promise<{ ok: boolean; reused?: boolean }>;
   mosFetch(message: MosFetchMessage): Promise<MosFetchResult>;
   onMosSession(cb: (s: MosSession) => void): () => void;
+  capture(rect: { x: number; y: number; width: number; height: number }, name: string): Promise<{ ok: true; path: string } | { ok: false; error: string }>;
+  showCapture(): Promise<boolean>;
 };
 
 declare global {

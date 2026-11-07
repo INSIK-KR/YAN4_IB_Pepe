@@ -14,6 +14,7 @@ export type PivotConfig = {
 export type PivotRow = { key: string; label: string; values: Record<string, number | null>; total: number | null; children: PivotRow[] };
 export type PivotResult = { cols: string[]; rows: PivotRow[]; colTotals: Record<string, number | null>; grandTotal: number | null; max: number };
 
+export const ZONE_BY_LOC: Record<string, [string, string]>;
 export const PIVOT_FIELDS: { key: PivotFieldKey; label: string; order?: string[] }[];
 export const PIVOT_MEASURES: { key: PivotMeasureKey; label: string }[];
 export function preparePivotRows(rows: MosRow[]): PreparedRow[];

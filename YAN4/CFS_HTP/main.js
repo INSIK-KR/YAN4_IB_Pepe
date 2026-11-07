@@ -2,7 +2,7 @@
 
 const fs = require("fs");
 const path = require("path");
-const { app, BrowserWindow, ipcMain, net, session } = require("electron");
+const { app, BrowserWindow, clipboard, ipcMain, nativeImage, net, session, shell } = require("electron");
 
 const APP_TITLE = "CFS HTP";
 // MOS 로그인 쿠키 등을 앱 재시작 후에도 유지하기 위한 영구 세션
@@ -222,6 +222,54 @@ ipcMain.handle("cfs-htp-mos-login", async function () {
 
 ipcMain.handle("cfs-htp-mos-fetch", async function (_e, message) {
   return mosFetch(message || {});
+});
+
+// 화면 일부를 PNG 로 저장하고 클립보드에도 복사 (메일·Teams 붙여넣기용).
+// 창 밖으로 넘어간 부분까지 찍으려고 DevTools 프로토콜의 captureBeyondViewport 를 쓴다
+let lastCapturePath = "";
+
+async function captureArea(rect, name) {
+  if (!mainWindow || mainWindow.isDestroyed()) return { ok: false, error: "창이 없습니다" };
+  const clip = {
+    x: Math.max(0, Math.floor(Number(rect && rect.x) || 0)),
+    y: Math.max(0, Math.floor(Number(rect && rect.y) || 0)),
+    width: Math.ceil(Number(rect && rect.width) || 0),
+    height: Math.ceil(Number(rect && rect.height) || 0),
+    scale: 1,
+  };
+  if (clip.width <= 0 || clip.height <= 0) return { ok: false, error: "캡처할 영역이 없습니다" };
+  const dbg = mainWindow.webContents.debugger;
+  const attachedHere = !dbg.isAttached();
+  try {
+    if (attachedHere) dbg.attach("1.3");
+    const shot = await dbg.sendCommand("Page.captureScreenshot", { format: "png", clip: clip, captureBeyondViewport: true });
+    const buf = Buffer.from(shot.data, "base64");
+    const d = new Date();
+    const pad = function (n) {
+      return String(n).padStart(2, "0");
+    };
+    // 파일 이름에 못 쓰는 문자 \ / : * ? " < > |
+    const safe = String(name || "캡처").replace(/[\\/:*?"<>|]/g, "_");
+    const file = path.join(app.getPath("downloads"), safe + "_" + pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds()) + ".png");
+    fs.writeFileSync(file, buf);
+    clipboard.writeImage(nativeImage.createFromBuffer(buf));
+    lastCapturePath = file;
+    return { ok: true, path: file };
+  } catch (e) {
+    return { ok: false, error: e && e.message ? e.message : String(e) };
+  } finally {
+    if (attachedHere && dbg.isAttached()) dbg.detach();
+  }
+}
+
+ipcMain.handle("cfs-htp-capture", async function (_e, rect, name) {
+  return captureArea(rect, name);
+});
+
+ipcMain.handle("cfs-htp-capture-show", async function () {
+  if (!lastCapturePath) return false;
+  shell.showItemInFolder(lastCapturePath);
+  return true;
 });
 
 // 입력값(Target, S&OP, H/C, 이관 차량)은 portable exe 옆이 아니라 사용자 데이터 폴더에 저장
