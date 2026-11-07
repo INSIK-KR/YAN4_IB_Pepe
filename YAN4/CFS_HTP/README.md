@@ -25,7 +25,7 @@ React + Tailwind + shadcn/ui (`components.json`, 부품은 `src/components/ui`).
 
 
 - **개요**: 중요 지표(HTP·진열·하차·매입·MH), 시간대별 진열·생산성 차트, 지금 확인할 것, 근무조별, 입고 흐름, S&OP와 실적, 진열 구성, 공정별 MH, 이관 차량
-- **진열 생산성**: 엑셀 "진열자 생산성 대시보드"를 옮긴 화면. 근무조(MOS Shift 열)별 진열·EACH·PALLET·CASE HTP, EACH HTP 분포·구간별 인원, 상위·하위 5명, 작업자별 EACH HTP 차트, 작업자 표(정렬·표 복사), 대시보드 캡처(다운로드 폴더에 PNG 저장 + 클립보드 복사)
+- **진열 생산성**: 엑셀 "진열자 생산성 대시보드"를 옮긴 화면. 근무조(MOS Shift 열)별 진열·EACH·PALLET·CASE HTP, EACH HTP 분포·구간별 인원, 상위 5명·하위 10명, 작업자별 EACH HTP 차트, 작업자 표(정렬·표 복사), 대시보드 캡처(다운로드 폴더에 PNG 저장 + 클립보드 복사)
 - **피벗**: 입고 공정 자료를 행·하위 행·열·값(수량, MH, 인원, 시간당 수량)과 필터로 묶어 보기. 표 복사로 엑셀에 붙여넣기 가능
 - **상세 표**: 엑셀 Status 시트와 같은 계산 (HTP Actual·Gap, S&OP, 업무별 근무조 비중, H/C, 근무조 시뮬레이션, 시간대별 하차·매입·진열·생산성, 진열 구성, 공정별 MH, 체크인 지연)
 - **MOS 데이터**: 날짜를 골라 MOS에서 받기(로그인 세션으로 exportExcel → getAsyncFileSaveStatus → downloadSavedFile), 받은 자료 미리보기

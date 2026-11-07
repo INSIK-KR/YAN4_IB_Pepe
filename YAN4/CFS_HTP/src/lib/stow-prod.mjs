@@ -26,6 +26,8 @@ const BANDS = [
   { label: "300 이상", below: Infinity },
 ];
 const MIN_MH = 1;
+const TOP_N = 5;
+const BOTTOM_N = 10;
 // 진열 외 업무가 많은 인원: 총 근무 4시간 이상 & 진열 비중 60% 미만
 const OTHER_WORK_MIN_MH = 4;
 const OTHER_WORK_MAX_SHARE = 0.6;
@@ -226,8 +228,9 @@ function computeStowProductivity(rows) {
       label: s.label,
       workers: workers,
       summary: summarize(workers),
-      top: ranked.slice(0, 5),
-      bottom: ranked.slice(-5).reverse(),
+      top: ranked.slice(0, TOP_N),
+      // 하위는 가장 낮은 사람부터
+      bottom: ranked.slice(-BOTTOM_N).reverse(),
     };
   });
   const all = shifts.reduce(function (list, s) {

@@ -467,7 +467,7 @@ export default function StowPage({ stow, mos }: Props) {
 
       <div className="grid gap-4 lg:grid-cols-3">
         {stow.shifts.map((s) => (
-          <Section key={s.key} title={`${s.label} EACH HTP`} sub="상위 5 · 하위 5 · 오른쪽은 EACH MH">
+          <Section key={s.key} title={`${s.label} EACH HTP`} sub="상위 5 · 하위 10 · 오른쪽은 EACH MH">
             <RankList title="▲ 상위" workers={s.top} tone="top" />
             <RankList title="▼ 하위 (EACH MH 1h 이상 중)" workers={s.bottom} tone="bottom" />
           </Section>
