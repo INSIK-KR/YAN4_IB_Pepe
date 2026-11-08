@@ -22,11 +22,16 @@ function cellsOf(html, tag) {
  */
 function parseCutlines(html) {
   const values = [];
+  const headers = [];
   let found = false;
-  (String(html || "").match(/<table\b[\s\S]*?<\/table>/gi) || []).forEach(function (table) {
+  const page = String(html || "");
+  const tables = page.match(/<table\b[\s\S]*?<\/table>/gi) || [];
+  tables.forEach(function (table) {
     const head = /<thead\b[\s\S]*?<\/thead>/i.exec(table);
     if (!head) return;
-    const index = cellsOf(head[0], "th").indexOf(CUTLINE_HEADER);
+    const names = cellsOf(head[0], "th");
+    headers.push.apply(headers, names);
+    const index = names.indexOf(CUTLINE_HEADER);
     if (index < 0) return;
     found = true;
     const body = /<tbody\b[\s\S]*?<\/tbody>/i.exec(table);
@@ -36,7 +41,14 @@ function parseCutlines(html) {
       if (value && DATE_TIME.test(value) && values.indexOf(value) < 0) values.push(value);
     });
   });
-  return { found: found, values: values };
+  if (found) return { found: true, values: values };
+  // 원인 확인용. 고객 정보가 없는 페이지 제목과 표 머리글만 담는다
+  const title = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(page);
+  const diagnostic =
+    "표 " + tables.length + "개" +
+    (title ? " · 제목 " + cellText(title[1]) : "") +
+    (headers.length ? " · 머리글 " + headers.join(", ").slice(0, 160) : "");
+  return { found: false, values: values, diagnostic: diagnostic };
 }
 
 module.exports = { parseCutlines };

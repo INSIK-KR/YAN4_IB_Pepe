@@ -108,6 +108,8 @@ function fetchOrderCutline(orderNumber) {
     let lastUrl = WMS_ORDER_DETAIL_URL + order;
     const req = net.request({ url: lastUrl, session: getSes(), useSessionCookies: true, redirect: "manual" });
     req.setHeader("Accept", "text/html,application/xhtml+xml,*/*;q=0.8");
+    // 없으면 서버가 표 제목을 다른 언어로 줄 수 있다
+    req.setHeader("Accept-Language", "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7");
     req.setHeader("Referer", "https://outbound.coupang.com/v2/orderPool/outbound/list");
     req.setHeader("User-Agent", CHROME_UA);
     req.on("redirect", function (_status, _method, redirectUrl) {
@@ -131,7 +133,12 @@ function fetchOrderCutline(orderNumber) {
       });
       res.on("end", function () {
         const parsed = parseCutlines(Buffer.concat(chunks).toString("utf8"));
-        resolve({ ok: true, found: parsed.found, cutlines: parsed.values });
+        resolve({
+          ok: true,
+          found: parsed.found,
+          cutlines: parsed.values,
+          diagnostic: parsed.diagnostic ? parsed.diagnostic + " · " + hostAndPath(lastUrl) : undefined,
+        });
       });
       res.on("error", function (e) {
         resolve({ ok: false, error: e && e.message ? e.message : String(e) });

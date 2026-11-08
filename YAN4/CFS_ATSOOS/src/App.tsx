@@ -13,7 +13,7 @@ const CUTLINE_EMPTY = "-";
 const CUTLINE_UNAVAILABLE = "조회 불가";
 const CUTLINE_FAILED = "실패";
 
-type CutlineLookup = { running: boolean; done: number; total: number; found: number; empty: number; failed: number; error: string; stopped: boolean };
+type CutlineLookup = { running: boolean; done: number; total: number; found: number; empty: number; failed: number; error: string; stopped: boolean; note: string };
 const FIELD_CLASS = "h-9 rounded-lg border border-input bg-background px-2.5 text-sm text-foreground";
 
 function CenterSelect({ value, onChange, label, only }: { value: string; onChange: (center: string) => void; label: string; only?: string[] }) {
@@ -124,7 +124,7 @@ export default function App() {
     if (!bridge || !table || lookup?.running) return;
     const orderIndex = table.columns.indexOf("ordernumber");
     const orders = [...new Set(table.rows.map((row) => row[orderIndex]).filter(Boolean))];
-    const state: CutlineLookup = { running: true, done: 0, total: orders.length, found: 0, empty: 0, failed: 0, error: "", stopped: false };
+    const state: CutlineLookup = { running: true, done: 0, total: orders.length, found: 0, empty: 0, failed: 0, error: "", stopped: false, note: "" };
     const finish = (patch: Partial<CutlineLookup>) => setLookup({ ...state, ...patch, running: false });
     stopLookup.current = false;
     setCutlines({});
@@ -151,6 +151,7 @@ export default function App() {
       } else {
         value = res.found ? CUTLINE_EMPTY : CUTLINE_UNAVAILABLE;
         state.empty++;
+        if (!state.note && res.diagnostic) state.note = order + ": " + res.diagnostic;
       }
       state.done++;
       setCutlines((prev) => ({ ...prev, [order]: value }));
@@ -275,7 +276,7 @@ export default function App() {
                 tone={lookup.failed ? "idle" : "ok"}
                 title={`출고 커트라인 조회 ${lookup.stopped ? "중지" : "완료"} ${lookup.done.toLocaleString("ko-KR")} / ${lookup.total.toLocaleString("ko-KR")}`}
               >
-                {`값 있음 ${lookup.found.toLocaleString("ko-KR")} · 값 없음 ${lookup.empty.toLocaleString("ko-KR")} · 실패 ${lookup.failed.toLocaleString("ko-KR")}`}
+                {`값 있음 ${lookup.found.toLocaleString("ko-KR")} · 값 없음 ${lookup.empty.toLocaleString("ko-KR")} · 실패 ${lookup.failed.toLocaleString("ko-KR")}${lookup.note ? ` · 조회 불가 예시 ${lookup.note}` : ""}`}
               </StatusLine>
             )}
 

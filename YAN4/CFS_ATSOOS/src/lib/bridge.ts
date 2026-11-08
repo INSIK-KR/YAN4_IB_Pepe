@@ -2,7 +2,7 @@
 
 export type WmsSession = { loggedIn: boolean; centerId?: string; error?: string; detail?: string };
 export type WmsChangeCenterResult = { ok: true; verified: boolean } | { ok: false; error: string };
-export type WmsOrderCutlineResult = { ok: true; found: boolean; cutlines: string[] } | { ok: false; error: string; needLogin?: boolean };
+export type WmsOrderCutlineResult = { ok: true; found: boolean; cutlines: string[]; diagnostic?: string } | { ok: false; error: string; needLogin?: boolean };
 export type PbiStatus = { loggedIn: boolean; checking: boolean; loginOpen: boolean };
 export type PbiExportResult = { ok: true; base64: string } | { ok: false; error: string; needLogin?: boolean };
 
