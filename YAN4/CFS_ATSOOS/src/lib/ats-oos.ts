@@ -31,7 +31,7 @@ export function parseAtsOosExport(base64: string): AtsOosTable {
       }
       all.push(row);
     }
-    const headerIndex = all.findIndex((row) => row.includes("oos_date") && row.includes("ordernumber"));
+    const headerIndex = all.findIndex((row) => row.includes("centercode") && row.includes("ordernumber"));
     if (headerIndex < 0) continue;
     const columns = all[headerIndex];
     const centerIndex = columns.indexOf("centercode");
