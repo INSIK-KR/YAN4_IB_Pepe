@@ -84,14 +84,20 @@ function buildOrderSearchBody(orderNumber, start, end) {
   ]).toString();
 }
 
-/** 검색 결과에서 글자가 이 오더넘버인 링크의 주문 ID만 꺼낸다 */
+/**
+ * 검색 결과의 주문 ID. 주문 번호에 링크가 없는 줄은 같은 줄의 쉽먼트 ID 링크에 주문 ID가 있다.
+ * 다른 오더의 링크가 섞이지 않게 주문 번호 칸이 일치하는 줄만 본다
+ */
 function parseOrderIds(html, orderNumber) {
   const ids = [];
-  const re = /<a\b[^>]*href="\/order\/detail\/(\d+)"[^>]*>([\s\S]*?)<\/a>/gi;
-  let m;
-  while ((m = re.exec(String(html || "")))) {
-    if (cellText(m[2]) === orderNumber && ids.indexOf(m[1]) < 0) ids.push(m[1]);
-  }
+  (String(html || "").match(/<tr\b[\s\S]*?<\/tr>/gi) || []).forEach(function (row) {
+    if (cellsOf(row, "td").indexOf(orderNumber) < 0) return;
+    const re = /<a\b[^>]*href="[^"]*\/order\/detail\/(\d+)[^"]*"/gi;
+    let m;
+    while ((m = re.exec(row))) {
+      if (ids.indexOf(m[1]) < 0) ids.push(m[1]);
+    }
+  });
   return ids;
 }
 
