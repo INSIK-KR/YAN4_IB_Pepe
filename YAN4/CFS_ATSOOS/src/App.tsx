@@ -5,10 +5,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { bridge, type PbiStatus, type WmsSession } from "@/lib/bridge";
 import { parseAtsOosExport, type AtsOosTable } from "@/lib/ats-oos";
 import { BI_CENTERS, CENTER_NAMES, CENTER_REGIONS, DEFAULT_CENTER, centerIdOf, isSelectableCenter } from "@/lib/centers";
-import { cutlineKey, transferKey, type TransferCells } from "@/lib/overview";
+import { TRANSFER_COLUMNS, cutlineKey, transferKey, type TransferCells } from "@/lib/overview";
+import { buildExportBase64, exportFileName } from "@/lib/excel-export";
+import Pager, { PAGE_SIZE, lastPageOf } from "@/components/Pager";
 import OverviewPage from "@/pages/OverviewPage";
 
-const PREVIEW_ROWS = 20;
 // WMS 서버 부담을 줄이려고 오더 사이에 두는 간격
 const CUTLINE_GAP_MS = 140;
 const CUTLINE_EMPTY = "-";
@@ -39,12 +40,6 @@ type CutlineLookup = {
 };
 type CenterGroup = { orders: Set<string>; pairs: Map<string, { cart: string; ct: string }> };
 
-const TRANSFER_COLUMNS: [keyof TransferCells, string][] = [
-  ["load", "WMS 상차시간"],
-  ["unload", "WMS 하차시간"],
-  ["stow", "WMS 진열완료시간"],
-  ["vehicle", "WMS 차량번호"],
-];
 const count = (n: number) => n.toLocaleString("ko-KR");
 
 const FIELD_CLASS = "h-9 rounded-lg border border-input bg-background px-2.5 text-sm text-foreground";
@@ -141,6 +136,8 @@ export default function App() {
   const [transfers, setTransfers] = useState<Record<string, TransferCells>>({});
   const [lookup, setLookup] = useState<CutlineLookup | null>(null);
   const stopLookup = useRef(false);
+  const [dataPage, setDataPage] = useState(0);
+  const [saved, setSaved] = useState<{ ok: boolean; message: string } | null>(null);
 
   const wmsCenterId = wms?.centerId;
   const wmsCenterName = wmsCenterId ? (CENTER_NAMES[wmsCenterId] ?? wmsCenterId) : undefined;
@@ -186,6 +183,8 @@ export default function App() {
         return;
       }
       setTable({ ...parseAtsOosExport(res.base64), date, centers });
+      setDataPage(0);
+      setSaved(null);
       setCutlines({});
       setTransfers({});
       setLookup(null);
@@ -326,6 +325,16 @@ export default function App() {
     finish({});
   }
 
+  async function downloadExcel() {
+    if (!bridge || !table) return;
+    try {
+      const res = await bridge.saveExcel(exportFileName(table.centers, table.date), buildExportBase64(table, cutlines, transfers));
+      setSaved(res.ok ? { ok: true, message: res.path } : { ok: false, message: res.error });
+    } catch (e) {
+      setSaved({ ok: false, message: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
   async function switchCenter() {
     const id = centerIdOf(switchTarget);
     if (!bridge || !id || switching) return;
@@ -360,7 +369,24 @@ export default function App() {
         </nav>
       </header>
 
-      {view === "overview" && <OverviewPage table={table} cutlines={cutlines} transfers={transfers} requeried={lookup !== null} running={!!lookup?.running} />}
+      {saved && (
+        <div className="mx-auto mt-4 flex w-full max-w-6xl items-center gap-2 px-6">
+          <div className="min-w-0 flex-1">
+            <StatusLine tone={saved.ok ? "ok" : "error"} title={saved.ok ? "엑셀을 저장했습니다" : "엑셀 저장 실패"}>
+              {saved.message}
+            </StatusLine>
+          </div>
+          {saved.ok && (
+            <Button size="sm" variant="outline" onClick={() => bridge?.showSavedExcel()}>
+              폴더 열기
+            </Button>
+          )}
+        </div>
+      )}
+
+      {view === "overview" && (
+        <OverviewPage table={table} cutlines={cutlines} transfers={transfers} requeried={lookup !== null} running={!!lookup?.running} onDownload={downloadExcel} />
+      )}
 
       {/* 개요를 보는 동안에도 재조회가 이어지도록 화면만 숨긴다 */}
       <main className={view === "data" ? "mx-auto flex w-full max-w-6xl flex-col gap-4 p-6" : "hidden"}>
@@ -436,6 +462,12 @@ export default function App() {
                   WMS 재조회
                 </Button>
               )}
+              {table && !error && !lookup?.running && (
+                <Button size="lg" variant="outline" onClick={downloadExcel}>
+                  <Download />
+                  엑셀 다운로드
+                </Button>
+              )}
               {lookup?.running && (
                 <Button size="lg" variant="outline" onClick={() => (stopLookup.current = true)}>
                   <Square />
@@ -475,7 +507,6 @@ export default function App() {
               <>
                 <p className="font-medium">
                   {table.centers.join(", ")} · {table.date} · {count(table.rows.length)}행
-                  {table.rows.length > PREVIEW_ROWS && <span className="ml-2 text-xs font-normal text-muted-foreground">앞 {PREVIEW_ROWS}행만 표시</span>}
                 </p>
                 <div className="overflow-x-auto rounded-lg border">
                   <table className="w-max text-xs">
@@ -497,7 +528,7 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      {table.rows.slice(0, PREVIEW_ROWS).map((row, r) => {
+                      {table.rows.slice(dataPage * PAGE_SIZE, (dataPage + 1) * PAGE_SIZE).map((row, r) => {
                         const center = row[columnOf("centercode")];
                         const pair = transfers[transferKey(center, row[columnOf("cartbarcode")], row[columnOf("ctbarcode")] ?? "")];
                         return (
@@ -521,6 +552,7 @@ export default function App() {
                     </tbody>
                   </table>
                 </div>
+                <Pager page={Math.min(dataPage, lastPageOf(table.rows.length))} total={table.rows.length} onChange={setDataPage} />
               </>
             )}
           </CardContent>

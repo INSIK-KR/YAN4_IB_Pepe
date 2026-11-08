@@ -1,7 +1,11 @@
 import { useMemo, useState } from "react";
+import { Download } from "lucide-react";
 import BarList, { percent } from "@/components/BarList";
+import Pager, { PAGE_SIZE, lastPageOf } from "@/components/Pager";
+import { Button } from "@/components/ui/button";
 import type { AtsOosTable } from "@/lib/ats-oos";
 import {
+  EVIDENCE_HEADERS,
   LATE_VERDICTS,
   VERDICTS,
   buildOverviewRows,
@@ -15,7 +19,6 @@ import {
   type Verdict,
 } from "@/lib/overview";
 
-const EVIDENCE_LIMIT = 300;
 const ALL = "전체";
 const FIELD_CLASS = "h-9 rounded-lg border border-input bg-background px-2.5 text-sm text-foreground";
 const count = (n: number) => n.toLocaleString("ko-KR");
@@ -38,11 +41,13 @@ type Props = {
   transfers: Record<string, TransferCells>;
   requeried: boolean;
   running: boolean;
+  onDownload: () => void;
 };
 
-export default function OverviewPage({ table, cutlines, transfers, requeried, running }: Props) {
+export default function OverviewPage({ table, cutlines, transfers, requeried, running, onDownload }: Props) {
   const [center, setCenter] = useState(ALL);
   const [verdict, setVerdict] = useState(ALL);
+  const [evidencePage, setEvidencePage] = useState(0);
 
   const allRows = useMemo(() => (table ? buildOverviewRows(table, cutlines, transfers) : []), [table, cutlines, transfers]);
   const centers = useMemo(() => tally(allRows, (r) => r.center), [allRows]);
@@ -66,6 +71,8 @@ export default function OverviewPage({ table, cutlines, transfers, requeried, ru
   const rca = tally(rows, (r) => r.rca3);
   const byCutline = tally(rows.filter((r) => r.cutlineMs !== null), (r) => cutlineLabel(r.cutlineMs)).sort((a, b) => a.key.localeCompare(b.key));
   const evidence = verdict === ALL ? rows : rows.filter((r) => r.verdict === verdict);
+  // 필터로 행이 줄면 마지막 페이지 안으로 맞춘다
+  const page = Math.min(evidencePage, lastPageOf(evidence.length));
 
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-4 p-6">
@@ -87,6 +94,10 @@ export default function OverviewPage({ table, cutlines, transfers, requeried, ru
             ))}
           </select>
         </label>
+        <Button size="lg" variant="outline" disabled={running} onClick={onDownload}>
+          <Download />
+          엑셀 다운로드
+        </Button>
       </div>
 
       {(!requeried || running) && (
@@ -119,7 +130,7 @@ export default function OverviewPage({ table, cutlines, transfers, requeried, ru
           <div className="mr-auto">
             <h3 className="text-sm font-semibold">OOS 사유 근거</h3>
             <p className="text-xs text-muted-foreground">
-              {count(evidence.length)}행{evidence.length > EVIDENCE_LIMIT ? ` 중 앞 ${EVIDENCE_LIMIT}행` : ""} · 처음 늦어진 시간은 굵게 표시합니다.
+              {count(evidence.length)}행 · 처음 늦어진 시간은 굵게 표시합니다.
             </p>
           </div>
           <label className="flex flex-col gap-1 text-xs text-muted-foreground">
@@ -138,7 +149,7 @@ export default function OverviewPage({ table, cutlines, transfers, requeried, ru
           <table className="w-max text-xs">
             <thead className="sticky top-0 bg-muted text-left">
               <tr>
-                {["센터", "오더넘버", "온도대", "출고 커트라인", "WMS 상차시간", "WMS 하차시간", "WMS 진열완료시간", "판정", "지연", "RCA_Level_3", "From FC", "F3_SD", "units"].map((h) => (
+                {EVIDENCE_HEADERS.map((h) => (
                   <th key={h} className="px-2 py-1.5 font-medium whitespace-nowrap">
                     {h}
                   </th>
@@ -146,7 +157,7 @@ export default function OverviewPage({ table, cutlines, transfers, requeried, ru
               </tr>
             </thead>
             <tbody>
-              {evidence.slice(0, EVIDENCE_LIMIT).map((r, i) => (
+              {evidence.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((r, i) => (
                 <tr key={i} className="border-t">
                   <td className="px-2 py-1 whitespace-nowrap">{r.center}</td>
                   <td className="px-2 py-1 whitespace-nowrap">{r.order}</td>
@@ -166,6 +177,7 @@ export default function OverviewPage({ table, cutlines, transfers, requeried, ru
             </tbody>
           </table>
         </div>
+        <Pager page={page} total={evidence.length} onChange={setEvidencePage} />
       </section>
     </main>
   );

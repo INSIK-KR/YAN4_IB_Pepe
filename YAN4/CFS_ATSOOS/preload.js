@@ -21,6 +21,12 @@ contextBridge.exposeInMainWorld("cfsAtsoos", {
   wmsChangeCenter: function (centerId) {
     return ipcRenderer.invoke("cfs-atsoos-wms-change-center", centerId);
   },
+  saveExcel: function (name, base64) {
+    return ipcRenderer.invoke("cfs-atsoos-save-excel", name, base64);
+  },
+  showSavedExcel: function () {
+    return ipcRenderer.invoke("cfs-atsoos-show-saved-excel");
+  },
   pbiStatus: function () {
     return ipcRenderer.invoke("cfs-atsoos-pbi-status");
   },

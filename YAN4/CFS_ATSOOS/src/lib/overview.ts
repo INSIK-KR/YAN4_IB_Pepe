@@ -2,6 +2,15 @@ import type { AtsOosTable } from "./ats-oos";
 
 export type TransferCells = { load: string; unload: string; stow: string; vehicle: string };
 
+export const TRANSFER_COLUMNS: [keyof TransferCells, string][] = [
+  ["load", "WMS 상차시간"],
+  ["unload", "WMS 하차시간"],
+  ["stow", "WMS 진열완료시간"],
+  ["vehicle", "WMS 차량번호"],
+];
+
+export const EVIDENCE_HEADERS = ["센터", "오더넘버", "온도대", "출고 커트라인", "WMS 상차시간", "WMS 하차시간", "WMS 진열완료시간", "판정", "지연", "RCA_Level_3", "From FC", "F3_SD", "units"];
+
 // 같은 오더넘버·GC가 다른 센터에 있을 수 있어 센터까지 묶어서 구분한다
 export const cutlineKey = (center: string, order: string) => center + "|" + order;
 export const transferKey = (center: string, cart: string, ct: string) => center + "|" + cart + "|" + ct;

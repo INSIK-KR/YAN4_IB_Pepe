@@ -18,6 +18,8 @@ type Bridge = {
   wmsChangeCenter(centerId: string): Promise<WmsChangeCenterResult>;
   wmsTransferInfo(request: { cart: string; ct: string; center: string; date: string }): Promise<WmsTransferInfoResult>;
   wmsOrderCutline(orderNumber: string, date: string): Promise<WmsOrderCutlineResult>;
+  saveExcel(name: string, base64: string): Promise<{ ok: true; path: string } | { ok: false; error: string }>;
+  showSavedExcel(): Promise<boolean>;
   pbiStatus(): Promise<PbiStatus>;
   pbiLogin(): Promise<{ ok: boolean }>;
   pbiExport(request: { centers: string[]; date: string }): Promise<PbiExportResult>;
@@ -31,9 +33,13 @@ declare global {
     cfsAtsoos?: Bridge;
     XLSX?: {
       read(data: ArrayBuffer, opts: Record<string, unknown>): { SheetNames: string[]; Sheets: Record<string, Record<string, unknown>> };
+      write(book: unknown, opts: Record<string, unknown>): string;
       utils: {
         decode_range(ref: string): { s: { r: number; c: number }; e: { r: number; c: number } };
         encode_cell(cell: { r: number; c: number }): string;
+        book_new(): unknown;
+        aoa_to_sheet(rows: (string | number)[][]): Record<string, unknown>;
+        book_append_sheet(book: unknown, sheet: unknown, name: string): void;
       };
       SSF: { is_date(format: string): boolean };
     };

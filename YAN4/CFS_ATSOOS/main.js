@@ -1,8 +1,9 @@
 "use strict";
 
+const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
-const { app, BrowserWindow, ipcMain, net, session } = require("electron");
+const { app, BrowserWindow, ipcMain, net, session, shell } = require("electron");
 const { buildAtsOosBody } = require("./powerbi-export");
 const { parseCutlines, buildOrderSearchBody, parseOrderIds, addDays } = require("./wms-order");
 const { PAGING_BASES, PAGE_CAP, buildTransferUrl, parseTransferRows, pickTransferRow, hasNextPage } = require("./wms-transfer");
@@ -588,6 +589,27 @@ ipcMain.handle("cfs-atsoos-wms-transfer-info", async function (_e, request) {
 
 ipcMain.handle("cfs-atsoos-wms-change-center", async function (_e, centerId) {
   return changeWmsCenter(centerId);
+});
+
+// 엑셀은 다운로드 폴더에 저장한다. 파일 이름에 시각이 들어가 이전 파일을 덮어쓰지 않는다
+let lastSavedExcel = "";
+
+ipcMain.handle("cfs-atsoos-save-excel", async function (_e, name, base64) {
+  try {
+    const safe = String(name || "ATS_OOS").replace(/[\\/:*?"<>|]/g, "_");
+    const file = path.join(app.getPath("downloads"), safe + ".xlsx");
+    fs.writeFileSync(file, Buffer.from(String(base64 || ""), "base64"));
+    lastSavedExcel = file;
+    return { ok: true, path: file };
+  } catch (e) {
+    return { ok: false, error: e && e.message ? e.message : String(e) };
+  }
+});
+
+ipcMain.handle("cfs-atsoos-show-saved-excel", async function () {
+  if (!lastSavedExcel) return false;
+  shell.showItemInFolder(lastSavedExcel);
+  return true;
 });
 
 ipcMain.handle("cfs-atsoos-pbi-status", async function () {
