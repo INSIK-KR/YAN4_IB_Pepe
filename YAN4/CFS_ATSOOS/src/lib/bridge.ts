@@ -3,6 +3,10 @@
 export type WmsSession = { loggedIn: boolean; centerId?: string; error?: string; detail?: string };
 export type WmsChangeCenterResult = { ok: true; verified: boolean } | { ok: false; error: string };
 export type WmsOrderCutlineResult = { ok: true; found: boolean; cutlines: string[]; diagnostic?: string } | { ok: false; error: string; needLogin?: boolean };
+export type WmsTransferInfoResult =
+  | { ok: true; found: false }
+  | { ok: true; found: true; ctMatched: boolean; load: string; unload: string; stow: string; vehicle: string; diagnostic?: string }
+  | { ok: false; error: string; needLogin?: boolean };
 export type PbiStatus = { loggedIn: boolean; checking: boolean; loginOpen: boolean };
 export type PbiExportResult = { ok: true; base64: string } | { ok: false; error: string; needLogin?: boolean };
 
@@ -12,6 +16,7 @@ type Bridge = {
   wmsLogin(): Promise<{ ok: boolean; reused?: boolean }>;
   onWmsSession(cb: (s: WmsSession) => void): () => void;
   wmsChangeCenter(centerId: string): Promise<WmsChangeCenterResult>;
+  wmsTransferInfo(request: { cart: string; ct: string; center: string; date: string }): Promise<WmsTransferInfoResult>;
   wmsOrderCutline(orderNumber: string, date: string): Promise<WmsOrderCutlineResult>;
   pbiStatus(): Promise<PbiStatus>;
   pbiLogin(): Promise<{ ok: boolean }>;

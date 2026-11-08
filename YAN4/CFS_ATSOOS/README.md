@@ -20,6 +20,11 @@ npm start
 - WMS 요청에는 시간 제한을 두지 않습니다.
 - 센터 전환은 `/auth/changeCenter/{id}`를 호출한 뒤 첫 화면의 `centerId`로 실제 전환 여부를 다시 확인합니다. 이 앱의 세션만 바뀝니다.
 
+## 이관 정보 조회
+
+- `cartbarcode`의 GC로 이관현황(`/transfer/admin/operation/paging`, 없으면 `same-center/paging`)을 조회해 상차, 하차, 진열완료 시간과 차량번호를 가져옵니다. 조회 조건은 CFS IB LIVE의 ATS 화면과 같습니다.
+- GC는 재사용되므로 `ctbarcode`와 컨테이너가 일치하는 줄을 우선합니다. 일치하는 줄이 없으면 GC만 맞는 첫 줄을 쓰고 "GC만 일치"로 집계합니다.
+
 ## 출고 커트라인 조회
 
 - 받은 데이터의 `ordernumber`를 중복 없이 모아 하나씩 조회합니다.

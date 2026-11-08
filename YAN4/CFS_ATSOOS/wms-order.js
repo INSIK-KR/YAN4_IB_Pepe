@@ -106,4 +106,4 @@ function addDays(date, days) {
   return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
 }
 
-module.exports = { parseCutlines, buildOrderSearchBody, parseOrderIds, addDays };
+module.exports = { parseCutlines, buildOrderSearchBody, parseOrderIds, addDays, cellText, cellsOf };

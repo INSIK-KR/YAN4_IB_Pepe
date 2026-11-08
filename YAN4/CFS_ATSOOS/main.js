@@ -5,6 +5,7 @@ const crypto = require("crypto");
 const { app, BrowserWindow, ipcMain, net, session } = require("electron");
 const { buildAtsOosBody } = require("./powerbi-export");
 const { parseCutlines, buildOrderSearchBody, parseOrderIds, addDays } = require("./wms-order");
+const { PAGING_BASES, PAGE_CAP, buildTransferUrl, parseTransferRows, pickTransferRow, hasNextPage } = require("./wms-transfer");
 
 const APP_TITLE = "CFS ATSOOS";
 // WMS 로그인 쿠키를 앱 재시작 후에도 유지하는 영구 세션 (다른 CFS 앱과 공유하지 않음)
@@ -16,6 +17,7 @@ const WMS_LOGIN_URL = "https://inbound.coupang.com/";
 const WMS_CHANGE_CENTER_URL = "https://inbound.coupang.com/auth/changeCenter/";
 const WMS_ORDER_DETAIL_URL = "https://outbound.coupang.com/order/detail/";
 const WMS_ORDER_LIST_URL = "https://outbound.coupang.com/v2/orderPool/outbound/list";
+const WMS_TRANSFER_REFERER = "https://inbound.coupang.com/transfer/admin/operation/list";
 // 한 오더의 검색과 상세 요청 사이 간격 (WMS 서버 부담 완화)
 const WMS_ORDER_STEP_GAP_MS = 100;
 const WMS_HOSTS = ["inbound.coupang.com", "inventory.coupang.com", "outbound.coupang.com", "wms-front.coupang.com"];
@@ -104,7 +106,7 @@ function probeWmsLogin() {
  * 출고 화면 요청. 페이지에 고객 정보가 있을 수 있어 HTML은 메인 프로세스에서만 다룬다.
  * SSO를 거쳐 돌아올 수 있어 이동은 따라가고, 마지막 주소로 로그인 여부를 판단한다. 시간 제한 없음
  */
-function outboundRequest(url, formBody) {
+function outboundRequest(url, formBody, extraHeaders) {
   return new Promise(function (resolve) {
     let lastUrl = url;
     const req = net.request({ method: formBody ? "POST" : "GET", url: url, session: getSes(), useSessionCookies: true, redirect: "manual" });
@@ -117,6 +119,9 @@ function outboundRequest(url, formBody) {
       req.setHeader("Content-Type", "application/x-www-form-urlencoded");
       req.setHeader("Origin", "https://outbound.coupang.com");
     }
+    Object.keys(extraHeaders || {}).forEach(function (k) {
+      req.setHeader(k, extraHeaders[k]);
+    });
     req.on("redirect", function (_status, _method, redirectUrl) {
       lastUrl = redirectUrl;
       req.followRedirect();
@@ -198,6 +203,54 @@ async function fetchOrderCutline(orderNumber, date) {
     if (parsed.diagnostic && !diagnostic) diagnostic = parsed.diagnostic + " · " + hostAndPath(detail.lastUrl);
   }
   return { ok: true, found: found, cutlines: cutlines, diagnostic: found ? undefined : diagnostic };
+}
+
+/** GC의 이관 정보(상차·하차·진열완료·차량번호). 일반 이관 → 같은 센터 이관 순서로 찾는다 */
+async function fetchTransferInfo(request) {
+  const cart = String((request && request.cart) || "");
+  const ct = String((request && request.ct) || "");
+  const center = String((request && request.center) || "");
+  const date = String((request && request.date) || "");
+  if (!/^GC-[A-Z0-9-]+$/i.test(cart) || !/^[A-Z0-9-]*$/i.test(ct) || !/^[A-Z][A-Z0-9]*$/.test(center) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return { ok: false, error: "조회 값 형식이 올바르지 않습니다" };
+  }
+  const headers = { Accept: "text/html, */*; q=0.01", Referer: WMS_TRANSFER_REFERER, "X-Requested-With": "XMLHttpRequest" };
+  let cartOnly = null;
+  let noStowLabels = null;
+  let lastError = "";
+  for (const base of PAGING_BASES) {
+    for (let page = 0; page < PAGE_CAP; page++) {
+      if (page > 0) await wait(WMS_ORDER_STEP_GAP_MS);
+      const res = await outboundRequest(buildTransferUrl(base, cart, center, date, page), undefined, headers);
+      if (!res.ok) {
+        if (res.needLogin) return res;
+        lastError = res.error;
+        break;
+      }
+      const parsed = parseTransferRows(res.html);
+      const picked = pickTransferRow(parsed.rows, cart, ct);
+      if (picked.row && !parsed.hasStow) noStowLabels = parsed.labels;
+      if (picked.row && picked.ctMatched) return transferResult(picked.row, true, noStowLabels);
+      if (picked.row && !cartOnly) cartOnly = picked.row;
+      if (!hasNextPage(res.html, page)) break;
+    }
+  }
+  if (cartOnly) return transferResult(cartOnly, false, noStowLabels);
+  if (lastError) return { ok: false, error: lastError };
+  return { ok: true, found: false };
+}
+
+function transferResult(row, ctMatched, noStowLabels) {
+  return {
+    ok: true,
+    found: true,
+    ctMatched: ctMatched,
+    load: row.load,
+    unload: row.unload,
+    stow: row.stow,
+    vehicle: row.vehicle,
+    diagnostic: noStowLabels ? "진열완료 열을 못 찾음 · 머리글 " + noStowLabels.join(", ").slice(0, 200) : undefined,
+  };
 }
 
 /** 이 앱의 WMS 세션만 전환된다 (Chrome 등 다른 곳의 로그인에는 영향 없음) */
@@ -526,6 +579,10 @@ ipcMain.handle("cfs-atsoos-wms-login", async function () {
 
 ipcMain.handle("cfs-atsoos-wms-order-cutline", async function (_e, orderNumber, date) {
   return fetchOrderCutline(orderNumber, date);
+});
+
+ipcMain.handle("cfs-atsoos-wms-transfer-info", async function (_e, request) {
+  return fetchTransferInfo(request);
 });
 
 ipcMain.handle("cfs-atsoos-wms-change-center", async function (_e, centerId) {

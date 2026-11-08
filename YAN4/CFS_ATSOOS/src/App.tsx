@@ -13,7 +13,34 @@ const CUTLINE_EMPTY = "-";
 const CUTLINE_UNAVAILABLE = "조회 불가";
 const CUTLINE_FAILED = "실패";
 
-type CutlineLookup = { running: boolean; done: number; total: number; found: number; empty: number; failed: number; error: string; stopped: boolean; note: string };
+type CutlineLookup = {
+  running: boolean;
+  phase: "order" | "gc";
+  done: number;
+  total: number;
+  found: number;
+  empty: number;
+  failed: number;
+  error: string;
+  stopped: boolean;
+  note: string;
+  gcDone: number;
+  gcTotal: number;
+  gcFound: number;
+  gcCartOnly: number;
+  gcMissing: number;
+  gcFailed: number;
+  gcNote: string;
+};
+type TransferCells = { load: string; unload: string; stow: string; vehicle: string };
+
+const TRANSFER_COLUMNS: [keyof TransferCells, string][] = [
+  ["load", "WMS 상차시간"],
+  ["unload", "WMS 하차시간"],
+  ["stow", "WMS 진열완료시간"],
+  ["vehicle", "WMS 차량번호"],
+];
+const transferKey = (cart: string, ct: string) => cart + "|" + ct;
 const FIELD_CLASS = "h-9 rounded-lg border border-input bg-background px-2.5 text-sm text-foreground";
 
 function CenterSelect({ value, onChange, label, only }: { value: string; onChange: (center: string) => void; label: string; only?: string[] }) {
@@ -73,6 +100,7 @@ export default function App() {
   const [switching, setSwitching] = useState(false);
   const [switchError, setSwitchError] = useState("");
   const [cutlines, setCutlines] = useState<Record<string, string>>({});
+  const [transfers, setTransfers] = useState<Record<string, TransferCells>>({});
   const [lookup, setLookup] = useState<CutlineLookup | null>(null);
   const stopLookup = useRef(false);
 
@@ -112,6 +140,7 @@ export default function App() {
       }
       setTable({ ...parseAtsOosExport(res.base64), date, center: dataCenter });
       setCutlines({});
+      setTransfers({});
       setLookup(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -124,10 +153,39 @@ export default function App() {
     if (!bridge || !table || lookup?.running) return;
     const orderIndex = table.columns.indexOf("ordernumber");
     const orders = [...new Set(table.rows.map((row) => row[orderIndex]).filter(Boolean))];
-    const state: CutlineLookup = { running: true, done: 0, total: orders.length, found: 0, empty: 0, failed: 0, error: "", stopped: false, note: "" };
+    const cartIndex = table.columns.indexOf("cartbarcode");
+    const ctIndex = table.columns.indexOf("ctbarcode");
+    const pairs = new Map<string, { cart: string; ct: string }>();
+    if (cartIndex >= 0) {
+      for (const row of table.rows) {
+        const cart = row[cartIndex];
+        const ct = ctIndex >= 0 ? row[ctIndex] : "";
+        if (/^GC-/i.test(cart)) pairs.set(transferKey(cart, ct), { cart, ct });
+      }
+    }
+    const state: CutlineLookup = {
+      running: true,
+      phase: "order",
+      done: 0,
+      total: orders.length,
+      found: 0,
+      empty: 0,
+      failed: 0,
+      error: "",
+      stopped: false,
+      note: "",
+      gcDone: 0,
+      gcTotal: pairs.size,
+      gcFound: 0,
+      gcCartOnly: 0,
+      gcMissing: 0,
+      gcFailed: 0,
+      gcNote: "",
+    };
     const finish = (patch: Partial<CutlineLookup>) => setLookup({ ...state, ...patch, running: false });
     stopLookup.current = false;
     setCutlines({});
+    setTransfers({});
     setLookup({ ...state });
 
     // 다른 센터 오더는 그 센터로 전환해야 열린다
@@ -155,6 +213,28 @@ export default function App() {
       }
       state.done++;
       setCutlines((prev) => ({ ...prev, [order]: value }));
+      setLookup({ ...state });
+      await new Promise((resolve) => setTimeout(resolve, CUTLINE_GAP_MS));
+    }
+
+    state.phase = "gc";
+    setLookup({ ...state });
+    for (const [key, { cart, ct }] of pairs) {
+      if (stopLookup.current) return finish({ stopped: true });
+      const res = await bridge.wmsTransferInfo({ cart, ct, center: table.center, date: table.date });
+      if (!res.ok && res.needLogin) return finish({ error: res.error });
+      if (!res.ok) {
+        state.gcFailed++;
+      } else if (!res.found) {
+        state.gcMissing++;
+        if (!state.gcNote) state.gcNote = cart + ": 이관현황에 없음";
+      } else {
+        if (res.ctMatched) state.gcFound++;
+        else state.gcCartOnly++;
+        if (!state.gcNote && res.diagnostic) state.gcNote = res.diagnostic;
+        setTransfers((prev) => ({ ...prev, [key]: { load: res.load, unload: res.unload, stow: res.stow, vehicle: res.vehicle } }));
+      }
+      state.gcDone++;
       setLookup({ ...state });
       await new Promise((resolve) => setTimeout(resolve, CUTLINE_GAP_MS));
     }
@@ -256,7 +336,7 @@ export default function App() {
               {table && !error && !lookup?.running && (
                 <Button size="lg" variant="outline" disabled={!wmsIn || table.rows.length === 0} onClick={runCutlineLookup}>
                   <Clock />
-                  출고 커트라인 조회
+                  WMS 재조회
                 </Button>
               )}
               {lookup?.running && (
@@ -268,7 +348,14 @@ export default function App() {
             </div>
 
             {lookup?.running && (
-              <StatusLine tone="busy" title={`출고 커트라인 조회 중 ${lookup.done.toLocaleString("ko-KR")} / ${lookup.total.toLocaleString("ko-KR")}`} />
+              <StatusLine
+                tone="busy"
+                title={
+                  lookup.phase === "order"
+                    ? `출고 커트라인 조회 중 ${lookup.done.toLocaleString("ko-KR")} / ${lookup.total.toLocaleString("ko-KR")}`
+                    : `이관 정보 조회 중 ${lookup.gcDone.toLocaleString("ko-KR")} / ${lookup.gcTotal.toLocaleString("ko-KR")}`
+                }
+              />
             )}
             {lookup && !lookup.running && lookup.error && <StatusLine tone="error" title={lookup.error} />}
             {lookup && !lookup.running && !lookup.error && (
@@ -277,6 +364,14 @@ export default function App() {
                 title={`출고 커트라인 조회 ${lookup.stopped ? "중지" : "완료"} ${lookup.done.toLocaleString("ko-KR")} / ${lookup.total.toLocaleString("ko-KR")}`}
               >
                 {`값 있음 ${lookup.found.toLocaleString("ko-KR")} · 값 없음 ${lookup.empty.toLocaleString("ko-KR")} · 실패 ${lookup.failed.toLocaleString("ko-KR")}${lookup.note ? ` · 조회 불가 예시 ${lookup.note}` : ""}`}
+              </StatusLine>
+            )}
+            {lookup && !lookup.running && !lookup.error && lookup.gcTotal > 0 && lookup.phase === "gc" && (
+              <StatusLine
+                tone={lookup.gcFailed || lookup.gcMissing ? "idle" : "ok"}
+                title={`이관 정보 조회 ${lookup.stopped ? "중지" : "완료"} ${lookup.gcDone.toLocaleString("ko-KR")} / ${lookup.gcTotal.toLocaleString("ko-KR")}`}
+              >
+                {`GC·CT 일치 ${lookup.gcFound.toLocaleString("ko-KR")} · GC만 일치 ${lookup.gcCartOnly.toLocaleString("ko-KR")} · 없음 ${lookup.gcMissing.toLocaleString("ko-KR")} · 실패 ${lookup.gcFailed.toLocaleString("ko-KR")}${lookup.gcNote ? ` · ${lookup.gcNote}` : ""}`}
               </StatusLine>
             )}
 
@@ -298,6 +393,13 @@ export default function App() {
                           </th>
                         ))}
                         {lookup && <th className="whitespace-nowrap px-2 py-1.5 font-medium">출고 커트라인</th>}
+                        {lookup &&
+                          lookup.gcTotal > 0 &&
+                          TRANSFER_COLUMNS.map(([key, label]) => (
+                            <th key={key} className="whitespace-nowrap px-2 py-1.5 font-medium">
+                              {label}
+                            </th>
+                          ))}
                       </tr>
                     </thead>
                     <tbody>
@@ -309,6 +411,13 @@ export default function App() {
                             </td>
                           ))}
                           {lookup && <td className="whitespace-nowrap px-2 py-1">{cutlines[row[table.columns.indexOf("ordernumber")]] ?? ""}</td>}
+                          {lookup &&
+                            lookup.gcTotal > 0 &&
+                            TRANSFER_COLUMNS.map(([key]) => (
+                              <td key={key} className="whitespace-nowrap px-2 py-1">
+                                {transfers[transferKey(row[table.columns.indexOf("cartbarcode")], row[table.columns.indexOf("ctbarcode")] ?? "")]?.[key] ?? ""}
+                              </td>
+                            ))}
                         </tr>
                       ))}
                     </tbody>
