@@ -534,6 +534,7 @@ function createMainWindow() {
     minWidth: 800,
     minHeight: 560,
     title: APP_TITLE,
+    icon: path.join(__dirname, "build", "icon.png"),
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),

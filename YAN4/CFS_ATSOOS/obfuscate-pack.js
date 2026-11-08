@@ -55,6 +55,8 @@ function main() {
     fs.copyFileSync(path.join(root, name), path.join(packDir, name));
   });
   fs.cpSync(path.join(root, "dist"), path.join(packDir, "dist"), { recursive: true });
+  fs.mkdirSync(path.join(packDir, "build"), { recursive: true });
+  fs.copyFileSync(path.join(root, "build", "icon.png"), path.join(packDir, "build", "icon.png"));
 
   const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
   fs.writeFileSync(

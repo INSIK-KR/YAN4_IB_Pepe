@@ -1,6 +1,6 @@
 {
   "name": "cfs-atsoos",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "private": true,
   "description": "CFS ATSOOS",
   "author": {
@@ -40,6 +40,8 @@
     "productName": "CFS ATSOOS",
     "copyright": "YAN4 IB Pepe",
     "artifactName": "${productName} ${version}.${ext}",
+    "afterPack": "./after-pack.js",
+    "icon": "build/icon.ico",
     "directories": {
       "output": "release"
     },
@@ -50,6 +52,7 @@
       "powerbi-query.json",
       "wms-order.js",
       "wms-transfer.js",
+      "build/icon.png",
       "dist/**/*",
       "!**/*.map"
     ],
@@ -57,6 +60,7 @@
       "target": [
         "portable"
       ],
+      "icon": "build/icon.ico",
       "signAndEditExecutable": false
     }
   }
