@@ -5,6 +5,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { bridge, type PbiStatus, type WmsSession } from "@/lib/bridge";
 import { parseAtsOosExport, type AtsOosTable } from "@/lib/ats-oos";
 import { BI_CENTERS, CENTER_NAMES, CENTER_REGIONS, DEFAULT_CENTER, centerIdOf, isSelectableCenter } from "@/lib/centers";
+import { cutlineKey, transferKey, type TransferCells } from "@/lib/overview";
+import OverviewPage from "@/pages/OverviewPage";
 
 const PREVIEW_ROWS = 20;
 // WMS 서버 부담을 줄이려고 오더 사이에 두는 간격
@@ -35,7 +37,6 @@ type CutlineLookup = {
   gcNote: string;
   centerErrors: string[];
 };
-type TransferCells = { load: string; unload: string; stow: string; vehicle: string };
 type CenterGroup = { orders: Set<string>; pairs: Map<string, { cart: string; ct: string }> };
 
 const TRANSFER_COLUMNS: [keyof TransferCells, string][] = [
@@ -44,9 +45,6 @@ const TRANSFER_COLUMNS: [keyof TransferCells, string][] = [
   ["stow", "WMS 진열완료시간"],
   ["vehicle", "WMS 차량번호"],
 ];
-// 같은 오더넘버·GC가 다른 센터에 있을 수 있어 센터까지 묶어서 구분한다
-const cutlineKey = (center: string, order: string) => center + "|" + order;
-const transferKey = (center: string, cart: string, ct: string) => center + "|" + cart + "|" + ct;
 const count = (n: number) => n.toLocaleString("ko-KR");
 
 const FIELD_CLASS = "h-9 rounded-lg border border-input bg-background px-2.5 text-sm text-foreground";
@@ -126,6 +124,7 @@ function StatusLine({ tone, title, children }: { tone: Tone; title: string; chil
 
 export default function App() {
   const [version, setVersion] = useState("");
+  const [view, setView] = useState<"data" | "overview">("data");
   // null = 첫 확인이 아직 끝나지 않음
   const [wms, setWms] = useState<WmsSession | null>(null);
   const [pbi, setPbi] = useState<PbiStatus>({ loggedIn: false, checking: true, loginOpen: false });
@@ -351,9 +350,20 @@ export default function App() {
       <header className="flex h-12 items-center gap-2 border-b bg-background px-4">
         <span className="font-semibold">CFS ATSOOS</span>
         {version && <span className="text-xs text-muted-foreground">v{version}</span>}
+        <nav className="ml-4 flex gap-1" aria-label="화면">
+          <Button size="sm" variant={view === "data" ? "secondary" : "ghost"} aria-pressed={view === "data"} onClick={() => setView("data")}>
+            데이터
+          </Button>
+          <Button size="sm" variant={view === "overview" ? "secondary" : "ghost"} aria-pressed={view === "overview"} onClick={() => setView("overview")}>
+            개요
+          </Button>
+        </nav>
       </header>
 
-      <main className="mx-auto flex w-full max-w-6xl flex-col gap-4 p-6">
+      {view === "overview" && <OverviewPage table={table} cutlines={cutlines} transfers={transfers} requeried={lookup !== null} running={!!lookup?.running} />}
+
+      {/* 개요를 보는 동안에도 재조회가 이어지도록 화면만 숨긴다 */}
+      <main className={view === "data" ? "mx-auto flex w-full max-w-6xl flex-col gap-4 p-6" : "hidden"}>
         <div className="grid gap-4 md:grid-cols-2">
           <Card>
             <CardHeader>
