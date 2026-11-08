@@ -55,4 +55,49 @@ function parseCutlines(html) {
   return { found: false, values: values, diagnostic: diagnostic };
 }
 
-module.exports = { parseCutlines };
+/** 출고 목록 검색 폼 그대로의 본문 (빈 칸도 브라우저처럼 함께 보낸다) */
+function buildOrderSearchBody(orderNumber, start, end) {
+  return new URLSearchParams([
+    ["page", ""],
+    ["start", start],
+    ["end", end],
+    ["searched", "false"],
+    ["backwardKey", ""],
+    ["forwardKey", ""],
+    ["searchKey", ""],
+    ["shipmentStatus", ""],
+    ["shippingCompanyId", ""],
+    ["shippingType", ""],
+    ["pageSize", "20"],
+    ["processPathGroupId", ""],
+    ["workFlowStatus", ""],
+    ["rebatchType", ""],
+    ["reShipType", ""],
+    ["pickingType", ""],
+    ["batchId", ""],
+    ["orderNumber", orderNumber],
+    ["shipmentId", ""],
+    ["skuId", ""],
+    ["skuExternalId", ""],
+    ["barcode", ""],
+    ["invoiceNumber", ""],
+  ]).toString();
+}
+
+/** 검색 결과에서 글자가 이 오더넘버인 링크의 주문 ID만 꺼낸다 */
+function parseOrderIds(html, orderNumber) {
+  const ids = [];
+  const re = /<a\b[^>]*href="\/order\/detail\/(\d+)"[^>]*>([\s\S]*?)<\/a>/gi;
+  let m;
+  while ((m = re.exec(String(html || "")))) {
+    if (cellText(m[2]) === orderNumber && ids.indexOf(m[1]) < 0) ids.push(m[1]);
+  }
+  return ids;
+}
+
+function addDays(date, days) {
+  const [y, m, d] = String(date).split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+
+module.exports = { parseCutlines, buildOrderSearchBody, parseOrderIds, addDays };

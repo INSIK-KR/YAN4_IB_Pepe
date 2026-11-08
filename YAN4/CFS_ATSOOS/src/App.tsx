@@ -139,7 +139,7 @@ export default function App() {
 
     for (const order of orders) {
       if (stopLookup.current) return finish({ stopped: true });
-      const res = await bridge.wmsOrderCutline(order);
+      const res = await bridge.wmsOrderCutline(order, table.date);
       if (!res.ok && res.needLogin) return finish({ error: res.error });
       let value: string;
       if (!res.ok) {

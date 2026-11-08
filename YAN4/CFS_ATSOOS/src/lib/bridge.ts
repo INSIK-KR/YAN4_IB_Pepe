@@ -12,7 +12,7 @@ type Bridge = {
   wmsLogin(): Promise<{ ok: boolean; reused?: boolean }>;
   onWmsSession(cb: (s: WmsSession) => void): () => void;
   wmsChangeCenter(centerId: string): Promise<WmsChangeCenterResult>;
-  wmsOrderCutline(orderNumber: string): Promise<WmsOrderCutlineResult>;
+  wmsOrderCutline(orderNumber: string, date: string): Promise<WmsOrderCutlineResult>;
   pbiStatus(): Promise<PbiStatus>;
   pbiLogin(): Promise<{ ok: boolean }>;
   pbiExport(request: { center: string; date: string }): Promise<PbiExportResult>;

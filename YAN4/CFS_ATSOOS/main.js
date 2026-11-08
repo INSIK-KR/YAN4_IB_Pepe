@@ -4,7 +4,7 @@ const path = require("path");
 const crypto = require("crypto");
 const { app, BrowserWindow, ipcMain, net, session } = require("electron");
 const { buildAtsOosBody } = require("./powerbi-export");
-const { parseCutlines } = require("./wms-order");
+const { parseCutlines, buildOrderSearchBody, parseOrderIds, addDays } = require("./wms-order");
 
 const APP_TITLE = "CFS ATSOOS";
 // WMS 로그인 쿠키를 앱 재시작 후에도 유지하는 영구 세션 (다른 CFS 앱과 공유하지 않음)
@@ -15,6 +15,9 @@ const CHROME_UA =
 const WMS_LOGIN_URL = "https://inbound.coupang.com/";
 const WMS_CHANGE_CENTER_URL = "https://inbound.coupang.com/auth/changeCenter/";
 const WMS_ORDER_DETAIL_URL = "https://outbound.coupang.com/order/detail/";
+const WMS_ORDER_LIST_URL = "https://outbound.coupang.com/v2/orderPool/outbound/list";
+// 한 오더의 검색과 상세 요청 사이 간격 (WMS 서버 부담 완화)
+const WMS_ORDER_STEP_GAP_MS = 100;
 const WMS_HOSTS = ["inbound.coupang.com", "inventory.coupang.com", "outbound.coupang.com", "wms-front.coupang.com"];
 
 const PBI_REPORT_URL =
@@ -98,20 +101,22 @@ function probeWmsLogin() {
 }
 
 /**
- * 오더 상세의 출고 커트라인. 페이지에 고객 정보가 있을 수 있어 HTML은 여기서만 읽고 값만 돌려준다.
+ * 출고 화면 요청. 페이지에 고객 정보가 있을 수 있어 HTML은 메인 프로세스에서만 다룬다.
  * SSO를 거쳐 돌아올 수 있어 이동은 따라가고, 마지막 주소로 로그인 여부를 판단한다. 시간 제한 없음
  */
-function fetchOrderCutline(orderNumber) {
-  const order = String(orderNumber || "");
-  if (!/^\d{1,20}$/.test(order)) return Promise.resolve({ ok: false, error: "오더넘버 형식이 올바르지 않습니다" });
+function outboundRequest(url, formBody) {
   return new Promise(function (resolve) {
-    let lastUrl = WMS_ORDER_DETAIL_URL + order;
-    const req = net.request({ url: lastUrl, session: getSes(), useSessionCookies: true, redirect: "manual" });
+    let lastUrl = url;
+    const req = net.request({ method: formBody ? "POST" : "GET", url: url, session: getSes(), useSessionCookies: true, redirect: "manual" });
     req.setHeader("Accept", "text/html,application/xhtml+xml,*/*;q=0.8");
     // 없으면 서버가 표 제목을 다른 언어로 줄 수 있다
     req.setHeader("Accept-Language", "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7");
-    req.setHeader("Referer", "https://outbound.coupang.com/v2/orderPool/outbound/list");
+    req.setHeader("Referer", WMS_ORDER_LIST_URL);
     req.setHeader("User-Agent", CHROME_UA);
+    if (formBody) {
+      req.setHeader("Content-Type", "application/x-www-form-urlencoded");
+      req.setHeader("Origin", "https://outbound.coupang.com");
+    }
     req.on("redirect", function (_status, _method, redirectUrl) {
       lastUrl = redirectUrl;
       req.followRedirect();
@@ -132,13 +137,7 @@ function fetchOrderCutline(orderNumber) {
         chunks.push(chunk);
       });
       res.on("end", function () {
-        const parsed = parseCutlines(Buffer.concat(chunks).toString("utf8"));
-        resolve({
-          ok: true,
-          found: parsed.found,
-          cutlines: parsed.values,
-          diagnostic: parsed.diagnostic ? parsed.diagnostic + " · " + hostAndPath(lastUrl) : undefined,
-        });
+        resolve({ ok: true, html: Buffer.concat(chunks).toString("utf8"), lastUrl: lastUrl });
       });
       res.on("error", function (e) {
         resolve({ ok: false, error: e && e.message ? e.message : String(e) });
@@ -147,8 +146,58 @@ function fetchOrderCutline(orderNumber) {
     req.on("error", function (e) {
       resolve({ ok: false, error: e && e.message ? e.message : String(e) });
     });
-    req.end();
+    req.end(formBody);
   });
+}
+
+function wait(ms) {
+  return new Promise(function (resolve) {
+    setTimeout(resolve, ms);
+  });
+}
+
+/** 오더넘버 → 주문 ID. 화면에서 쓰는 기간(OOS일~다음 날)에 없으면 하루 앞까지 넓혀 한 번 더 찾는다 */
+async function findOrderIds(order, date) {
+  const ranges = [
+    [date, addDays(date, 1)],
+    [addDays(date, -1), addDays(date, 1)],
+  ];
+  let size = 0;
+  for (let i = 0; i < ranges.length; i++) {
+    if (i > 0) await wait(WMS_ORDER_STEP_GAP_MS);
+    const res = await outboundRequest(WMS_ORDER_LIST_URL, buildOrderSearchBody(order, ranges[i][0], ranges[i][1]));
+    if (!res.ok) return res;
+    const ids = parseOrderIds(res.html, order);
+    if (ids.length) return { ok: true, ids: ids };
+    size = res.html.length;
+  }
+  return { ok: true, ids: [], size: size };
+}
+
+/** 오더의 출고 커트라인. 화면에는 값과 고객 정보가 없는 진단 문구만 돌려준다 */
+async function fetchOrderCutline(orderNumber, date) {
+  const order = String(orderNumber || "");
+  if (!/^\d{1,20}$/.test(order)) return { ok: false, error: "오더넘버 형식이 올바르지 않습니다" };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ""))) return { ok: false, error: "날짜 형식이 올바르지 않습니다" };
+  const search = await findOrderIds(order, date);
+  if (!search.ok) return search;
+  if (!search.ids.length) return { ok: true, found: false, cutlines: [], diagnostic: "주문 ID를 찾지 못함 · 검색 응답 " + search.size + "자" };
+
+  const cutlines = [];
+  let found = false;
+  let diagnostic;
+  for (const id of search.ids) {
+    await wait(WMS_ORDER_STEP_GAP_MS);
+    const detail = await outboundRequest(WMS_ORDER_DETAIL_URL + id);
+    if (!detail.ok) return detail;
+    const parsed = parseCutlines(detail.html);
+    found = found || parsed.found;
+    parsed.values.forEach(function (value) {
+      if (cutlines.indexOf(value) < 0) cutlines.push(value);
+    });
+    if (parsed.diagnostic && !diagnostic) diagnostic = parsed.diagnostic + " · " + hostAndPath(detail.lastUrl);
+  }
+  return { ok: true, found: found, cutlines: cutlines, diagnostic: found ? undefined : diagnostic };
 }
 
 /** 이 앱의 WMS 세션만 전환된다 (Chrome 등 다른 곳의 로그인에는 영향 없음) */
@@ -475,8 +524,8 @@ ipcMain.handle("cfs-atsoos-wms-login", async function () {
   return openWmsLoginWindow();
 });
 
-ipcMain.handle("cfs-atsoos-wms-order-cutline", async function (_e, orderNumber) {
-  return fetchOrderCutline(orderNumber);
+ipcMain.handle("cfs-atsoos-wms-order-cutline", async function (_e, orderNumber, date) {
+  return fetchOrderCutline(orderNumber, date);
 });
 
 ipcMain.handle("cfs-atsoos-wms-change-center", async function (_e, centerId) {

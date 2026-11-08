@@ -12,8 +12,8 @@ contextBridge.exposeInMainWorld("cfsAtsoos", {
   wmsLogin: function () {
     return ipcRenderer.invoke("cfs-atsoos-wms-login");
   },
-  wmsOrderCutline: function (orderNumber) {
-    return ipcRenderer.invoke("cfs-atsoos-wms-order-cutline", orderNumber);
+  wmsOrderCutline: function (orderNumber, date) {
+    return ipcRenderer.invoke("cfs-atsoos-wms-order-cutline", orderNumber, date);
   },
   wmsChangeCenter: function (centerId) {
     return ipcRenderer.invoke("cfs-atsoos-wms-change-center", centerId);
