@@ -488,7 +488,7 @@ function pbiPost(url, headers, body) {
 async function exportAtsOos(request) {
   let body;
   try {
-    body = JSON.stringify(buildAtsOosBody(request && request.center, request && request.date));
+    body = JSON.stringify(buildAtsOosBody((request && request.centers) || [], request && request.date));
   } catch (e) {
     return { ok: false, error: e.message };
   }

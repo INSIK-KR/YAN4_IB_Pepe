@@ -12,10 +12,12 @@ const CUTLINE_GAP_MS = 140;
 const CUTLINE_EMPTY = "-";
 const CUTLINE_UNAVAILABLE = "조회 불가";
 const CUTLINE_FAILED = "실패";
+const CUTLINE_SWITCH_FAILED = "전환 실패";
 
 type CutlineLookup = {
   running: boolean;
   phase: "order" | "gc";
+  center: string;
   done: number;
   total: number;
   found: number;
@@ -31,8 +33,10 @@ type CutlineLookup = {
   gcMissing: number;
   gcFailed: number;
   gcNote: string;
+  centerErrors: string[];
 };
 type TransferCells = { load: string; unload: string; stow: string; vehicle: string };
+type CenterGroup = { orders: Set<string>; pairs: Map<string, { cart: string; ct: string }> };
 
 const TRANSFER_COLUMNS: [keyof TransferCells, string][] = [
   ["load", "WMS 상차시간"],
@@ -40,17 +44,21 @@ const TRANSFER_COLUMNS: [keyof TransferCells, string][] = [
   ["stow", "WMS 진열완료시간"],
   ["vehicle", "WMS 차량번호"],
 ];
-const transferKey = (cart: string, ct: string) => cart + "|" + ct;
+// 같은 오더넘버·GC가 다른 센터에 있을 수 있어 센터까지 묶어서 구분한다
+const cutlineKey = (center: string, order: string) => center + "|" + order;
+const transferKey = (center: string, cart: string, ct: string) => center + "|" + cart + "|" + ct;
+const count = (n: number) => n.toLocaleString("ko-KR");
+
 const FIELD_CLASS = "h-9 rounded-lg border border-input bg-background px-2.5 text-sm text-foreground";
 
-function CenterSelect({ value, onChange, label, only }: { value: string; onChange: (center: string) => void; label: string; only?: string[] }) {
+function CenterSelect({ value, onChange, label }: { value: string; onChange: (center: string) => void; label: string }) {
   return (
     <label className="flex flex-col gap-1 text-xs text-muted-foreground">
       {label}
       <select value={value} onChange={(e) => onChange(e.target.value)} className={FIELD_CLASS}>
         {CENTER_REGIONS.map(([region, names]) => (
           <optgroup key={region} label={region}>
-            {names.filter((name) => !only || only.includes(name)).map((name) => (
+            {names.map((name) => (
               <option key={name} value={name}>
                 {name}
               </option>
@@ -59,6 +67,36 @@ function CenterSelect({ value, onChange, label, only }: { value: string; onChang
         ))}
       </select>
     </label>
+  );
+}
+
+function CenterChecks({ value, onChange }: { value: string[]; onChange: (centers: string[]) => void }) {
+  const toggle = (name: string) => onChange(value.includes(name) ? value.filter((c) => c !== name) : [...value, name]);
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+        <span className="mr-1">센터 {value.length}개 선택</span>
+        <Button size="xs" variant="ghost" onClick={() => onChange([...BI_CENTERS])}>
+          모두 선택
+        </Button>
+        <Button size="xs" variant="ghost" onClick={() => onChange([])}>
+          모두 해제
+        </Button>
+      </div>
+      {CENTER_REGIONS.map(([region, names]) => (
+        <div key={region} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span className="w-14 text-xs text-muted-foreground">{region}</span>
+          {names
+            .filter((name) => BI_CENTERS.includes(name))
+            .map((name) => (
+              <label key={name} className="flex cursor-pointer items-center gap-1.5 text-sm">
+                <input type="checkbox" data-center={name} checked={value.includes(name)} onChange={() => toggle(name)} />
+                {name}
+              </label>
+            ))}
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -94,8 +132,9 @@ export default function App() {
   const [date, setDate] = useState(yesterday);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [table, setTable] = useState<(AtsOosTable & { date: string; center: string }) | null>(null);
-  const [dataCenter, setDataCenter] = useState(DEFAULT_CENTER);
+  const [table, setTable] = useState<(AtsOosTable & { date: string; centers: string[] }) | null>(null);
+  const [dataCenters, setDataCenters] = useState<string[]>([DEFAULT_CENTER]);
+  const centersTouched = useRef(false);
   const [switchTarget, setSwitchTarget] = useState(DEFAULT_CENTER);
   const [switching, setSwitching] = useState(false);
   const [switchError, setSwitchError] = useState("");
@@ -107,11 +146,14 @@ export default function App() {
   const wmsCenterId = wms?.centerId;
   const wmsCenterName = wmsCenterId ? (CENTER_NAMES[wmsCenterId] ?? wmsCenterId) : undefined;
 
-  // WMS 현재 센터가 확인되거나 바뀌면 전환 목록과 데이터 센터를 그 값으로 맞춘다 (데이터 센터는 이후 따로 바꿀 수 있음)
+  // WMS 현재 센터가 확인되거나 바뀌면 전환 목록을 맞춘다. 체크박스는 처음 한 번만 현재 센터로 맞추고 이후엔 고른 대로 둔다
   useEffect(() => {
     if (!isSelectableCenter(wmsCenterName)) return;
     setSwitchTarget(wmsCenterName);
-    if (BI_CENTERS.includes(wmsCenterName)) setDataCenter(wmsCenterName);
+    if (!centersTouched.current && BI_CENTERS.includes(wmsCenterName)) {
+      centersTouched.current = true;
+      setDataCenters([wmsCenterName]);
+    }
   }, [wmsCenterName]);
 
   useEffect(() => {
@@ -128,17 +170,23 @@ export default function App() {
     };
   }, []);
 
+  function changeDataCenters(centers: string[]) {
+    centersTouched.current = true;
+    setDataCenters(centers);
+  }
+
   async function fetchData() {
-    if (!bridge || busy) return;
+    if (!bridge || busy || !dataCenters.length) return;
     setBusy(true);
     setError("");
+    const centers = BI_CENTERS.filter((c) => dataCenters.includes(c));
     try {
-      const res = await bridge.pbiExport({ center: dataCenter, date });
+      const res = await bridge.pbiExport({ centers, date });
       if (!res.ok) {
         setError(res.error);
         return;
       }
-      setTable({ ...parseAtsOosExport(res.base64), date, center: dataCenter });
+      setTable({ ...parseAtsOosExport(res.base64), date, centers });
       setCutlines({});
       setTransfers({});
       setLookup(null);
@@ -151,23 +199,39 @@ export default function App() {
 
   async function runCutlineLookup() {
     if (!bridge || !table || lookup?.running) return;
-    const orderIndex = table.columns.indexOf("ordernumber");
-    const orders = [...new Set(table.rows.map((row) => row[orderIndex]).filter(Boolean))];
-    const cartIndex = table.columns.indexOf("cartbarcode");
-    const ctIndex = table.columns.indexOf("ctbarcode");
-    const pairs = new Map<string, { cart: string; ct: string }>();
-    if (cartIndex >= 0) {
-      for (const row of table.rows) {
-        const cart = row[cartIndex];
-        const ct = ctIndex >= 0 ? row[ctIndex] : "";
-        if (/^GC-/i.test(cart)) pairs.set(transferKey(cart, ct), { cart, ct });
+    const col = (name: string) => table.columns.indexOf(name);
+    const centerIndex = col("centercode");
+    const orderIndex = col("ordernumber");
+    const cartIndex = col("cartbarcode");
+    const ctIndex = col("ctbarcode");
+
+    // 데이터에 나온 센터 순서대로 묶어서, 센터를 한 번만 전환하고 그 센터 건을 모두 조회한다
+    const groups = new Map<string, CenterGroup>();
+    for (const row of table.rows) {
+      const center = row[centerIndex];
+      let group = groups.get(center);
+      if (!group) {
+        group = { orders: new Set(), pairs: new Map() };
+        groups.set(center, group);
       }
+      if (row[orderIndex]) group.orders.add(row[orderIndex]);
+      const cart = cartIndex >= 0 ? row[cartIndex] : "";
+      const ct = ctIndex >= 0 ? row[ctIndex] : "";
+      if (/^GC-/i.test(cart)) group.pairs.set(transferKey(center, cart, ct), { cart, ct });
     }
+
+    let total = 0;
+    let gcTotal = 0;
+    groups.forEach((group) => {
+      total += group.orders.size;
+      gcTotal += group.pairs.size;
+    });
     const state: CutlineLookup = {
       running: true,
       phase: "order",
+      center: "",
       done: 0,
-      total: orders.length,
+      total,
       found: 0,
       empty: 0,
       failed: 0,
@@ -175,68 +239,90 @@ export default function App() {
       stopped: false,
       note: "",
       gcDone: 0,
-      gcTotal: pairs.size,
+      gcTotal,
       gcFound: 0,
       gcCartOnly: 0,
       gcMissing: 0,
       gcFailed: 0,
       gcNote: "",
+      centerErrors: [],
     };
     const finish = (patch: Partial<CutlineLookup>) => setLookup({ ...state, ...patch, running: false });
+    const gap = () => new Promise((resolve) => setTimeout(resolve, CUTLINE_GAP_MS));
     stopLookup.current = false;
     setCutlines({});
     setTransfers({});
     setLookup({ ...state });
 
-    // 다른 센터 오더는 그 센터로 전환해야 열린다
-    if (wmsCenterName !== table.center) {
-      const id = centerIdOf(table.center);
-      const switched = id ? await bridge.wmsChangeCenter(id) : { ok: false as const, error: "센터 ID를 찾지 못했습니다" };
-      if (!switched.ok) return finish({ error: table.center + " 센터 전환 실패: " + switched.error });
-    }
-
-    for (const order of orders) {
+    let current = wmsCenterName;
+    for (const [center, group] of groups) {
       if (stopLookup.current) return finish({ stopped: true });
-      const res = await bridge.wmsOrderCutline(order, table.date);
-      if (!res.ok && res.needLogin) return finish({ error: res.error });
-      let value: string;
-      if (!res.ok) {
-        value = CUTLINE_FAILED;
-        state.failed++;
-      } else if (res.cutlines.length) {
-        value = res.cutlines.join(" / ");
-        state.found++;
-      } else {
-        value = res.found ? CUTLINE_EMPTY : CUTLINE_UNAVAILABLE;
-        state.empty++;
-        if (!state.note && res.diagnostic) state.note = order + ": " + res.diagnostic;
-      }
-      state.done++;
-      setCutlines((prev) => ({ ...prev, [order]: value }));
+      state.center = center;
+      state.phase = "order";
       setLookup({ ...state });
-      await new Promise((resolve) => setTimeout(resolve, CUTLINE_GAP_MS));
-    }
 
-    state.phase = "gc";
-    setLookup({ ...state });
-    for (const [key, { cart, ct }] of pairs) {
-      if (stopLookup.current) return finish({ stopped: true });
-      const res = await bridge.wmsTransferInfo({ cart, ct, center: table.center, date: table.date });
-      if (!res.ok && res.needLogin) return finish({ error: res.error });
-      if (!res.ok) {
-        state.gcFailed++;
-      } else if (!res.found) {
-        state.gcMissing++;
-        if (!state.gcNote) state.gcNote = cart + ": 이관현황에 없음";
-      } else {
-        if (res.ctMatched) state.gcFound++;
-        else state.gcCartOnly++;
-        if (!state.gcNote && res.diagnostic) state.gcNote = res.diagnostic;
-        setTransfers((prev) => ({ ...prev, [key]: { load: res.load, unload: res.unload, stow: res.stow, vehicle: res.vehicle } }));
+      // 다른 센터 오더는 그 센터로 전환해야 열린다. 실패해도 다음 센터는 계속 조회한다
+      if (current !== center) {
+        const id = centerIdOf(center);
+        const switched = id ? await bridge.wmsChangeCenter(id) : { ok: false as const, error: "센터 ID를 찾지 못했습니다" };
+        if (!switched.ok) {
+          state.centerErrors.push(center + " 센터 전환 실패: " + switched.error);
+          state.failed += group.orders.size;
+          state.done += group.orders.size;
+          state.gcFailed += group.pairs.size;
+          state.gcDone += group.pairs.size;
+          const failedCells: Record<string, string> = {};
+          group.orders.forEach((order) => (failedCells[cutlineKey(center, order)] = CUTLINE_SWITCH_FAILED));
+          setCutlines((prev) => ({ ...prev, ...failedCells }));
+          setLookup({ ...state });
+          continue;
+        }
+        current = center;
       }
-      state.gcDone++;
+
+      for (const order of group.orders) {
+        if (stopLookup.current) return finish({ stopped: true });
+        const res = await bridge.wmsOrderCutline(order, table.date);
+        if (!res.ok && res.needLogin) return finish({ error: res.error });
+        let value: string;
+        if (!res.ok) {
+          value = CUTLINE_FAILED;
+          state.failed++;
+        } else if (res.cutlines.length) {
+          value = res.cutlines.join(" / ");
+          state.found++;
+        } else {
+          value = res.found ? CUTLINE_EMPTY : CUTLINE_UNAVAILABLE;
+          state.empty++;
+          if (!state.note && res.diagnostic) state.note = order + ": " + res.diagnostic;
+        }
+        state.done++;
+        setCutlines((prev) => ({ ...prev, [cutlineKey(center, order)]: value }));
+        setLookup({ ...state });
+        await gap();
+      }
+
+      state.phase = "gc";
       setLookup({ ...state });
-      await new Promise((resolve) => setTimeout(resolve, CUTLINE_GAP_MS));
+      for (const [key, { cart, ct }] of group.pairs) {
+        if (stopLookup.current) return finish({ stopped: true });
+        const res = await bridge.wmsTransferInfo({ cart, ct, center, date: table.date });
+        if (!res.ok && res.needLogin) return finish({ error: res.error });
+        if (!res.ok) {
+          state.gcFailed++;
+        } else if (!res.found) {
+          state.gcMissing++;
+          if (!state.gcNote) state.gcNote = cart + ": 이관현황에 없음";
+        } else {
+          if (res.ctMatched) state.gcFound++;
+          else state.gcCartOnly++;
+          if (!state.gcNote && res.diagnostic) state.gcNote = res.diagnostic;
+          setTransfers((prev) => ({ ...prev, [key]: { load: res.load, unload: res.unload, stow: res.stow, vehicle: res.vehicle } }));
+        }
+        state.gcDone++;
+        setLookup({ ...state });
+        await gap();
+      }
     }
     finish({});
   }
@@ -258,6 +344,7 @@ export default function App() {
 
   const wmsIn = wms?.loggedIn === true;
   const wmsFailed = !!wms?.error;
+  const columnOf = (name: string) => (table ? table.columns.indexOf(name) : -1);
 
   return (
     <div className="flex min-h-screen flex-col bg-muted/40">
@@ -283,7 +370,7 @@ export default function App() {
               {wmsIn && (
                 <div className="flex items-end gap-2">
                   <CenterSelect label="WMS 센터 전환" value={switchTarget} onChange={setSwitchTarget} />
-                  <Button size="lg" variant="outline" disabled={switching || switchTarget === wmsCenterName} onClick={switchCenter}>
+                  <Button size="lg" variant="outline" disabled={switching || lookup?.running || switchTarget === wmsCenterName} onClick={switchCenter}>
                     {switching ? <Loader2 className="animate-spin" /> : <ArrowLeftRight />}
                     {switching ? "전환 중" : "전환"}
                   </Button>
@@ -323,13 +410,13 @@ export default function App() {
             <CardDescription>센터와 날짜를 골라 OOS 데이터를 Power BI에서 받습니다.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
+            <CenterChecks value={dataCenters} onChange={changeDataCenters} />
             <div className="flex flex-wrap items-end gap-2">
-              <CenterSelect label="센터" value={dataCenter} onChange={setDataCenter} only={BI_CENTERS} />
               <label className="flex flex-col gap-1 text-xs text-muted-foreground">
                 OOS 날짜
                 <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={FIELD_CLASS} />
               </label>
-              <Button size="lg" disabled={!pbi.loggedIn || busy || !date || lookup?.running} onClick={fetchData}>
+              <Button size="lg" disabled={!pbi.loggedIn || busy || !date || !dataCenters.length || lookup?.running} onClick={fetchData}>
                 {busy ? <Loader2 className="animate-spin" /> : <Download />}
                 {busy ? "받는 중" : "데이터 받기"}
               </Button>
@@ -351,27 +438,24 @@ export default function App() {
               <StatusLine
                 tone="busy"
                 title={
-                  lookup.phase === "order"
-                    ? `출고 커트라인 조회 중 ${lookup.done.toLocaleString("ko-KR")} / ${lookup.total.toLocaleString("ko-KR")}`
-                    : `이관 정보 조회 중 ${lookup.gcDone.toLocaleString("ko-KR")} / ${lookup.gcTotal.toLocaleString("ko-KR")}`
+                  (lookup.center ? lookup.center + " " : "") +
+                  (lookup.phase === "order" ? `출고 커트라인 조회 중 ${count(lookup.done)} / ${count(lookup.total)}` : `이관 정보 조회 중 ${count(lookup.gcDone)} / ${count(lookup.gcTotal)}`)
                 }
               />
             )}
             {lookup && !lookup.running && lookup.error && <StatusLine tone="error" title={lookup.error} />}
+            {lookup && lookup.centerErrors.map((message) => <StatusLine key={message} tone="error" title={message} />)}
             {lookup && !lookup.running && !lookup.error && (
-              <StatusLine
-                tone={lookup.failed ? "idle" : "ok"}
-                title={`출고 커트라인 조회 ${lookup.stopped ? "중지" : "완료"} ${lookup.done.toLocaleString("ko-KR")} / ${lookup.total.toLocaleString("ko-KR")}`}
-              >
-                {`값 있음 ${lookup.found.toLocaleString("ko-KR")} · 값 없음 ${lookup.empty.toLocaleString("ko-KR")} · 실패 ${lookup.failed.toLocaleString("ko-KR")}${lookup.note ? ` · 조회 불가 예시 ${lookup.note}` : ""}`}
+              <StatusLine tone={lookup.failed ? "idle" : "ok"} title={`출고 커트라인 조회 ${lookup.stopped ? "중지" : "완료"} ${count(lookup.done)} / ${count(lookup.total)}`}>
+                {`값 있음 ${count(lookup.found)} · 값 없음 ${count(lookup.empty)} · 실패 ${count(lookup.failed)}${lookup.note ? ` · 조회 불가 예시 ${lookup.note}` : ""}`}
               </StatusLine>
             )}
-            {lookup && !lookup.running && !lookup.error && lookup.gcTotal > 0 && lookup.phase === "gc" && (
+            {lookup && !lookup.running && !lookup.error && lookup.gcTotal > 0 && (
               <StatusLine
                 tone={lookup.gcFailed || lookup.gcMissing ? "idle" : "ok"}
-                title={`이관 정보 조회 ${lookup.stopped ? "중지" : "완료"} ${lookup.gcDone.toLocaleString("ko-KR")} / ${lookup.gcTotal.toLocaleString("ko-KR")}`}
+                title={`이관 정보 조회 ${lookup.stopped ? "중지" : "완료"} ${count(lookup.gcDone)} / ${count(lookup.gcTotal)}`}
               >
-                {`GC·CT 일치 ${lookup.gcFound.toLocaleString("ko-KR")} · GC만 일치 ${lookup.gcCartOnly.toLocaleString("ko-KR")} · 없음 ${lookup.gcMissing.toLocaleString("ko-KR")} · 실패 ${lookup.gcFailed.toLocaleString("ko-KR")}${lookup.gcNote ? ` · ${lookup.gcNote}` : ""}`}
+                {`GC·CT 일치 ${count(lookup.gcFound)} · GC만 일치 ${count(lookup.gcCartOnly)} · 없음 ${count(lookup.gcMissing)} · 실패 ${count(lookup.gcFailed)}${lookup.gcNote ? ` · ${lookup.gcNote}` : ""}`}
               </StatusLine>
             )}
 
@@ -380,7 +464,7 @@ export default function App() {
             {table && !error && (
               <>
                 <p className="font-medium">
-                  {table.center} · {table.date} · {table.rows.length.toLocaleString("ko-KR")}행
+                  {table.centers.join(", ")} · {table.date} · {count(table.rows.length)}행
                   {table.rows.length > PREVIEW_ROWS && <span className="ml-2 text-xs font-normal text-muted-foreground">앞 {PREVIEW_ROWS}행만 표시</span>}
                 </p>
                 <div className="overflow-x-auto rounded-lg border">
@@ -403,23 +487,27 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      {table.rows.slice(0, PREVIEW_ROWS).map((row, r) => (
-                        <tr key={r} className="border-t">
-                          {row.map((v, c) => (
-                            <td key={c} className="whitespace-nowrap px-2 py-1">
-                              {v}
-                            </td>
-                          ))}
-                          {lookup && <td className="whitespace-nowrap px-2 py-1">{cutlines[row[table.columns.indexOf("ordernumber")]] ?? ""}</td>}
-                          {lookup &&
-                            lookup.gcTotal > 0 &&
-                            TRANSFER_COLUMNS.map(([key]) => (
-                              <td key={key} className="whitespace-nowrap px-2 py-1">
-                                {transfers[transferKey(row[table.columns.indexOf("cartbarcode")], row[table.columns.indexOf("ctbarcode")] ?? "")]?.[key] ?? ""}
+                      {table.rows.slice(0, PREVIEW_ROWS).map((row, r) => {
+                        const center = row[columnOf("centercode")];
+                        const pair = transfers[transferKey(center, row[columnOf("cartbarcode")], row[columnOf("ctbarcode")] ?? "")];
+                        return (
+                          <tr key={r} className="border-t">
+                            {row.map((v, c) => (
+                              <td key={c} className="whitespace-nowrap px-2 py-1">
+                                {v}
                               </td>
                             ))}
-                        </tr>
-                      ))}
+                            {lookup && <td className="whitespace-nowrap px-2 py-1">{cutlines[cutlineKey(center, row[columnOf("ordernumber")])] ?? ""}</td>}
+                            {lookup &&
+                              lookup.gcTotal > 0 &&
+                              TRANSFER_COLUMNS.map(([key]) => (
+                                <td key={key} className="whitespace-nowrap px-2 py-1">
+                                  {pair?.[key] ?? ""}
+                                </td>
+                              ))}
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

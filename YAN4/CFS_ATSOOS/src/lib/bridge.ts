@@ -20,7 +20,7 @@ type Bridge = {
   wmsOrderCutline(orderNumber: string, date: string): Promise<WmsOrderCutlineResult>;
   pbiStatus(): Promise<PbiStatus>;
   pbiLogin(): Promise<{ ok: boolean }>;
-  pbiExport(request: { center: string; date: string }): Promise<PbiExportResult>;
+  pbiExport(request: { centers: string[]; date: string }): Promise<PbiExportResult>;
   onPbiStatus(cb: (s: PbiStatus) => void): () => void;
 };
 
