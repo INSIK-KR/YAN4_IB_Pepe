@@ -9,7 +9,7 @@ npm install
 npm start
 ```
 
-휴대용 exe는 `npm run dist`로 `release` 폴더에 만들어집니다.
+휴대용 exe는 `npm run dist`로 `release` 폴더에 만들어집니다. 이때 `.dist-pack`에 복사한 코드를 난독화해서 넣으며, 원본 코드와 `npm start`에는 영향이 없습니다.
 
 ## WMS 로그인
 

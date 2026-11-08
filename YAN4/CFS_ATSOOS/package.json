@@ -1,6 +1,6 @@
 {
   "name": "cfs-atsoos",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "private": true,
   "description": "CFS ATSOOS",
   "author": {
@@ -11,7 +11,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "start": "vite build && electron .",
-    "dist": "vite build && electron-builder --win portable"
+    "dist": "vite build && node obfuscate-pack.js && electron-builder --win portable --config.directories.app=.dist-pack"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
@@ -23,6 +23,7 @@
     "cn": "^0.5.1",
     "electron": "^33.2.0",
     "electron-builder": "^25.1.8",
+    "javascript-obfuscator": "^4.2.2",
     "lucide-react": "^1.66.0",
     "pretendard": "^1.3.9",
     "radix-ui": "^1.8.1",
