@@ -4,6 +4,7 @@ const path = require("path");
 const crypto = require("crypto");
 const { app, BrowserWindow, ipcMain, net, session } = require("electron");
 const { buildAtsOosBody } = require("./powerbi-export");
+const { parseCutlines } = require("./wms-order");
 
 const APP_TITLE = "CFS ATSOOS";
 // WMS 로그인 쿠키를 앱 재시작 후에도 유지하는 영구 세션 (다른 CFS 앱과 공유하지 않음)
@@ -13,6 +14,7 @@ const CHROME_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 const WMS_LOGIN_URL = "https://inbound.coupang.com/";
 const WMS_CHANGE_CENTER_URL = "https://inbound.coupang.com/auth/changeCenter/";
+const WMS_ORDER_DETAIL_URL = "https://outbound.coupang.com/order/detail/";
 const WMS_HOSTS = ["inbound.coupang.com", "inventory.coupang.com", "outbound.coupang.com", "wms-front.coupang.com"];
 
 const PBI_REPORT_URL =
@@ -90,6 +92,53 @@ function probeWmsLogin() {
     });
     req.on("error", function (e) {
       resolve({ loggedIn: false, error: e && e.message ? e.message : String(e) });
+    });
+    req.end();
+  });
+}
+
+/**
+ * 오더 상세의 출고 커트라인. 페이지에 고객 정보가 있을 수 있어 HTML은 여기서만 읽고 값만 돌려준다.
+ * SSO를 거쳐 돌아올 수 있어 이동은 따라가고, 마지막 주소로 로그인 여부를 판단한다. 시간 제한 없음
+ */
+function fetchOrderCutline(orderNumber) {
+  const order = String(orderNumber || "");
+  if (!/^\d{1,20}$/.test(order)) return Promise.resolve({ ok: false, error: "오더넘버 형식이 올바르지 않습니다" });
+  return new Promise(function (resolve) {
+    let lastUrl = WMS_ORDER_DETAIL_URL + order;
+    const req = net.request({ url: lastUrl, session: getSes(), useSessionCookies: true, redirect: "manual" });
+    req.setHeader("Accept", "text/html,application/xhtml+xml,*/*;q=0.8");
+    req.setHeader("Referer", "https://outbound.coupang.com/v2/orderPool/outbound/list");
+    req.setHeader("User-Agent", CHROME_UA);
+    req.on("redirect", function (_status, _method, redirectUrl) {
+      lastUrl = redirectUrl;
+      req.followRedirect();
+    });
+    req.on("response", function (res) {
+      if (!looksLoggedIn(lastUrl)) {
+        resolve({ ok: false, needLogin: true, error: "WMS 로그인이 필요합니다" });
+        req.abort();
+        return;
+      }
+      if (res.statusCode !== 200) {
+        resolve({ ok: false, error: "HTTP " + res.statusCode });
+        req.abort();
+        return;
+      }
+      const chunks = [];
+      res.on("data", function (chunk) {
+        chunks.push(chunk);
+      });
+      res.on("end", function () {
+        const parsed = parseCutlines(Buffer.concat(chunks).toString("utf8"));
+        resolve({ ok: true, found: parsed.found, cutlines: parsed.values });
+      });
+      res.on("error", function (e) {
+        resolve({ ok: false, error: e && e.message ? e.message : String(e) });
+      });
+    });
+    req.on("error", function (e) {
+      resolve({ ok: false, error: e && e.message ? e.message : String(e) });
     });
     req.end();
   });
@@ -417,6 +466,10 @@ ipcMain.handle("cfs-atsoos-wms-status", async function () {
 
 ipcMain.handle("cfs-atsoos-wms-login", async function () {
   return openWmsLoginWindow();
+});
+
+ipcMain.handle("cfs-atsoos-wms-order-cutline", async function (_e, orderNumber) {
+  return fetchOrderCutline(orderNumber);
 });
 
 ipcMain.handle("cfs-atsoos-wms-change-center", async function (_e, centerId) {

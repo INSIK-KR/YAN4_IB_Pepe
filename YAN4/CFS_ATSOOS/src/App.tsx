@@ -1,5 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { ArrowLeftRight, CheckCircle2, CircleAlert, Download, Loader2, LogIn } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { ArrowLeftRight, CheckCircle2, CircleAlert, Clock, Download, Loader2, LogIn, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { bridge, type PbiStatus, type WmsSession } from "@/lib/bridge";
@@ -7,6 +7,13 @@ import { parseAtsOosExport, type AtsOosTable } from "@/lib/ats-oos";
 import { CENTER_NAMES, CENTER_REGIONS, DEFAULT_CENTER, centerIdOf, isSelectableCenter } from "@/lib/centers";
 
 const PREVIEW_ROWS = 20;
+// WMS 서버 부담을 줄이려고 오더 사이에 두는 간격
+const CUTLINE_GAP_MS = 140;
+const CUTLINE_EMPTY = "-";
+const CUTLINE_UNAVAILABLE = "조회 불가";
+const CUTLINE_FAILED = "실패";
+
+type CutlineLookup = { running: boolean; done: number; total: number; found: number; empty: number; failed: number; error: string; stopped: boolean };
 const FIELD_CLASS = "h-9 rounded-lg border border-input bg-background px-2.5 text-sm text-foreground";
 
 function CenterSelect({ value, onChange, label }: { value: string; onChange: (center: string) => void; label: string }) {
@@ -65,6 +72,9 @@ export default function App() {
   const [switchTarget, setSwitchTarget] = useState(DEFAULT_CENTER);
   const [switching, setSwitching] = useState(false);
   const [switchError, setSwitchError] = useState("");
+  const [cutlines, setCutlines] = useState<Record<string, string>>({});
+  const [lookup, setLookup] = useState<CutlineLookup | null>(null);
+  const stopLookup = useRef(false);
 
   const wmsCenterId = wms?.centerId;
   const wmsCenterName = wmsCenterId ? (CENTER_NAMES[wmsCenterId] ?? wmsCenterId) : undefined;
@@ -101,11 +111,53 @@ export default function App() {
         return;
       }
       setTable({ ...parseAtsOosExport(res.base64), date, center: dataCenter });
+      setCutlines({});
+      setLookup(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
     }
+  }
+
+  async function runCutlineLookup() {
+    if (!bridge || !table || lookup?.running) return;
+    const orderIndex = table.columns.indexOf("ordernumber");
+    const orders = [...new Set(table.rows.map((row) => row[orderIndex]).filter(Boolean))];
+    const state: CutlineLookup = { running: true, done: 0, total: orders.length, found: 0, empty: 0, failed: 0, error: "", stopped: false };
+    const finish = (patch: Partial<CutlineLookup>) => setLookup({ ...state, ...patch, running: false });
+    stopLookup.current = false;
+    setCutlines({});
+    setLookup({ ...state });
+
+    // 다른 센터 오더는 그 센터로 전환해야 열린다
+    if (wmsCenterName !== table.center) {
+      const id = centerIdOf(table.center);
+      const switched = id ? await bridge.wmsChangeCenter(id) : { ok: false as const, error: "센터 ID를 찾지 못했습니다" };
+      if (!switched.ok) return finish({ error: table.center + " 센터 전환 실패: " + switched.error });
+    }
+
+    for (const order of orders) {
+      if (stopLookup.current) return finish({ stopped: true });
+      const res = await bridge.wmsOrderCutline(order);
+      if (!res.ok && res.needLogin) return finish({ error: res.error });
+      let value: string;
+      if (!res.ok) {
+        value = CUTLINE_FAILED;
+        state.failed++;
+      } else if (res.cutlines.length) {
+        value = res.cutlines.join(" / ");
+        state.found++;
+      } else {
+        value = res.found ? CUTLINE_EMPTY : CUTLINE_UNAVAILABLE;
+        state.empty++;
+      }
+      state.done++;
+      setCutlines((prev) => ({ ...prev, [order]: value }));
+      setLookup({ ...state });
+      await new Promise((resolve) => setTimeout(resolve, CUTLINE_GAP_MS));
+    }
+    finish({});
   }
 
   async function switchCenter() {
@@ -196,11 +248,36 @@ export default function App() {
                 OOS 날짜
                 <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={FIELD_CLASS} />
               </label>
-              <Button size="lg" disabled={!pbi.loggedIn || busy || !date} onClick={fetchData}>
+              <Button size="lg" disabled={!pbi.loggedIn || busy || !date || lookup?.running} onClick={fetchData}>
                 {busy ? <Loader2 className="animate-spin" /> : <Download />}
                 {busy ? "받는 중" : "데이터 받기"}
               </Button>
+              {table && !error && !lookup?.running && (
+                <Button size="lg" variant="outline" disabled={!wmsIn || table.rows.length === 0} onClick={runCutlineLookup}>
+                  <Clock />
+                  출고 커트라인 조회
+                </Button>
+              )}
+              {lookup?.running && (
+                <Button size="lg" variant="outline" onClick={() => (stopLookup.current = true)}>
+                  <Square />
+                  중지
+                </Button>
+              )}
             </div>
+
+            {lookup?.running && (
+              <StatusLine tone="busy" title={`출고 커트라인 조회 중 ${lookup.done.toLocaleString("ko-KR")} / ${lookup.total.toLocaleString("ko-KR")}`} />
+            )}
+            {lookup && !lookup.running && lookup.error && <StatusLine tone="error" title={lookup.error} />}
+            {lookup && !lookup.running && !lookup.error && (
+              <StatusLine
+                tone={lookup.failed ? "idle" : "ok"}
+                title={`출고 커트라인 조회 ${lookup.stopped ? "중지" : "완료"} ${lookup.done.toLocaleString("ko-KR")} / ${lookup.total.toLocaleString("ko-KR")}`}
+              >
+                {`값 있음 ${lookup.found.toLocaleString("ko-KR")} · 값 없음 ${lookup.empty.toLocaleString("ko-KR")} · 실패 ${lookup.failed.toLocaleString("ko-KR")}`}
+              </StatusLine>
+            )}
 
             {error && <StatusLine tone="error" title={error} />}
 
@@ -219,6 +296,7 @@ export default function App() {
                             {c}
                           </th>
                         ))}
+                        {lookup && <th className="whitespace-nowrap px-2 py-1.5 font-medium">출고 커트라인</th>}
                       </tr>
                     </thead>
                     <tbody>
@@ -229,6 +307,7 @@ export default function App() {
                               {v}
                             </td>
                           ))}
+                          {lookup && <td className="whitespace-nowrap px-2 py-1">{cutlines[row[table.columns.indexOf("ordernumber")]] ?? ""}</td>}
                         </tr>
                       ))}
                     </tbody>

@@ -20,6 +20,13 @@ npm start
 - WMS 요청에는 시간 제한을 두지 않습니다.
 - 센터 전환은 `/auth/changeCenter/{id}`를 호출한 뒤 첫 화면의 `centerId`로 실제 전환 여부를 다시 확인합니다. 이 앱의 세션만 바뀝니다.
 
+## 출고 커트라인 조회
+
+- 받은 데이터의 `ordernumber`를 중복 없이 모아 `outbound.coupang.com/order/detail/{오더넘버}`를 하나씩 조회합니다.
+- 데이터의 센터와 WMS 현재 센터가 다르면 먼저 WMS 센터를 전환합니다.
+- 페이지에 고객 정보가 있을 수 있어 HTML은 메인 프로세스(`wms-order.js`)에서만 읽고, 화면에는 커트라인 값만 넘깁니다.
+- 한 오더에 운송장이 여러 개이고 커트라인이 다르면 ` / `로 이어서 표시합니다.
+
 ## Power BI ATS OOS 받기
 
 - 리포트 "ATS OOS dashboard_v1"의 데이터 내보내기 요청(`/export/xlsx`)을 앱에서 그대로 보냅니다.
