@@ -1,6 +1,7 @@
 // preload.js 가 노출하는 window.cfsAtsoos (Electron 밖에서 열면 없음)
 
-export type WmsSession = { loggedIn: boolean; error?: string; detail?: string };
+export type WmsSession = { loggedIn: boolean; centerId?: string; error?: string; detail?: string };
+export type WmsChangeCenterResult = { ok: true; verified: boolean } | { ok: false; error: string };
 export type PbiStatus = { loggedIn: boolean; checking: boolean; loginOpen: boolean };
 export type PbiExportResult = { ok: true; base64: string } | { ok: false; error: string; needLogin?: boolean };
 
@@ -9,6 +10,7 @@ type Bridge = {
   wmsStatus(): Promise<WmsSession>;
   wmsLogin(): Promise<{ ok: boolean; reused?: boolean }>;
   onWmsSession(cb: (s: WmsSession) => void): () => void;
+  wmsChangeCenter(centerId: string): Promise<WmsChangeCenterResult>;
   pbiStatus(): Promise<PbiStatus>;
   pbiLogin(): Promise<{ ok: boolean }>;
   pbiExport(request: { center: string; date: string }): Promise<PbiExportResult>;

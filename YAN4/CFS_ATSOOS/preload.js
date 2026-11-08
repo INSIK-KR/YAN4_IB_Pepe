@@ -12,6 +12,9 @@ contextBridge.exposeInMainWorld("cfsAtsoos", {
   wmsLogin: function () {
     return ipcRenderer.invoke("cfs-atsoos-wms-login");
   },
+  wmsChangeCenter: function (centerId) {
+    return ipcRenderer.invoke("cfs-atsoos-wms-change-center", centerId);
+  },
   pbiStatus: function () {
     return ipcRenderer.invoke("cfs-atsoos-pbi-status");
   },

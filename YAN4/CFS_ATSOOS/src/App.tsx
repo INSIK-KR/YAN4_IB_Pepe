@@ -1,12 +1,32 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { CheckCircle2, CircleAlert, Download, Loader2, LogIn } from "lucide-react";
+import { ArrowLeftRight, CheckCircle2, CircleAlert, Download, Loader2, LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { bridge, type PbiStatus, type WmsSession } from "@/lib/bridge";
 import { parseAtsOosExport, type AtsOosTable } from "@/lib/ats-oos";
+import { CENTER_NAMES, CENTER_REGIONS, DEFAULT_CENTER, centerIdOf, isSelectableCenter } from "@/lib/centers";
 
-const CENTER = "YAN4";
 const PREVIEW_ROWS = 20;
+const FIELD_CLASS = "h-9 rounded-lg border border-input bg-background px-2.5 text-sm text-foreground";
+
+function CenterSelect({ value, onChange, label }: { value: string; onChange: (center: string) => void; label: string }) {
+  return (
+    <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+      {label}
+      <select value={value} onChange={(e) => onChange(e.target.value)} className={FIELD_CLASS}>
+        {CENTER_REGIONS.map(([region, names]) => (
+          <optgroup key={region} label={region}>
+            {names.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </optgroup>
+        ))}
+      </select>
+    </label>
+  );
+}
 
 function yesterday(): string {
   const d = new Date();
@@ -40,7 +60,21 @@ export default function App() {
   const [date, setDate] = useState(yesterday);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [table, setTable] = useState<(AtsOosTable & { date: string }) | null>(null);
+  const [table, setTable] = useState<(AtsOosTable & { date: string; center: string }) | null>(null);
+  const [dataCenter, setDataCenter] = useState(DEFAULT_CENTER);
+  const [switchTarget, setSwitchTarget] = useState(DEFAULT_CENTER);
+  const [switching, setSwitching] = useState(false);
+  const [switchError, setSwitchError] = useState("");
+
+  const wmsCenterId = wms?.centerId;
+  const wmsCenterName = wmsCenterId ? (CENTER_NAMES[wmsCenterId] ?? wmsCenterId) : undefined;
+
+  // WMS 현재 센터가 확인되거나 바뀌면 전환 목록과 데이터 센터를 그 값으로 맞춘다 (데이터 센터는 이후 따로 바꿀 수 있음)
+  useEffect(() => {
+    if (!isSelectableCenter(wmsCenterName)) return;
+    setSwitchTarget(wmsCenterName);
+    setDataCenter(wmsCenterName);
+  }, [wmsCenterName]);
 
   useEffect(() => {
     if (!bridge) return;
@@ -61,16 +95,31 @@ export default function App() {
     setBusy(true);
     setError("");
     try {
-      const res = await bridge.pbiExport({ center: CENTER, date });
+      const res = await bridge.pbiExport({ center: dataCenter, date });
       if (!res.ok) {
         setError(res.error);
         return;
       }
-      setTable({ ...parseAtsOosExport(res.base64), date });
+      setTable({ ...parseAtsOosExport(res.base64), date, center: dataCenter });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function switchCenter() {
+    const id = centerIdOf(switchTarget);
+    if (!bridge || !id || switching) return;
+    setSwitching(true);
+    setSwitchError("");
+    try {
+      const res = await bridge.wmsChangeCenter(id);
+      if (!res.ok) setSwitchError(res.error);
+    } catch (e) {
+      setSwitchError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSwitching(false);
     }
   }
 
@@ -96,8 +145,18 @@ export default function App() {
                 tone={wms === null ? "busy" : wmsIn ? "ok" : wmsFailed ? "error" : "idle"}
                 title={wms === null ? "로그인 상태 확인 중" : wmsIn ? "로그인됨" : wmsFailed ? "WMS에 연결하지 못했습니다" : "로그인이 필요합니다"}
               >
-                {wms?.error}
+                {wms?.error ?? (wmsIn ? "현재 센터 " + (wmsCenterName ?? "확인 불가") : undefined)}
               </StatusLine>
+              {wmsIn && (
+                <div className="flex items-end gap-2">
+                  <CenterSelect label="WMS 센터 전환" value={switchTarget} onChange={setSwitchTarget} />
+                  <Button size="lg" variant="outline" disabled={switching || switchTarget === wmsCenterName} onClick={switchCenter}>
+                    {switching ? <Loader2 className="animate-spin" /> : <ArrowLeftRight />}
+                    {switching ? "전환 중" : "전환"}
+                  </Button>
+                </div>
+              )}
+              {switchError && <StatusLine tone="error" title={switchError} />}
               <Button size="lg" variant={wmsIn ? "outline" : "default"} onClick={() => bridge?.wmsLogin()}>
                 <LogIn />
                 {wmsIn ? "WMS 다시 로그인" : "WMS 로그인"}
@@ -128,18 +187,14 @@ export default function App() {
         <Card>
           <CardHeader>
             <CardTitle>ATS OOS 데이터</CardTitle>
-            <CardDescription>{CENTER} 센터의 OOS 데이터를 날짜별로 Power BI에서 받습니다.</CardDescription>
+            <CardDescription>센터와 날짜를 골라 OOS 데이터를 Power BI에서 받습니다.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <div className="flex flex-wrap items-end gap-2">
+              <CenterSelect label="센터" value={dataCenter} onChange={setDataCenter} />
               <label className="flex flex-col gap-1 text-xs text-muted-foreground">
                 OOS 날짜
-                <input
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  className="h-9 rounded-lg border border-input bg-background px-2.5 text-sm text-foreground"
-                />
+                <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={FIELD_CLASS} />
               </label>
               <Button size="lg" disabled={!pbi.loggedIn || busy || !date} onClick={fetchData}>
                 {busy ? <Loader2 className="animate-spin" /> : <Download />}
@@ -152,7 +207,7 @@ export default function App() {
             {table && !error && (
               <>
                 <p className="font-medium">
-                  {table.date} · {table.rows.length.toLocaleString("ko-KR")}행
+                  {table.center} · {table.date} · {table.rows.length.toLocaleString("ko-KR")}행
                   {table.rows.length > PREVIEW_ROWS && <span className="ml-2 text-xs font-normal text-muted-foreground">앞 {PREVIEW_ROWS}행만 표시</span>}
                 </p>
                 <div className="overflow-x-auto rounded-lg border">

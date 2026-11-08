@@ -12,6 +12,7 @@ const PARTITION = "persist:cfs-atsoos";
 const CHROME_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 const WMS_LOGIN_URL = "https://inbound.coupang.com/";
+const WMS_CHANGE_CENTER_URL = "https://inbound.coupang.com/auth/changeCenter/";
 const WMS_HOSTS = ["inbound.coupang.com", "inventory.coupang.com", "outbound.coupang.com", "wms-front.coupang.com"];
 
 const PBI_REPORT_URL =
@@ -68,15 +69,57 @@ function probeWmsLogin() {
     });
     req.on("response", function (res) {
       const status = res.statusCode;
-      if (status >= 500) resolve({ loggedIn: false, error: "HTTP " + status });
-      else resolve({ loggedIn: status === 200, detail: status === 200 ? undefined : "HTTP " + status });
-      req.abort();
+      if (status !== 200) {
+        if (status >= 500) resolve({ loggedIn: false, error: "HTTP " + status });
+        else resolve({ loggedIn: false, detail: "HTTP " + status });
+        req.abort();
+        return;
+      }
+      // 로그인된 첫 화면에 현재 센터 ID가 들어 있다
+      const chunks = [];
+      res.on("data", function (chunk) {
+        chunks.push(chunk);
+      });
+      res.on("end", function () {
+        const m = Buffer.concat(chunks).toString("utf8").match(/centerId(?:=|&#x3D;|&#61;)(\d{2,6})/i);
+        resolve({ loggedIn: true, centerId: m ? m[1] : undefined });
+      });
+      res.on("error", function () {
+        resolve({ loggedIn: true });
+      });
     });
     req.on("error", function (e) {
       resolve({ loggedIn: false, error: e && e.message ? e.message : String(e) });
     });
     req.end();
   });
+}
+
+/** 이 앱의 WMS 세션만 전환된다 (Chrome 등 다른 곳의 로그인에는 영향 없음) */
+async function changeWmsCenter(centerId) {
+  const want = String(centerId || "");
+  if (!/^\d{2,6}$/.test(want)) return { ok: false, error: "센터 ID 형식이 올바르지 않습니다" };
+  let body;
+  try {
+    const res = await getSes().fetch(WMS_CHANGE_CENTER_URL + want, {
+      headers: { Accept: "*/*", Referer: WMS_LOGIN_URL, "User-Agent": CHROME_UA },
+    });
+    if (res.status < 200 || res.status >= 400) return { ok: false, error: "센터 전환 HTTP " + res.status };
+    body = await res.text();
+  } catch (e) {
+    return { ok: false, error: e && e.message ? e.message : String(e) };
+  }
+  let result = null;
+  try {
+    result = JSON.parse(body);
+  } catch (_e) {
+    return { ok: false, error: "센터 전환 응답 오류 (WMS 로그인을 확인해 주세요)" };
+  }
+  if (!result || result.success !== true) return { ok: false, error: (result && result.message) || "센터 전환에 실패했습니다" };
+  // 성공 응답이어도 실제 세션 센터가 바뀌었는지 다시 확인한다
+  const st = await wmsSessionStatus();
+  if (st.centerId && st.centerId !== want) return { ok: false, error: "전환 후 확인된 센터가 다릅니다 (" + st.centerId + ")" };
+  return { ok: true, verified: !!st.centerId };
 }
 
 let sessionCheckSeq = 0;
@@ -374,6 +417,10 @@ ipcMain.handle("cfs-atsoos-wms-status", async function () {
 
 ipcMain.handle("cfs-atsoos-wms-login", async function () {
   return openWmsLoginWindow();
+});
+
+ipcMain.handle("cfs-atsoos-wms-change-center", async function (_e, centerId) {
+  return changeWmsCenter(centerId);
 });
 
 ipcMain.handle("cfs-atsoos-pbi-status", async function () {
