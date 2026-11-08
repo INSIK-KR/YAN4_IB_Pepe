@@ -42,12 +42,16 @@ function parseCutlines(html) {
     });
   });
   if (found) return { found: true, values: values };
-  // 원인 확인용. 고객 정보가 없는 페이지 제목과 표 머리글만 담는다
+  // 원인 확인용. 오더 내용이 담길 수 있는 긴 페이지의 본문은 넣지 않는다
   const title = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(page);
+  const redirect = /location(?:\.href|\.replace)?\s*[=(]\s*['"]([^'"?]+)/i.exec(page);
+  const text = page.length < 3000 ? cellText(page.replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, " ")).slice(0, 100) : "";
   const diagnostic =
-    "표 " + tables.length + "개" +
+    "표 " + tables.length + "개 · 응답 " + page.length + "자" +
     (title ? " · 제목 " + cellText(title[1]) : "") +
-    (headers.length ? " · 머리글 " + headers.join(", ").slice(0, 160) : "");
+    (headers.length ? " · 머리글 " + headers.join(", ").slice(0, 160) : "") +
+    (redirect ? " · 이동 스크립트 " + redirect[1] : "") +
+    (text ? " · 내용 " + text : "");
   return { found: false, values: values, diagnostic: diagnostic };
 }
 
