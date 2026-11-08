@@ -17,7 +17,7 @@ export default function BarList({ title, note, items, total }: { title: string; 
       {items.length === 0 && <p className="text-xs text-muted-foreground">표시할 데이터가 없습니다.</p>}
       <ul className="flex flex-col">
         {items.map((item) => (
-          <li key={item.key} className="group relative grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)_auto] items-center gap-2 rounded px-1 py-1 hover:bg-muted/60">
+          <li key={item.key} className="group relative grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)_6.5rem] items-center gap-2 rounded px-1 py-1 hover:bg-muted/60">
             <span className="break-words text-xs">{item.key}</span>
             <span className="block h-3" aria-hidden="true">
               <span
@@ -25,7 +25,7 @@ export default function BarList({ title, note, items, total }: { title: string; 
                 style={{ width: `${Math.max(1, (item.units / max) * 100)}%`, background: BAR_COLOR }}
               />
             </span>
-            <span className="whitespace-nowrap text-xs tabular-nums">
+            <span className="whitespace-nowrap text-right text-xs tabular-nums">
               {count(item.units)} <span className="text-muted-foreground">({percent(item.units, total)})</span>
             </span>
             <span className="pointer-events-none absolute top-full right-1 z-10 hidden rounded-md bg-foreground px-2 py-1 text-xs whitespace-nowrap text-background group-hover:block">
