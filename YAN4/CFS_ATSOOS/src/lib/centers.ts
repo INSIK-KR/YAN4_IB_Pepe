@@ -35,6 +35,9 @@ export const CENTER_REGIONS: [string, string[]][] = [
   ["Region3", ["CHW2", "DAE4", "DAJ1", "GMH1", "GON1", "GYS1"]],
 ];
 
+/** ATS OOS 리포트(Power BI)에 있는 센터 */
+export const BI_CENTERS = ["BUC2", "CHW2", "DAJ1", "GMH1", "GON1", "GWJ1", "GWJ3", "INC11", "INC12", "INC15", "INC37", "PYT2", "SIH1", "YAN4", "YON5"];
+
 export const DEFAULT_CENTER = "YAN4";
 
 export function centerIdOf(name: string): string | undefined {

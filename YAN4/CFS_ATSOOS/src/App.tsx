@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { bridge, type PbiStatus, type WmsSession } from "@/lib/bridge";
 import { parseAtsOosExport, type AtsOosTable } from "@/lib/ats-oos";
-import { CENTER_NAMES, CENTER_REGIONS, DEFAULT_CENTER, centerIdOf, isSelectableCenter } from "@/lib/centers";
+import { BI_CENTERS, CENTER_NAMES, CENTER_REGIONS, DEFAULT_CENTER, centerIdOf, isSelectableCenter } from "@/lib/centers";
 
 const PREVIEW_ROWS = 20;
 // WMS 서버 부담을 줄이려고 오더 사이에 두는 간격
@@ -16,14 +16,14 @@ const CUTLINE_FAILED = "실패";
 type CutlineLookup = { running: boolean; done: number; total: number; found: number; empty: number; failed: number; error: string; stopped: boolean };
 const FIELD_CLASS = "h-9 rounded-lg border border-input bg-background px-2.5 text-sm text-foreground";
 
-function CenterSelect({ value, onChange, label }: { value: string; onChange: (center: string) => void; label: string }) {
+function CenterSelect({ value, onChange, label, only }: { value: string; onChange: (center: string) => void; label: string; only?: string[] }) {
   return (
     <label className="flex flex-col gap-1 text-xs text-muted-foreground">
       {label}
       <select value={value} onChange={(e) => onChange(e.target.value)} className={FIELD_CLASS}>
         {CENTER_REGIONS.map(([region, names]) => (
           <optgroup key={region} label={region}>
-            {names.map((name) => (
+            {names.filter((name) => !only || only.includes(name)).map((name) => (
               <option key={name} value={name}>
                 {name}
               </option>
@@ -83,7 +83,7 @@ export default function App() {
   useEffect(() => {
     if (!isSelectableCenter(wmsCenterName)) return;
     setSwitchTarget(wmsCenterName);
-    setDataCenter(wmsCenterName);
+    if (BI_CENTERS.includes(wmsCenterName)) setDataCenter(wmsCenterName);
   }, [wmsCenterName]);
 
   useEffect(() => {
@@ -243,7 +243,7 @@ export default function App() {
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <div className="flex flex-wrap items-end gap-2">
-              <CenterSelect label="센터" value={dataCenter} onChange={setDataCenter} />
+              <CenterSelect label="센터" value={dataCenter} onChange={setDataCenter} only={BI_CENTERS} />
               <label className="flex flex-col gap-1 text-xs text-muted-foreground">
                 OOS 날짜
                 <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={FIELD_CLASS} />
