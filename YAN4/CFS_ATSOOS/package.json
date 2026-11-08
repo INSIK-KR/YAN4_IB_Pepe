@@ -1,6 +1,6 @@
 {
   "name": "cfs-atsoos",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "CFS ATSOOS",
   "author": {
@@ -45,6 +45,8 @@
     "files": [
       "main.js",
       "preload.js",
+      "powerbi-export.js",
+      "powerbi-query.json",
       "dist/**/*",
       "!**/*.map"
     ],

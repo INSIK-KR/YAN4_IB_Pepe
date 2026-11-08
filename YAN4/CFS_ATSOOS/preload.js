@@ -12,6 +12,24 @@ contextBridge.exposeInMainWorld("cfsAtsoos", {
   wmsLogin: function () {
     return ipcRenderer.invoke("cfs-atsoos-wms-login");
   },
+  pbiStatus: function () {
+    return ipcRenderer.invoke("cfs-atsoos-pbi-status");
+  },
+  pbiLogin: function () {
+    return ipcRenderer.invoke("cfs-atsoos-pbi-login");
+  },
+  pbiExport: function (request) {
+    return ipcRenderer.invoke("cfs-atsoos-pbi-export", request);
+  },
+  onPbiStatus: function (cb) {
+    const handler = function (_e, payload) {
+      cb(payload);
+    };
+    ipcRenderer.on("cfs-atsoos-pbi-status", handler);
+    return function () {
+      ipcRenderer.removeListener("cfs-atsoos-pbi-status", handler);
+    };
+  },
   onWmsSession: function (cb) {
     const handler = function (_e, payload) {
       cb(payload);

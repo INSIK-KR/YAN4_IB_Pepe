@@ -1,7 +1,9 @@
 "use strict";
 
 const path = require("path");
+const crypto = require("crypto");
 const { app, BrowserWindow, ipcMain, net, session } = require("electron");
+const { buildAtsOosBody } = require("./powerbi-export");
 
 const APP_TITLE = "CFS ATSOOS";
 // WMS 로그인 쿠키를 앱 재시작 후에도 유지하는 영구 세션 (다른 CFS 앱과 공유하지 않음)
@@ -11,6 +13,14 @@ const CHROME_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 const WMS_LOGIN_URL = "https://inbound.coupang.com/";
 const WMS_HOSTS = ["inbound.coupang.com", "inventory.coupang.com", "outbound.coupang.com", "wms-front.coupang.com"];
+
+const PBI_REPORT_URL =
+  "https://app.powerbi.com/groups/me/reports/0e482212-d1b5-494d-b280-4e9f297f368d/9d7e55f9be66aa2608e5?ctid=9d9f74be-786b-48f6-8e18-83cf7a2eef7c&experience=power-bi";
+const PBI_EXPORT_URL = "https://wabi-south-east-asia-d-primary-redirect.analysis.windows.net/export/xlsx";
+const PBI_TOKEN_AUD = "https://analysis.windows.net/powerbi/api";
+// 저장된 로그인으로 토큰을 조용히 받는 창이 기다리는 시간 (데이터 요청에는 시간 제한 없음)
+const PBI_SILENT_WAIT_MS = 45000;
+const PBI_TOKEN_MARGIN_MS = 5 * 60 * 1000;
 
 let mainWindow = null;
 let wmsLoginWindow = null;
@@ -128,6 +138,194 @@ function openWmsLoginWindow() {
   return { ok: true, reused: false };
 }
 
+// Power BI: 리포트 화면이 보내는 요청에서 토큰을 얻는다. 토큰은 메모리에만 두고 화면 쪽으로 넘기지 않는다
+let pbiToken = null;
+let pbiWindow = null;
+let pbiWindowShown = false;
+let pbiSilentTimer = null;
+let pbiWaiters = [];
+
+function readJwtClaims(token) {
+  try {
+    return JSON.parse(Buffer.from(String(token).split(".")[1], "base64url").toString("utf8"));
+  } catch (_e) {
+    return null;
+  }
+}
+
+function pbiTokenValid(marginMs) {
+  return !!pbiToken && pbiToken.expMs - Date.now() > marginMs;
+}
+
+function pbiStatus() {
+  return { loggedIn: pbiTokenValid(0), checking: !!pbiWindow && !pbiWindowShown, loginOpen: !!pbiWindow && pbiWindowShown };
+}
+
+function sendPbiStatus() {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("cfs-atsoos-pbi-status", pbiStatus());
+}
+
+function settlePbiWaiters() {
+  const waiters = pbiWaiters;
+  pbiWaiters = [];
+  waiters.forEach(function (done) {
+    done(pbiTokenValid(0));
+  });
+}
+
+function closePbiWindow() {
+  if (pbiWindow && !pbiWindow.isDestroyed()) pbiWindow.close();
+}
+
+function rememberPbiToken(header) {
+  const m = /^Bearer\s+(\S+)$/i.exec(String(header || ""));
+  if (!m) return;
+  const claims = readJwtClaims(m[1]);
+  if (!claims || claims.aud !== PBI_TOKEN_AUD) return;
+  const expMs = Number(claims.exp) * 1000;
+  if (!(expMs > Date.now())) return;
+  const changed = !pbiToken || pbiToken.value !== m[1];
+  pbiToken = { value: m[1], expMs: expMs };
+  settlePbiWaiters();
+  closePbiWindow();
+  if (changed) sendPbiStatus();
+}
+
+function watchPbiToken() {
+  getSes().webRequest.onBeforeSendHeaders({ urls: ["https://*.analysis.windows.net/*"] }, function (details, callback) {
+    const headers = details.requestHeaders;
+    const key = Object.keys(headers).find(function (k) {
+      return k.toLowerCase() === "authorization";
+    });
+    const value = key ? headers[key] : null;
+    callback({ requestHeaders: headers });
+    if (value) rememberPbiToken(value);
+  });
+}
+
+/** visible=false 는 저장된 로그인으로 토큰만 조용히 받는 숨은 창 */
+function openPbiWindow(visible) {
+  if (pbiWindow && !pbiWindow.isDestroyed()) {
+    if (visible) {
+      clearTimeout(pbiSilentTimer);
+      pbiWindowShown = true;
+      pbiWindow.show();
+      pbiWindow.focus();
+      sendPbiStatus();
+    }
+    return;
+  }
+  const win = new BrowserWindow({
+    width: 1100,
+    height: 800,
+    show: visible,
+    title: APP_TITLE + " — Power BI 로그인",
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      partition: PARTITION,
+    },
+  });
+  pbiWindow = win;
+  pbiWindowShown = visible;
+  win.setMenu(null);
+  win.webContents.setWindowOpenHandler(function () {
+    return { action: "deny" };
+  });
+  clearTimeout(pbiSilentTimer);
+  if (!visible) pbiSilentTimer = setTimeout(closePbiWindow, PBI_SILENT_WAIT_MS);
+  win.on("closed", function () {
+    const wasShown = pbiWindowShown;
+    clearTimeout(pbiSilentTimer);
+    pbiWindow = null;
+    pbiWindowShown = false;
+    settlePbiWaiters();
+    sendPbiStatus();
+    if (wasShown && mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
+  win.loadURL(PBI_REPORT_URL).catch(function () {});
+  sendPbiStatus();
+}
+
+function acquirePbiToken() {
+  return new Promise(function (resolve) {
+    pbiWaiters.push(resolve);
+    openPbiWindow(false);
+  });
+}
+
+/**
+ * session.fetch 는 Origin 을 넣으면 CORS 검사를 해서, 서버가 답해도 net::ERR_FAILED 로 끝날 수 있다.
+ * net.request 는 검사가 없어 오류 응답의 상태 코드까지 그대로 받는다.
+ */
+function pbiPost(url, headers, body) {
+  return new Promise(function (resolve, reject) {
+    const req = net.request({ method: "POST", url: url, session: getSes() });
+    Object.keys(headers).forEach(function (k) {
+      req.setHeader(k, headers[k]);
+    });
+    req.on("response", function (res) {
+      const chunks = [];
+      res.on("data", function (chunk) {
+        chunks.push(chunk);
+      });
+      res.on("end", function () {
+        resolve({ status: res.statusCode, contentType: String(res.headers["content-type"] || ""), buffer: Buffer.concat(chunks) });
+      });
+      res.on("error", reject);
+    });
+    req.on("error", reject);
+    req.end(body);
+  });
+}
+
+/** 큰 자료일 수 있어 시간 제한을 두지 않는다 */
+async function exportAtsOos(request) {
+  let body;
+  try {
+    body = JSON.stringify(buildAtsOosBody(request && request.center, request && request.date));
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+  if (!pbiTokenValid(PBI_TOKEN_MARGIN_MS) && !(await acquirePbiToken())) {
+    return { ok: false, needLogin: true, error: "Power BI 로그인이 필요합니다" };
+  }
+  try {
+    const res = await pbiPost(
+      PBI_EXPORT_URL,
+      {
+        Accept: "application/json, text/plain, */*",
+        Authorization: "Bearer " + pbiToken.value,
+        "Content-Type": "application/json;charset=UTF-8",
+        ActivityId: crypto.randomUUID(),
+        RequestId: crypto.randomUUID(),
+        Origin: "https://app.powerbi.com",
+        Referer: "https://app.powerbi.com/",
+        "User-Agent": CHROME_UA,
+        "X-PowerBI-HostEnv": "Power BI Web App",
+      },
+      body
+    );
+    if (res.status === 401) {
+      pbiToken = null;
+      sendPbiStatus();
+      return { ok: false, needLogin: true, error: "Power BI 로그인이 만료되었습니다" };
+    }
+    if (res.status === 403) return { ok: false, error: "이 계정에 리포트 내보내기 권한이 없습니다 (HTTP 403)" };
+    if (res.status < 200 || res.status >= 300) return { ok: false, error: "Power BI 응답 오류 HTTP " + res.status };
+    if (!/spreadsheetml/i.test(res.contentType)) {
+      return { ok: false, error: "Power BI가 엑셀이 아닌 응답을 보냈습니다" };
+    }
+    return { ok: true, base64: res.buffer.toString("base64") };
+  } catch (e) {
+    return { ok: false, error: e && e.message ? e.message : String(e) };
+  }
+}
+
 function createMainWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -157,9 +355,12 @@ function createMainWindow() {
   // 세션이 끝났을 수 있어 창으로 돌아올 때마다 다시 확인
   mainWindow.on("focus", function () {
     void wmsSessionStatus();
+    sendPbiStatus();
   });
   mainWindow.on("closed", function () {
     mainWindow = null;
+    // 숨은 창이 남아 있으면 앱이 종료되지 않는다
+    closePbiWindow();
   });
 }
 
@@ -175,6 +376,19 @@ ipcMain.handle("cfs-atsoos-wms-login", async function () {
   return openWmsLoginWindow();
 });
 
+ipcMain.handle("cfs-atsoos-pbi-status", async function () {
+  return pbiStatus();
+});
+
+ipcMain.handle("cfs-atsoos-pbi-login", async function () {
+  openPbiWindow(true);
+  return { ok: true };
+});
+
+ipcMain.handle("cfs-atsoos-pbi-export", async function (_e, request) {
+  return exportAtsOos(request);
+});
+
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
   app.quit();
@@ -187,7 +401,9 @@ if (!gotSingleInstanceLock) {
 
   app.whenReady().then(function () {
     getSes().setUserAgent(CHROME_UA);
+    watchPbiToken();
     createMainWindow();
+    void acquirePbiToken();
   });
 
   app.on("window-all-closed", function () {

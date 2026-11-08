@@ -1,18 +1,35 @@
 // preload.js 가 노출하는 window.cfsAtsoos (Electron 밖에서 열면 없음)
 
 export type WmsSession = { loggedIn: boolean; error?: string; detail?: string };
+export type PbiStatus = { loggedIn: boolean; checking: boolean; loginOpen: boolean };
+export type PbiExportResult = { ok: true; base64: string } | { ok: false; error: string; needLogin?: boolean };
 
 type Bridge = {
   appInfo(): Promise<{ name: string; version: string }>;
   wmsStatus(): Promise<WmsSession>;
   wmsLogin(): Promise<{ ok: boolean; reused?: boolean }>;
   onWmsSession(cb: (s: WmsSession) => void): () => void;
+  pbiStatus(): Promise<PbiStatus>;
+  pbiLogin(): Promise<{ ok: boolean }>;
+  pbiExport(request: { center: string; date: string }): Promise<PbiExportResult>;
+  onPbiStatus(cb: (s: PbiStatus) => void): () => void;
 };
+
+type SheetCell = { t: string; v: unknown; w?: string; z?: string };
 
 declare global {
   interface Window {
     cfsAtsoos?: Bridge;
+    XLSX?: {
+      read(data: ArrayBuffer, opts: Record<string, unknown>): { SheetNames: string[]; Sheets: Record<string, Record<string, unknown>> };
+      utils: {
+        decode_range(ref: string): { s: { r: number; c: number }; e: { r: number; c: number } };
+        encode_cell(cell: { r: number; c: number }): string;
+      };
+      SSF: { is_date(format: string): boolean };
+    };
   }
 }
 
+export type { SheetCell };
 export const bridge = typeof window !== "undefined" ? window.cfsAtsoos : undefined;
