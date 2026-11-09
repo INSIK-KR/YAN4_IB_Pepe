@@ -14410,6 +14410,15 @@
     actions.appendChild(btnRun);
     mod.appendChild(actions);
 
+    var gauge = document.createElement("div");
+    gauge.style.cssText =
+      "display:none;height:8px;margin:6px 0;border-radius:4px;background:#e2e8f0;overflow:hidden;";
+    var gaugeFill = document.createElement("div");
+    gaugeFill.style.cssText =
+      "width:0;height:100%;background:#2563eb;transition:width 0.3s;";
+    gauge.appendChild(gaugeFill);
+    mod.appendChild(gauge);
+
     var status = document.createElement("div");
     status.className = "yna4-pane-status";
     status.textContent = "현재 센터 기준 조회 · Presto 계정은 입고내역 RWA 칸에서 저장";
@@ -14417,6 +14426,26 @@
     paneBody.appendChild(mod);
 
     var running = false;
+    var activeProgressId = "";
+    var progressPct = null;
+    var progressQueued = false;
+    var repaintProgress = null;
+
+    if (window.yan4ShellDesktop && typeof window.yan4ShellDesktop.onPrestoProgress === "function") {
+      window.yan4ShellDesktop.onPrestoProgress(function (p) {
+        if (!p || !activeProgressId || p.progressId !== activeProgressId) return;
+        progressQueued = p.state === "QUEUED";
+        var total = Number(p.totalSplits) || 0;
+        if (total > 0) {
+          // 전체 조각 수가 조회 중 늘어도 게이지가 뒤로 가지 않게 함
+          var pct = Math.min(99, Math.floor(((Number(p.completedSplits) || 0) / total) * 100));
+          progressPct = progressPct == null ? pct : Math.max(progressPct, pct);
+          gauge.style.display = "block";
+          gaugeFill.style.width = progressPct + "%";
+        }
+        if (repaintProgress) repaintProgress();
+      });
+    }
 
     async function run() {
       if (running) return;
@@ -14456,15 +14485,26 @@
       function paintElapsed() {
         var sec = Math.floor((Date.now() - startedAt) / 1000);
         var elapsed = sec >= 60 ? Math.floor(sec / 60) + "분 " + (sec % 60) + "초" : sec + "초";
-        status.textContent = "Presto 조회 중… " + elapsed + " (" + userLabel + " · " + ymd + ")";
+        status.textContent =
+          (progressQueued ? "Presto 대기 중… " : "Presto 조회 중… ") +
+          elapsed +
+          (progressPct != null ? " · " + progressPct + "%" : "") +
+          " (" + userLabel + " · " + ymd + ")";
       }
+      activeProgressId = "scan-" + startedAt;
+      progressPct = null;
+      progressQueued = false;
+      repaintProgress = paintElapsed;
       paintElapsed();
       var elapsedTimer = setInterval(paintElapsed, 1000);
       try {
         var res = await window.yan4ShellDesktop.prestoQuery({
           sql: workerScanBuildSql(centerId, userIds, ymd),
+          progressId: activeProgressId,
         });
         clearInterval(elapsedTimer);
+        activeProgressId = "";
+        repaintProgress = null;
         if (!res || !res.ok) {
           throw new Error((res && res.error) || "Presto 조회 실패");
         }
@@ -14486,6 +14526,10 @@
         status.textContent = "오류: " + (eRun && eRun.message ? eRun.message : String(eRun));
       } finally {
         clearInterval(elapsedTimer);
+        activeProgressId = "";
+        repaintProgress = null;
+        gauge.style.display = "none";
+        gaugeFill.style.width = "0";
         running = false;
         btnRun.disabled = false;
       }

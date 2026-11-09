@@ -1555,6 +1555,7 @@ async function runPrestoSql(sql, opt) {
   if (first.error) {
     throw new Error(formatPrestoAccessError(first.error, user));
   }
+  if (typeof opt.onProgress === "function") opt.onProgress(first.stats);
   columns = first.columns || null;
   if (Array.isArray(first.data)) rows = rows.concat(first.data);
   nextUri = first.nextUri || null;
@@ -1566,6 +1567,7 @@ async function runPrestoSql(sql, opt) {
     if (page.error) {
       throw new Error(formatPrestoAccessError(page.error, user));
     }
+    if (typeof opt.onProgress === "function") opt.onProgress(page.stats);
     if (!columns && page.columns) columns = page.columns;
     if (Array.isArray(page.data)) rows = rows.concat(page.data);
     nextUri = page.nextUri || null;
@@ -1582,7 +1584,24 @@ async function runPrestoSql(sql, opt) {
 
 ipcMain.handle("yan4-shell-presto-query", async function (_e, opts) {
   try {
-    return await runPrestoSql((opts && opts.sql) || "", opts || {});
+    const progressId = opts && opts.progressId;
+    const sender = _e.sender;
+    return await runPrestoSql(
+      (opts && opts.sql) || "",
+      Object.assign({}, opts, {
+        onProgress: progressId
+          ? function (stats) {
+              if (!stats || sender.isDestroyed()) return;
+              sender.send("yan4-shell-presto-progress", {
+                progressId: progressId,
+                state: stats.state,
+                completedSplits: stats.completedSplits,
+                totalSplits: stats.totalSplits,
+              });
+            }
+          : null,
+      })
+    );
   } catch (err) {
     return {
       ok: false,

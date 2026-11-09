@@ -52,6 +52,16 @@ contextBridge.exposeInMainWorld("yan4ShellDesktop", {
   prestoQuery: function (opts) {
     return ipcRenderer.invoke("yan4-shell-presto-query", opts || {});
   },
+  onPrestoProgress: function (cb) {
+    if (typeof cb !== "function") return function () {};
+    const handler = function (_e, payload) {
+      cb(payload);
+    };
+    ipcRenderer.on("yan4-shell-presto-progress", handler);
+    return function () {
+      ipcRenderer.removeListener("yan4-shell-presto-progress", handler);
+    };
+  },
   openSop: function (opts) {
     return ipcRenderer.invoke("yan4-shell-open-sop", opts || {});
   },
