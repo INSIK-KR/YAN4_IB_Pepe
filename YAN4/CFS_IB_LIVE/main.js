@@ -1570,6 +1570,9 @@ async function runPrestoSql(sql, opt) {
     if (Array.isArray(page.data)) rows = rows.concat(page.data);
     nextUri = page.nextUri || null;
   }
+  if (nextUri) {
+    throw new Error("Presto 조회가 끝나지 않아 중단했습니다. 잠시 후 다시 시도하세요.");
+  }
 
   var colNames = (columns || []).map(function (c) {
     return c && c.name != null ? String(c.name) : "";

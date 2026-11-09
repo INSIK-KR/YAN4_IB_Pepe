@@ -14360,7 +14360,7 @@
       "FROM hive.ods.stow_work_logs sw\n" +
       "     JOIN (select id, userid from hive.ods.WMS_USERS) u on (sw.workeruserid = u.id)\n" +
       "where sw.centerid in (" + centerId + ")\n" +
-      "and sw.createdat_day is not null\n" +
+      "and sw.createdat_day = " + recvYmdToDayInt(ymd) + "\n" +
       "and sw.updatedat between cast('" + ymd + " 00:00:00' as timestamp) and cast('" + ymd + " 23:59:59' as timestamp)\n" +
       "and u.userid in ('" + userId + "')\n" +
       "order by sw.createdat"
@@ -14440,11 +14440,19 @@
       }
       running = true;
       btnRun.disabled = true;
-      status.textContent = "Presto 조회 중… (" + userId + " · " + ymd + ")";
+      var startedAt = Date.now();
+      function paintElapsed() {
+        var sec = Math.floor((Date.now() - startedAt) / 1000);
+        var elapsed = sec >= 60 ? Math.floor(sec / 60) + "분 " + (sec % 60) + "초" : sec + "초";
+        status.textContent = "Presto 조회 중… " + elapsed + " (" + userId + " · " + ymd + ")";
+      }
+      paintElapsed();
+      var elapsedTimer = setInterval(paintElapsed, 1000);
       try {
         var res = await window.yan4ShellDesktop.prestoQuery({
           sql: workerScanBuildSql(centerId, userId, ymd),
         });
+        clearInterval(elapsedTimer);
         if (!res || !res.ok) {
           throw new Error((res && res.error) || "Presto 조회 실패");
         }
@@ -14465,6 +14473,7 @@
       } catch (eRun) {
         status.textContent = "오류: " + (eRun && eRun.message ? eRun.message : String(eRun));
       } finally {
+        clearInterval(elapsedTimer);
         running = false;
         btnRun.disabled = false;
       }
