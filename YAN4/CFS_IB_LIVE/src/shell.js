@@ -13634,10 +13634,9 @@
   var RECV_PROD_COL_HEADERS = [
     "작업자",
     "구역",
-    "총유닛",
-    "시작",
-    "종료",
+    "진열량(건)",
     "MH",
+    "유닛",
     "생산성",
   ];
   /** LET 결과 4열: Worker, MH, Unit, UPH */
@@ -13765,124 +13764,89 @@
         return "'" + String(w).replace(/'/g, "''") + "'";
       })
       .join(",\n        ");
-    return (
-      "SELECT\n" +
-      "    il.workerloginid,\n" +
-      "    CASE\n" +
-      "        WHEN LOWER(l2.fullname) LIKE '" +
-      loc22 +
-      "' THEN 'RCRT22'\n" +
-      "        WHEN LOWER(l2.fullname) LIKE '" +
-      loc44 +
-      "' THEN 'RCRT44'\n" +
-      "    END AS area,\n" +
-      "    SUM(il.adjustquantity) AS total_units,\n" +
-      "    MIN(il.createdat) AS start_time,\n" +
-      "    MAX(il.createdat) AS end_time,\n" +
-      "    ROUND(\n" +
-      "        (\n" +
-      "            DATE_DIFF(\n" +
-      "                'second',\n" +
-      "                MIN(il.createdat),\n" +
-      "                MAX(il.createdat)\n" +
-      "            ) / 3600.0\n" +
-      "        ) * 8 / 9,\n" +
-      "        2\n" +
-      "    ) AS mh,\n" +
-      "    COALESCE(\n" +
-      "        ROUND(\n" +
-      "            SUM(il.adjustquantity)\n" +
-      "            /\n" +
-      "            NULLIF(\n" +
-      "                (\n" +
-      "                    DATE_DIFF(\n" +
-      "                        'second',\n" +
-      "                        MIN(il.createdat),\n" +
-      "                        MAX(il.createdat)\n" +
-      "                    ) / 3600.0\n" +
-      "                ) * 8 / 9,\n" +
-      "                0\n" +
-      "            ),\n" +
-      "            2\n" +
-      "        ),\n" +
-      "        0\n" +
-      "    ) AS productivity\n" +
-      "FROM hive.ods.inventory_expanded_logs il\n" +
-      "JOIN hive.ods.inventories i\n" +
-      "    ON i.id = il.sourceinventoryid\n" +
-      "   AND i.createdat_year = " +
-      year +
-      "\n" +
-      "JOIN hive.ods.lots l2\n" +
-      "    ON l2.id = i.lotid\n" +
-      "WHERE il.centerid = " +
-      cid +
-      "\n" +
-      "  AND il.createdat_day = " +
-      day +
-      "\n" +
-      "  AND il.workerloginid IN (\n" +
-      "        " +
-      ids +
-      "\n" +
-      "      )\n" +
-      "  AND (\n" +
-      "        LOWER(l2.fullname) LIKE '" +
-      loc22 +
-      "'\n" +
-      "        OR LOWER(l2.fullname) LIKE '" +
-      loc44 +
-      "'\n" +
-      "      )\n" +
-      "GROUP BY\n" +
-      "    il.workerloginid,\n" +
-      "    CASE\n" +
-      "        WHEN LOWER(l2.fullname) LIKE '" +
-      loc22 +
-      "' THEN 'RCRT22'\n" +
-      "        WHEN LOWER(l2.fullname) LIKE '" +
-      loc44 +
-      "' THEN 'RCRT44'\n" +
-      "    END\n" +
-      "ORDER BY productivity DESC"
-    );
+    return [
+      "WITH workers AS (",
+      "    SELECT * FROM (VALUES",
+      "        " + ids,
+      "    ) AS t (workerloginid)",
+      "),",
+      "logs AS (",
+      "    SELECT lg.workerloginid, lg.createdat, lg.adjustquantity, lg.sourceinventoryid",
+      "    FROM hive.ods.inventory_expanded_logs lg",
+      "    JOIN workers w ON w.workerloginid = lg.workerloginid",
+      "    WHERE lg.createdat_day = " + day,
+      "      AND lg.centerid = " + cid,
+      "      AND lg.jobtype = 'STOWING'",
+      "),",
+      "src AS (",
+      "    SELECT i.id, l2.fullname",
+      "    FROM hive.ods.inventories i",
+      "    JOIN (SELECT DISTINCT sourceinventoryid FROM logs) k",
+      "      ON i.id = k.sourceinventoryid",
+      "    JOIN hive.ods.lots l2",
+      "      ON l2.id = i.lotid",
+      "    WHERE i.createdat_year = " + year,
+      "),",
+      "ev AS (",
+      "    SELECT",
+      "        lg.workerloginid,",
+      "        lg.createdat,",
+      "        lg.adjustquantity,",
+      "        CASE",
+      "            WHEN LOWER(s.fullname) LIKE '" + loc22 + "' THEN 'RCRT22'",
+      "            WHEN LOWER(s.fullname) LIKE '" + loc44 + "' THEN 'RCRT44'",
+      "            ELSE 'OTHER'",
+      "        END AS area",
+      "    FROM logs lg",
+      "    JOIN src s ON s.id = lg.sourceinventoryid",
+      "),",
+      "seq AS (",
+      "    SELECT",
+      "        *,",
+      "        ROW_NUMBER() OVER (PARTITION BY workerloginid ORDER BY createdat, area)",
+      "      - ROW_NUMBER() OVER (PARTITION BY workerloginid, area ORDER BY createdat) AS grp",
+      "    FROM ev",
+      "),",
+      "runs AS (",
+      "    SELECT",
+      "        workerloginid, area, grp,",
+      "        COUNT(*) AS scans,",
+      "        SUM(adjustquantity) AS units,",
+      "        DATE_DIFF('second', MIN(createdat), MAX(createdat)) AS span_sec",
+      "    FROM seq",
+      "    WHERE area IN ('RCRT22', 'RCRT44')",
+      "    GROUP BY workerloginid, area, grp",
+      ")",
+      "SELECT",
+      "    COALESCE(workerloginid, '합계') AS worker,",
+      "    area,",
+      "    SUM(scans) AS stow_cnt,",
+      "    ROUND(SUM(span_sec) / 3600.0 * 8 / 9, 2) AS mh,",
+      "    SUM(units) AS units,",
+      "    ROUND(SUM(units) / NULLIF(SUM(span_sec) / 3600.0 * 8 / 9, 0), 2) AS productivity",
+      "FROM runs",
+      "GROUP BY GROUPING SETS ((area, workerloginid), (area))",
+      "ORDER BY area, GROUPING(workerloginid), workerloginid",
+    ].join("\n");
   }
 
   function recvMapPrestoProductivityRows(result) {
-    var cols = (result && result.columns) || [];
     var idx = Object.create(null);
-    cols.forEach(function (name, i) {
+    ((result && result.columns) || []).forEach(function (name, i) {
       idx[String(name || "").toLowerCase()] = i;
     });
-    function col() {
-      var a = arguments;
-      var j;
-      for (j = 0; j < a.length; j++) {
-        if (idx[a[j]] != null) return idx[a[j]];
-      }
-      return -1;
-    }
-    var iWorker = col("workerloginid", "worker");
-    var iArea = col("area");
-    var iUnits = col("total_units", "unit", "units");
-    var iStart = col("start_time", "start");
-    var iEnd = col("end_time", "end");
-    var iMh = col("mh");
-    var iProd = col("productivity", "uph");
     return ((result && result.rows) || []).map(function (row) {
-      function cell(i) {
-        if (i < 0 || !row) return "";
-        var v = row[i];
+      function cell(name) {
+        var v = row && idx[name] != null ? row[idx[name]] : "";
         return v == null ? "" : v;
       }
       return {
-        worker: cell(iWorker),
-        area: cell(iArea),
-        totalUnits: cell(iUnits),
-        startTime: cell(iStart),
-        endTime: cell(iEnd),
-        mh: cell(iMh),
-        productivity: cell(iProd),
+        worker: cell("worker"),
+        area: cell("area"),
+        stowCnt: cell("stow_cnt"),
+        mh: cell("mh"),
+        units: cell("units"),
+        productivity: cell("productivity"),
       };
     });
   }
@@ -13972,10 +13936,9 @@
       var vals = [
         r.worker,
         r.area,
-        r.totalUnits,
-        r.startTime,
-        r.endTime,
+        r.stowCnt,
         r.mh,
+        r.units,
         r.productivity,
       ];
       vals.forEach(function (v, vi) {
