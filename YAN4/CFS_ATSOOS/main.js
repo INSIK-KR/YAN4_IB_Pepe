@@ -15,9 +15,6 @@ const PARTITION = "persist:cfs-atsoos";
 const CHROME_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 const WMS_LOGIN_URL = "https://inbound.coupang.com/";
-// 기본 주소로 로그인 화면이 안 열릴 때 재로그인하는 주소
-const WMS_FALLBACK_LOGIN_URL = "https://fc-auth2-wms.coupang.com/choose-your-login";
-const WMS_NOT_FOUND_TEXT = /페이지를\s*찾을\s*수\s*없/;
 const WMS_CHANGE_CENTER_URL = "https://inbound.coupang.com/auth/changeCenter/";
 const WMS_ORDER_DETAIL_URL = "https://outbound.coupang.com/order/detail/";
 const WMS_ORDER_LIST_URL = "https://outbound.coupang.com/v2/orderPool/outbound/list";
@@ -50,17 +47,6 @@ function looksLoggedIn(url) {
   }
   if (u.protocol !== "https:" || WMS_HOSTS.indexOf(u.hostname.toLowerCase()) < 0) return false;
   return !/\/(login|signin|sso|auth|idp)(\/|$)/i.test(u.pathname);
-}
-
-/** 재로그인 주소에서 로그인을 마치고 선택 화면을 벗어났는지 (이 주소 자체는 WMS 화면이 아니라 실제 확인이 따로 필요) */
-function leftFallbackLogin(url) {
-  try {
-    const u = new URL(String(url || ""));
-    const landing = new URL(WMS_FALLBACK_LOGIN_URL);
-    return u.hostname === landing.hostname && u.pathname !== landing.pathname;
-  } catch (_e) {
-    return false;
-  }
 }
 
 function hostAndPath(url) {
@@ -328,32 +314,13 @@ function openWmsLoginWindow() {
   wmsLoginWindow = win;
   win.setMenu(null);
   win.webContents.setUserAgent(CHROME_UA);
-  win.loadURL(WMS_LOGIN_URL).catch(function () {});
-
-  // 기본 주소가 안 열리면 재로그인 주소로 한 번만 넘어간다
-  let fallbackTried = false;
-  const tryFallback = function () {
-    if (fallbackTried || win.isDestroyed()) return;
-    fallbackTried = true;
-    win.loadURL(WMS_FALLBACK_LOGIN_URL).catch(function () {});
-  };
-  const fallbackIfNotFound = async function () {
-    if (fallbackTried || win.isDestroyed()) return;
-    try {
-      const shown = await win.webContents.executeJavaScript("document.body ? document.body.innerText.slice(0, 2000) : ''");
-      if (WMS_NOT_FOUND_TEXT.test(String(shown))) tryFallback();
-    } catch (_e) {
-      // 화면이 넘어가는 중이면 다음 로드 때 다시 확인한다
-    }
-  };
+  win.loadURL(WMS_LOGIN_URL);
 
   // 주소만 보면 로그인 전 화면일 수 있어 실제 요청까지 통과해야 자동으로 닫는다
   let closing = false;
-  const maybeDone = async function (_event, _url, httpCode) {
+  const maybeDone = async function () {
     if (closing || win.isDestroyed()) return;
-    if (typeof httpCode === "number" && (httpCode === 404 || httpCode >= 500)) tryFallback();
-    const url = win.webContents.getURL();
-    if (!looksLoggedIn(url) && !(fallbackTried && leftFallbackLogin(url))) return;
+    if (!looksLoggedIn(win.webContents.getURL())) return;
     const st = await wmsSessionStatus();
     if (!st.loggedIn || closing) return;
     closing = true;
@@ -364,19 +331,6 @@ function openWmsLoginWindow() {
   win.webContents.on("did-navigate", maybeDone);
   win.webContents.on("did-navigate-in-page", maybeDone);
   win.webContents.on("did-finish-load", maybeDone);
-  win.webContents.on("did-fail-load", function (_e, code, _desc, _url, isMainFrame) {
-    // -3은 다른 주소로 넘어가며 취소된 경우라 실패가 아니다
-    if (isMainFrame && code !== -3) tryFallback();
-  });
-  win.webContents.on("did-finish-load", function () {
-    void fallbackIfNotFound();
-    // 오류 문구가 화면 로드 뒤 늦게 그려지는 경우
-    [1500, 4000].forEach(function (ms) {
-      setTimeout(function () {
-        void fallbackIfNotFound();
-      }, ms);
-    });
-  });
   win.on("closed", function () {
     wmsLoginWindow = null;
     void wmsSessionStatus();
