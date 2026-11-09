@@ -158,9 +158,9 @@
       gridRowSpan: 2,
     },
     {
-      id: "barcode128",
-      label: "바코드 생성",
-      kind: "barcode128",
+      id: "p2workerScan",
+      label: "작업자 스캔 추적",
+      kind: "workerScanTrace",
       gridRowSpan: 2,
     },
     {
@@ -196,7 +196,12 @@
       gridRowSpan: 2,
       paneLock: { lockId: "loc-consol", password: "hanhan" },
     },
-    { id: "p2slot10", label: "—", kind: "slot", gridRowSpan: 2 },
+    {
+      id: "barcode128",
+      label: "바코드 생성",
+      kind: "barcode128",
+      gridRowSpan: 2,
+    },
     { id: "p2slot11", label: "—", kind: "slot", gridRowSpan: 2 },
     { id: "p2slot12", label: "—", kind: "slot", gridRowSpan: 2 },
     { id: "p2slot13", label: "—", kind: "slot", gridRowSpan: 2 },
@@ -14075,7 +14080,10 @@
           })
           .join("_")
       : "";
-    var filename = "입고내역_" + ymd + suffix + ".xlsx";
+    return recvSaveWorkbook(wb, "입고내역_" + ymd + suffix + ".xlsx");
+  }
+
+  function recvSaveWorkbook(wb, filename) {
     if (
       !window.__YAN4_DESKTOP_SHELL__ ||
       typeof chrome === "undefined" ||
@@ -14370,6 +14378,138 @@
     btnStop.addEventListener("click", function () {
       recvExportStop = true;
       setRecvStatus("중단 요청…");
+    });
+  }
+
+  /** 작업자 스캔 추적 — 작업자 PDA 진열 스캔 내역(stow_work_logs) Presto 조회 → Excel */
+  var WORKER_SCAN_ID_RE = /^[A-Za-z0-9._-]+$/;
+
+  function workerScanBuildSql(centerId, userId, ymd) {
+    return (
+      "SELECT sw.eventtype\n" +
+      ", sw.skubarcode\n" +
+      ", sw.locationbarcode\n" +
+      ", sw.quantity\n" +
+      ", u.userid\n" +
+      ", sw.message\n" +
+      ", sw.createdat\n" +
+      ", sw.centerid\n" +
+      "FROM hive.ods.stow_work_logs sw\n" +
+      "     JOIN (select id, userid from hive.ods.WMS_USERS) u on (sw.workeruserid = u.id)\n" +
+      "where sw.centerid in (" + centerId + ")\n" +
+      "and sw.createdat_day is not null\n" +
+      "and sw.updatedat between cast('" + ymd + " 00:00:00' as timestamp) and cast('" + ymd + " 23:59:59' as timestamp)\n" +
+      "and u.userid in ('" + userId + "')\n" +
+      "order by sw.createdat"
+    );
+  }
+
+  function initWorkerScanTracePane(paneBody) {
+    if (!paneBody) return;
+    paneBody.textContent = "";
+
+    var mod = document.createElement("div");
+    mod.className = "yna4-pane-mod yna4-pane-mod--worker-scan";
+
+    function addRow(labelText, input) {
+      var row = document.createElement("div");
+      row.className = "yna4-pane-row";
+      var lbl = document.createElement("span");
+      lbl.className = "yna4-pane-k";
+      lbl.textContent = labelText;
+      input.className = "yna4-pane-inp";
+      input.style.flex = "1";
+      input.style.minWidth = "0";
+      row.appendChild(lbl);
+      row.appendChild(input);
+      mod.appendChild(row);
+    }
+
+    var inpUser = document.createElement("input");
+    inpUser.type = "text";
+    inpUser.placeholder = "예: C8747616";
+    inpUser.autocomplete = "off";
+    inpUser.spellcheck = false;
+    addRow("작업자 ID", inpUser);
+
+    var inpDate = document.createElement("input");
+    inpDate.type = "date";
+    inpDate.value = recvTodayYmd();
+    addRow("작업일", inpDate);
+
+    var actions = document.createElement("div");
+    actions.className = "yna4-pane-actions";
+    var btnRun = document.createElement("button");
+    btnRun.type = "button";
+    btnRun.className = "yna4-pane-btn yna4-pane-btn--primary";
+    btnRun.textContent = "조회 후 Excel 저장";
+    actions.appendChild(btnRun);
+    mod.appendChild(actions);
+
+    var status = document.createElement("div");
+    status.className = "yna4-pane-status";
+    status.textContent = "현재 센터 기준 조회 · Presto 계정은 입고내역 RWA 칸에서 저장";
+    mod.appendChild(status);
+    paneBody.appendChild(mod);
+
+    var running = false;
+
+    async function run() {
+      if (running) return;
+      var userId = String(inpUser.value || "").trim();
+      var ymd = String(inpDate.value || "").trim();
+      if (!WORKER_SCAN_ID_RE.test(userId)) {
+        status.textContent = "작업자 ID를 확인하세요.";
+        return;
+      }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) {
+        status.textContent = "작업일을 선택하세요.";
+        return;
+      }
+      var centerId = cfsActiveCenterId("");
+      if (!centerId) {
+        status.textContent = "상단에서 센터를 먼저 선택하세요.";
+        return;
+      }
+      if (!window.yan4ShellDesktop || typeof window.yan4ShellDesktop.prestoQuery !== "function") {
+        status.textContent = "데스크톱 앱에서만 조회할 수 있습니다.";
+        return;
+      }
+      running = true;
+      btnRun.disabled = true;
+      status.textContent = "Presto 조회 중… (" + userId + " · " + ymd + ")";
+      try {
+        var res = await window.yan4ShellDesktop.prestoQuery({
+          sql: workerScanBuildSql(centerId, userId, ymd),
+        });
+        if (!res || !res.ok) {
+          throw new Error((res && res.error) || "Presto 조회 실패");
+        }
+        var rows = res.rows || [];
+        if (!rows.length) {
+          status.textContent = "결과 없음 (" + userId + " · " + ymd + ")";
+          return;
+        }
+        if (typeof XLSX === "undefined") throw new Error("XLSX 라이브러리 없음");
+        var wb = XLSX.utils.book_new();
+        var ws = XLSX.utils.aoa_to_sheet([res.columns || []].concat(rows));
+        XLSX.utils.book_append_sheet(wb, ws, "스캔내역");
+        var saved = await recvSaveWorkbook(
+          wb,
+          "작업자스캔_" + userId + "_" + ymd + ".xlsx"
+        );
+        status.textContent = "완료 · " + rows.length + "행 Excel 저장 (다운로드/" + saved + ")";
+      } catch (eRun) {
+        status.textContent = "오류: " + (eRun && eRun.message ? eRun.message : String(eRun));
+      } finally {
+        running = false;
+        btnRun.disabled = false;
+      }
+    }
+
+    btnRun.addEventListener("click", run);
+    inpUser.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") run();
     });
   }
 
@@ -17309,6 +17449,16 @@
           paneBody.textContent = "초기화 실패(Prepack&SR Daily Patrol)";
           if (typeof console !== "undefined" && console.warn) {
             console.warn("[YAN4 Shell] prepackDaily pane failed", ePrepack);
+          }
+        }
+      } else if (kind === "workerScanTrace") {
+        paneBody.classList.add("yna4-pane-card-body--tools");
+        try {
+          initWorkerScanTracePane(paneBody);
+        } catch (eWorkerScan) {
+          paneBody.textContent = "초기화 실패(작업자 스캔 추적)";
+          if (typeof console !== "undefined" && console.warn) {
+            console.warn("[YAN4 Shell] worker scan pane failed", eWorkerScan);
           }
         }
       } else if (kind === "barcode128") {
