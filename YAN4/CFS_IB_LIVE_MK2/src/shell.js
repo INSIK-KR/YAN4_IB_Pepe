@@ -14352,6 +14352,7 @@
       "SELECT sw.eventtype\n" +
       ", sw.skubarcode\n" +
       ", sw.locationbarcode\n" +
+      ", sw.cartbarcode\n" +
       ", sw.quantity\n" +
       ", u.userid\n" +
       ", sw.message\n" +
