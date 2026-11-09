@@ -44,13 +44,9 @@ const NET_TIME_URLS = [
 const NET_TIME_TIMEOUT_MS = 4000;
 const EXPIRY_RECHECK_MS = 30 * 60 * 1000;
 
-/** 로그인 주소가 열리지 않을 때 쿠팡 페이지에 뜨는 문구 */
-const LOGIN_NOT_FOUND_TEXT = /페이지를 ?찾을 ?수 ?없/;
-
 const LOGIN_TARGETS = {
   coupang: {
     url: "https://inbound.coupang.com/",
-    fallbackUrl: "https://fc-auth2-wms.coupang.com/choose-your-login",
     title: "CFS — WMS 로그인",
   },
   sharepoint: {
@@ -307,44 +303,12 @@ function openLoginWindow(kind, center) {
   try {
     win.webContents.setUserAgent(CHROME_UA);
   } catch (eUa) {}
-  win.loadURL(target.url).catch(function () {});
-
-  /* 기본 주소가 안 열리면 추가 주소로 한 번만 넘어감 */
-  let fallbackTried = false;
-  let fallbackFromUrl = null; // 전환 직전 주소 — 주소가 바뀌기 전에는 로그인 완료로 보지 않음
-  const tryFallback = function () {
-    if (fallbackTried || !target.fallbackUrl || win.isDestroyed()) return false;
-    fallbackTried = true;
-    fallbackFromUrl = win.webContents.getURL();
-    win.loadURL(target.fallbackUrl).catch(function () {});
-    return true;
-  };
-  const fallbackIfNotFound = async function () {
-    if (fallbackTried || !target.fallbackUrl || win.isDestroyed()) return false;
-    try {
-      const text = await win.webContents.executeJavaScript(
-        "document.body ? document.body.innerText.slice(0, 2000) : ''"
-      );
-      if (!LOGIN_NOT_FOUND_TEXT.test(String(text))) return false;
-      tryFallback();
-      return true;
-    } catch (e) {
-      return false;
-    }
-  };
+  win.loadURL(target.url);
 
   let closedOnce = false;
-  const maybeDone = async function (_event, _navUrl, httpCode) {
+  const maybeDone = async function () {
     try {
-      if (typeof httpCode === "number" && (httpCode === 404 || httpCode >= 500)) {
-        tryFallback();
-      }
-      if (await fallbackIfNotFound()) return;
       const url = win.webContents.getURL();
-      if (fallbackFromUrl !== null) {
-        if (url === fallbackFromUrl) return;
-        fallbackFromUrl = null;
-      }
       if (!looksLoggedIn(key, url)) return;
       await refreshSessionStatus();
       // Coupang·PO·MOS·쉽먼트: 로그인 완료 후 자동 닫기 (SharePoint는 MFA 등으로 수동)
@@ -369,11 +333,7 @@ function openLoginWindow(kind, center) {
           return;
         }
         closedOnce = true;
-        setTimeout(async function () {
-          if (await fallbackIfNotFound()) {
-            closedOnce = false;
-            return;
-          }
+        setTimeout(function () {
           if (win && !win.isDestroyed()) win.close();
         }, key === "po" || key === "mos" || key === "shipments" ? 800 : 500);
       }
@@ -383,20 +343,6 @@ function openLoginWindow(kind, center) {
   win.webContents.on("did-navigate", maybeDone);
   win.webContents.on("did-navigate-in-page", maybeDone);
   win.webContents.on("did-finish-load", maybeDone);
-  win.webContents.on("did-fail-load", function (_e, code, _desc, _url, isMainFrame) {
-    // -3 은 다른 주소로 넘어가며 취소된 경우라 실패가 아님
-    if (isMainFrame && code !== -3) tryFallback();
-  });
-  if (target.fallbackUrl) {
-    // 오류 문구가 화면 로드 뒤 늦게 그려지는 경우
-    win.webContents.on("did-finish-load", function () {
-      [1500, 4000].forEach(function (ms) {
-        setTimeout(function () {
-          void fallbackIfNotFound();
-        }, ms);
-      });
-    });
-  }
   win.on("closed", function () {
     loginWindows[key] = null;
     void refreshSessionStatus();
