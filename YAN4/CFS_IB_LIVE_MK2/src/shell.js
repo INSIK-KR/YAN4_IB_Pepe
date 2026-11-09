@@ -14347,7 +14347,7 @@
   /** 작업자 스캔 추적 — 작업자 PDA 진열 스캔 내역(stow_work_logs) Presto 조회 → Excel */
   var WORKER_SCAN_ID_RE = /^[A-Za-z0-9._-]+$/;
 
-  function workerScanBuildSql(centerId, userId, ymd) {
+  function workerScanBuildSql(centerId, userIds, ymd) {
     return (
       "SELECT sw.eventtype\n" +
       ", sw.skubarcode\n" +
@@ -14363,8 +14363,8 @@
       "where sw.centerid in (" + centerId + ")\n" +
       "and sw.createdat_day = " + recvYmdToDayInt(ymd) + "\n" +
       "and sw.updatedat between cast('" + ymd + " 00:00:00' as timestamp) and cast('" + ymd + " 23:59:59' as timestamp)\n" +
-      "and u.userid in ('" + userId + "')\n" +
-      "order by sw.createdat"
+      "and u.userid in (" + userIds.map(function (id) { return "'" + id + "'"; }).join(", ") + ")\n" +
+      "order by u.userid, sw.createdat"
     );
   }
 
@@ -14391,7 +14391,7 @@
 
     var inpUser = document.createElement("input");
     inpUser.type = "text";
-    inpUser.placeholder = "예: C8747616";
+    inpUser.placeholder = "여러 명은 쉼표·띄어쓰기로 구분";
     inpUser.autocomplete = "off";
     inpUser.spellcheck = false;
     addRow("작업자 ID", inpUser);
@@ -14420,9 +14420,20 @@
 
     async function run() {
       if (running) return;
-      var userId = String(inpUser.value || "").trim();
+      var userIds = String(inpUser.value || "")
+        .split(/[\s,]+/)
+        .filter(function (id, i, all) {
+          return id && all.indexOf(id) === i;
+        });
+      var extra = userIds.length - 1;
+      var userLabel = extra > 0 ? userIds[0] + " 외 " + extra + "명" : userIds[0];
       var ymd = String(inpDate.value || "").trim();
-      if (!WORKER_SCAN_ID_RE.test(userId)) {
+      if (
+        !userIds.length ||
+        !userIds.every(function (id) {
+          return WORKER_SCAN_ID_RE.test(id);
+        })
+      ) {
         status.textContent = "작업자 ID를 확인하세요.";
         return;
       }
@@ -14445,13 +14456,13 @@
       function paintElapsed() {
         var sec = Math.floor((Date.now() - startedAt) / 1000);
         var elapsed = sec >= 60 ? Math.floor(sec / 60) + "분 " + (sec % 60) + "초" : sec + "초";
-        status.textContent = "Presto 조회 중… " + elapsed + " (" + userId + " · " + ymd + ")";
+        status.textContent = "Presto 조회 중… " + elapsed + " (" + userLabel + " · " + ymd + ")";
       }
       paintElapsed();
       var elapsedTimer = setInterval(paintElapsed, 1000);
       try {
         var res = await window.yan4ShellDesktop.prestoQuery({
-          sql: workerScanBuildSql(centerId, userId, ymd),
+          sql: workerScanBuildSql(centerId, userIds, ymd),
         });
         clearInterval(elapsedTimer);
         if (!res || !res.ok) {
@@ -14459,7 +14470,7 @@
         }
         var rows = res.rows || [];
         if (!rows.length) {
-          status.textContent = "결과 없음 (" + userId + " · " + ymd + ")";
+          status.textContent = "결과 없음 (" + userLabel + " · " + ymd + ")";
           return;
         }
         if (typeof XLSX === "undefined") throw new Error("XLSX 라이브러리 없음");
@@ -14468,7 +14479,7 @@
         XLSX.utils.book_append_sheet(wb, ws, "스캔내역");
         var saved = await recvSaveWorkbook(
           wb,
-          "작업자스캔_" + userId + "_" + ymd + ".xlsx"
+          "작업자스캔_" + userIds[0] + (extra > 0 ? "_외" + extra + "명" : "") + "_" + ymd + ".xlsx"
         );
         status.textContent = "완료 · " + rows.length + "행 Excel 저장 (다운로드/" + saved + ")";
       } catch (eRun) {
