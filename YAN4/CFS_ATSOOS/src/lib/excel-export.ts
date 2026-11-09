@@ -18,6 +18,7 @@ export function buildExportBase64(table: AtsOosTable & { date: string }, cutline
   const col = (name: string) => table.columns.indexOf(name);
   const iCenter = col("centercode");
   const iOrder = col("ordernumber");
+  const iSku = col("externalskuid");
   const iCart = col("cartbarcode");
   const iCt = col("ctbarcode");
   const iUnits = col("units");
@@ -28,7 +29,7 @@ export function buildExportBase64(table: AtsOosTable & { date: string }, cutline
     const pair = transfers[transferKey(center, row[iCart], row[iCt] ?? "")];
     merged.push([
       ...row.map((value, i): Cell => (i === iUnits && value !== "" ? Number(value) : value)),
-      cutlines[cutlineKey(center, row[iOrder])] ?? "",
+      cutlines[cutlineKey(center, row[iOrder], row[iSku] ?? "")] ?? "",
       ...TRANSFER_COLUMNS.map(([key]) => pair?.[key] ?? ""),
     ]);
   }

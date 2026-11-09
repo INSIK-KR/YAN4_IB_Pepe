@@ -17,7 +17,7 @@ type Bridge = {
   onWmsSession(cb: (s: WmsSession) => void): () => void;
   wmsChangeCenter(centerId: string): Promise<WmsChangeCenterResult>;
   wmsTransferInfo(request: { cart: string; ct: string; center: string; date: string }): Promise<WmsTransferInfoResult>;
-  wmsOrderCutline(orderNumber: string, date: string): Promise<WmsOrderCutlineResult>;
+  wmsOrderCutline(orderNumber: string, externalSku: string, date: string): Promise<WmsOrderCutlineResult>;
   saveExcel(name: string, base64: string): Promise<{ ok: true; path: string } | { ok: false; error: string }>;
   showSavedExcel(): Promise<boolean>;
   pbiStatus(): Promise<PbiStatus>;

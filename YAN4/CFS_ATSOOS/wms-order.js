@@ -56,7 +56,7 @@ function parseCutlines(html) {
 }
 
 /** 출고 목록 검색 폼 그대로의 본문 (빈 칸도 브라우저처럼 함께 보낸다) */
-function buildOrderSearchBody(orderNumber, start, end) {
+function buildOrderSearchBody(orderNumber, skuExternalId, start, end) {
   return new URLSearchParams([
     ["page", ""],
     ["start", start],
@@ -78,7 +78,7 @@ function buildOrderSearchBody(orderNumber, start, end) {
     ["orderNumber", orderNumber],
     ["shipmentId", ""],
     ["skuId", ""],
-    ["skuExternalId", ""],
+    ["skuExternalId", skuExternalId],
     ["barcode", ""],
     ["invoiceNumber", ""],
   ]).toString();

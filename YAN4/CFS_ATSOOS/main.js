@@ -163,7 +163,7 @@ function wait(ms) {
 }
 
 /** 오더넘버 → 주문 ID. 화면에서 쓰는 기간(OOS일~다음 날)에 없으면 하루 앞까지 넓혀 한 번 더 찾는다 */
-async function findOrderIds(order, date) {
+async function findOrderIds(order, sku, date) {
   const ranges = [
     [date, addDays(date, 1)],
     [addDays(date, -1), addDays(date, 1)],
@@ -171,7 +171,7 @@ async function findOrderIds(order, date) {
   let size = 0;
   for (let i = 0; i < ranges.length; i++) {
     if (i > 0) await wait(WMS_ORDER_STEP_GAP_MS);
-    const res = await outboundRequest(WMS_ORDER_LIST_URL, buildOrderSearchBody(order, ranges[i][0], ranges[i][1]));
+    const res = await outboundRequest(WMS_ORDER_LIST_URL, buildOrderSearchBody(order, sku, ranges[i][0], ranges[i][1]));
     if (!res.ok) return res;
     const ids = parseOrderIds(res.html, order);
     if (ids.length) return { ok: true, ids: ids };
@@ -181,11 +181,13 @@ async function findOrderIds(order, date) {
 }
 
 /** 오더의 출고 커트라인. 화면에는 값과 고객 정보가 없는 진단 문구만 돌려준다 */
-async function fetchOrderCutline(orderNumber, date) {
+async function fetchOrderCutline(orderNumber, externalSku, date) {
   const order = String(orderNumber || "");
+  const sku = String(externalSku || "");
   if (!/^\d{1,20}$/.test(order)) return { ok: false, error: "오더넘버 형식이 올바르지 않습니다" };
+  if (!/^[A-Za-z0-9_-]{0,40}$/.test(sku)) return { ok: false, error: "외부 SKU ID 형식이 올바르지 않습니다" };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ""))) return { ok: false, error: "날짜 형식이 올바르지 않습니다" };
-  const search = await findOrderIds(order, date);
+  const search = await findOrderIds(order, sku, date);
   if (!search.ok) return search;
   if (!search.ids.length) return { ok: true, found: false, cutlines: [], diagnostic: "주문 ID를 찾지 못함 · 검색 응답 " + search.size + "자" };
 
@@ -579,8 +581,8 @@ ipcMain.handle("cfs-atsoos-wms-login", async function () {
   return openWmsLoginWindow();
 });
 
-ipcMain.handle("cfs-atsoos-wms-order-cutline", async function (_e, orderNumber, date) {
-  return fetchOrderCutline(orderNumber, date);
+ipcMain.handle("cfs-atsoos-wms-order-cutline", async function (_e, orderNumber, externalSku, date) {
+  return fetchOrderCutline(orderNumber, externalSku, date);
 });
 
 ipcMain.handle("cfs-atsoos-wms-transfer-info", async function (_e, request) {

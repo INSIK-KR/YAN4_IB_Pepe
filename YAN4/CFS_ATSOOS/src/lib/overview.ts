@@ -11,8 +11,8 @@ export const TRANSFER_COLUMNS: [keyof TransferCells, string][] = [
 
 export const EVIDENCE_HEADERS = ["센터", "오더넘버", "온도대", "출고 커트라인", "WMS 상차시간", "WMS 하차시간", "WMS 진열완료시간", "판정", "지연", "RCA_Level_3", "From FC", "F3_SD", "units"];
 
-// 같은 오더넘버·GC가 다른 센터에 있을 수 있어 센터까지 묶어서 구분한다
-export const cutlineKey = (center: string, order: string) => center + "|" + order;
+// 같은 오더넘버·GC가 다른 센터에 있을 수 있어 센터까지 묶어서 구분한다. 한 오더넘버에 주문이 여러 개일 수 있어 커트라인은 외부 SKU ID까지 본다
+export const cutlineKey = (center: string, order: string, sku: string) => center + "|" + order + "|" + sku;
 export const transferKey = (center: string, cart: string, ct: string) => center + "|" + cart + "|" + ct;
 
 export const VERDICTS = ["상차 지연", "하차 지연", "진열 지연", "커트라인 전 진열", "판단 불가"] as const;
@@ -79,6 +79,7 @@ export function buildOverviewRows(
   const at = (row: string[], index: number) => (index >= 0 ? row[index] || "" : "");
   const iCenter = col("centercode");
   const iOrder = col("ordernumber");
+  const iSku = col("externalskuid");
   const iTemp = col("temperature");
   const iFrom = col("from FC");
   const iF3 = col("F3_SD");
@@ -91,7 +92,7 @@ export function buildOverviewRows(
   return table.rows.map((row) => {
     const center = at(row, iCenter);
     const order = at(row, iOrder);
-    const cutline = cutlines[cutlineKey(center, order)] ?? "";
+    const cutline = cutlines[cutlineKey(center, order, at(row, iSku))] ?? "";
     const pair = transfers[transferKey(center, at(row, iCart), at(row, iCt))];
     const load = pair?.load ?? "";
     const unload = pair?.unload ?? "";

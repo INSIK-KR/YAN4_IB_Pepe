@@ -38,7 +38,7 @@ type CutlineLookup = {
   gcNote: string;
   centerErrors: string[];
 };
-type CenterGroup = { orders: Set<string>; pairs: Map<string, { cart: string; ct: string }> };
+type CenterGroup = { orders: Map<string, { order: string; sku: string }>; pairs: Map<string, { cart: string; ct: string }> };
 
 const count = (n: number) => n.toLocaleString("ko-KR");
 
@@ -200,6 +200,7 @@ export default function App() {
     const col = (name: string) => table.columns.indexOf(name);
     const centerIndex = col("centercode");
     const orderIndex = col("ordernumber");
+    const skuIndex = col("externalskuid");
     const cartIndex = col("cartbarcode");
     const ctIndex = col("ctbarcode");
 
@@ -209,10 +210,13 @@ export default function App() {
       const center = row[centerIndex];
       let group = groups.get(center);
       if (!group) {
-        group = { orders: new Set(), pairs: new Map() };
+        group = { orders: new Map(), pairs: new Map() };
         groups.set(center, group);
       }
-      if (row[orderIndex]) group.orders.add(row[orderIndex]);
+      if (row[orderIndex]) {
+        const sku = skuIndex >= 0 ? row[skuIndex] : "";
+        group.orders.set(cutlineKey(center, row[orderIndex], sku), { order: row[orderIndex], sku });
+      }
       const cart = cartIndex >= 0 ? row[cartIndex] : "";
       const ct = ctIndex >= 0 ? row[ctIndex] : "";
       if (/^GC-/i.test(cart)) group.pairs.set(transferKey(center, cart, ct), { cart, ct });
@@ -270,7 +274,7 @@ export default function App() {
           state.gcFailed += group.pairs.size;
           state.gcDone += group.pairs.size;
           const failedCells: Record<string, string> = {};
-          group.orders.forEach((order) => (failedCells[cutlineKey(center, order)] = CUTLINE_SWITCH_FAILED));
+          group.orders.forEach((_, key) => (failedCells[key] = CUTLINE_SWITCH_FAILED));
           setCutlines((prev) => ({ ...prev, ...failedCells }));
           setLookup({ ...state });
           continue;
@@ -278,9 +282,9 @@ export default function App() {
         current = center;
       }
 
-      for (const order of group.orders) {
+      for (const [key, { order, sku }] of group.orders) {
         if (stopLookup.current) return finish({ stopped: true });
-        const res = await bridge.wmsOrderCutline(order, table.date);
+        const res = await bridge.wmsOrderCutline(order, sku, table.date);
         if (!res.ok && res.needLogin) return finish({ error: res.error });
         let value: string;
         if (!res.ok) {
@@ -292,10 +296,10 @@ export default function App() {
         } else {
           value = res.found ? CUTLINE_EMPTY : CUTLINE_UNAVAILABLE;
           state.empty++;
-          if (!state.note && res.diagnostic) state.note = order + ": " + res.diagnostic;
+          if (!state.note && res.diagnostic) state.note = order + (sku ? " / SKU " + sku : "") + ": " + res.diagnostic;
         }
         state.done++;
-        setCutlines((prev) => ({ ...prev, [cutlineKey(center, order)]: value }));
+        setCutlines((prev) => ({ ...prev, [key]: value }));
         setLookup({ ...state });
         await gap();
       }
@@ -538,7 +542,7 @@ export default function App() {
                                 {v}
                               </td>
                             ))}
-                            {lookup && <td className="whitespace-nowrap px-2 py-1">{cutlines[cutlineKey(center, row[columnOf("ordernumber")])] ?? ""}</td>}
+                            {lookup && <td className="whitespace-nowrap px-2 py-1">{cutlines[cutlineKey(center, row[columnOf("ordernumber")], row[columnOf("externalskuid")] ?? "")] ?? ""}</td>}
                             {lookup &&
                               lookup.gcTotal > 0 &&
                               TRANSFER_COLUMNS.map(([key]) => (
