@@ -68,7 +68,32 @@
   var BARCODE_DELAY_MS = 120;
   var ATS_NO_STOCK_LABEL = "진열가능한 재고 없음";
   var ATS_NO_STOCK_QTY = "X";
-  var ATS_DEADLINE_OFFSET_MIN = 50;
+  /** 보충마감 = 출고마감 - N분. 기본 50, 사용자가 툴바에서 바꿈 */
+  var ATS_DEADLINE_OFFSET_DEFAULT_MIN = 50;
+  var ATS_DEADLINE_OFFSET_MAX_MIN = 600;
+  var ATS_DEADLINE_OFFSET_STORAGE_KEY = "yna4_ats_deadline_offset_min_v1";
+
+  function normalizeAtsDeadlineOffset(v) {
+    var n = parseInt(String(v == null ? "" : v).trim(), 10);
+    if (!isFinite(n) || n < 0) return null;
+    return Math.min(n, ATS_DEADLINE_OFFSET_MAX_MIN);
+  }
+
+  function getAtsDeadlineOffsetMin() {
+    try {
+      var n = normalizeAtsDeadlineOffset(
+        localStorage.getItem(ATS_DEADLINE_OFFSET_STORAGE_KEY)
+      );
+      if (n != null) return n;
+    } catch (eOff) {}
+    return ATS_DEADLINE_OFFSET_DEFAULT_MIN;
+  }
+
+  function saveAtsDeadlineOffsetMin(n) {
+    try {
+      localStorage.setItem(ATS_DEADLINE_OFFSET_STORAGE_KEY, String(n));
+    } catch (eOffSv) {}
+  }
   var ATS_DONE_STORAGE_KEY = "yna4_ats_replenish_done_v2";
   var ATS_RCRT_DISPLAY_STORAGE_KEY = "yna4_ats_rcrt_display_done_v1";
   var ATS_RCRT_DISPLAY_TIME_STORAGE_KEY = "yna4_ats_rcrt_display_time_v1";
@@ -2597,7 +2622,7 @@
       barcode: barcode,
       obQty: obQty || "",
       atsDeadline: dlTime
-        ? subtractMinutesFromHm(dlTime, ATS_DEADLINE_OFFSET_MIN)
+        ? subtractMinutesFromHm(dlTime, getAtsDeadlineOffsetMin())
         : "",
     };
   }
@@ -5087,6 +5112,8 @@
       ".yna4-shell-page-ats-inner button.yna4-ats-btn--auto{min-width:74px;font-variant-numeric:tabular-nums;color:#b91c1c!important;-webkit-text-fill-color:#b91c1c!important;background:#fff!important;border-color:#f87171!important}" +
       ".yna4-shell-page-ats-inner button.yna4-ats-btn--auto:hover:not(:disabled){background:#fef2f2!important}" +
       ".yna4-shell-page-ats-inner button.yna4-ats-btn--auto.yna4-ats-btn--auto-on{color:#fff!important;-webkit-text-fill-color:#fff!important;background:#dc2626!important;border-color:#b91c1c!important}" +
+      ".yna4-ats-deadline-offset{display:inline-flex;align-items:center;gap:3px;margin-left:8px;font-size:10px;font-weight:600;color:#334155;white-space:nowrap}" +
+      ".yna4-ats-deadline-offset-input{width:48px;font-size:10px;font-weight:600;padding:1px 4px;border:1px solid #cbd5e1;border-radius:8px;min-height:20px;box-sizing:border-box;text-align:right}" +
       ".yna4-shell-page-ats-inner select.yna4-ats-auto-interval{font-family:Segoe UI,Malgun Gothic,sans-serif;font-size:10px;font-weight:600;line-height:1.15;color:#334155;background:#fff;border:1px solid #cbd5e1;border-radius:10px;padding:2px 4px;min-height:22px;box-sizing:border-box;cursor:pointer}" +
       ".yna4-shell-page-ats-inner button.yna4-ats-btn--primary{color:#fff!important;-webkit-text-fill-color:#fff!important;background:#dc2626!important;border-color:#b91c1c!important}" +
       ".yna4-shell-page-ats-inner button.yna4-ats-btn--cutline{color:#fff!important;-webkit-text-fill-color:#fff!important;background:#2563eb!important;border-color:#1d4ed8!important;font-weight:700!important}" +
@@ -5258,6 +5285,33 @@
     cutlineActions.appendChild(cutlineActionsLabel);
     cutlineActions.appendChild(btnCutlineAll);
     cutlineActions.appendChild(btnCutlineNone);
+
+    var offsetWrap = document.createElement("label");
+    offsetWrap.className = "yna4-ats-deadline-offset";
+    offsetWrap.title =
+      "보충마감 = 출고마감 - 입력한 분 (기본 50분) · 다음 조회 실행부터 적용";
+    var offsetLab = document.createElement("span");
+    offsetLab.textContent = "보충마감 출고 -";
+    var inpOffset = document.createElement("input");
+    inpOffset.type = "number";
+    inpOffset.min = "0";
+    inpOffset.max = String(ATS_DEADLINE_OFFSET_MAX_MIN);
+    inpOffset.step = "5";
+    inpOffset.className = "yna4-ats-deadline-offset-input";
+    inpOffset.value = String(getAtsDeadlineOffsetMin());
+    var offsetUnit = document.createElement("span");
+    offsetUnit.textContent = "분";
+    inpOffset.addEventListener("change", function () {
+      var n = normalizeAtsDeadlineOffset(inpOffset.value);
+      if (n == null) n = getAtsDeadlineOffsetMin();
+      inpOffset.value = String(n);
+      saveAtsDeadlineOffsetMin(n);
+      setStatus("보충마감 출고 -" + n + "분 · 다음 조회 실행부터 적용");
+    });
+    offsetWrap.appendChild(offsetLab);
+    offsetWrap.appendChild(inpOffset);
+    offsetWrap.appendChild(offsetUnit);
+    cutlineActions.appendChild(offsetWrap);
 
     var cutlineListHost = document.createElement("div");
     cutlineListHost.id = "atsCutlineList";
