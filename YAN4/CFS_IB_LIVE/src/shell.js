@@ -8241,8 +8241,29 @@
           targetUphType: "FIXED",
           daysAgo: "1",
           weeksAgo: "1",
-          fixedTargetUph: "200",
+          fixedTargetUph: String(readTarget()),
         };
+      }
+
+      var TARGET_STORAGE_KEY = "yna4_gross_htp_target_v1";
+      var TARGET_DEFAULT = 200;
+      function normalizeTarget(v) {
+        var n = Number(String(v == null ? "" : v).trim());
+        if (!isFinite(n) || n <= 0) return null;
+        return Math.min(Math.round(n), 9999);
+      }
+      function readTarget() {
+        try {
+          var n = normalizeTarget(localStorage.getItem(TARGET_STORAGE_KEY));
+          if (n != null) return n;
+        } catch (eT) {}
+        return TARGET_DEFAULT;
+      }
+      function centerLabelText() {
+        var id = cfsActiveCenterId("1007");
+        var api = window.__CFS_CENTER__;
+        var name = api && typeof api.name === "function" ? api.name(id) : id;
+        return name === id ? id : name + " (" + id + ")";
       }
 
       async function postGrossUph(bodyObj) {
@@ -8370,6 +8391,7 @@
         item.appendChild(sw);
         item.appendChild(tx);
         parent.appendChild(item);
+        return tx;
       }
 
       var toolbarRight = document.createElement("div");
@@ -8377,13 +8399,40 @@
       var legendWrap = document.createElement("div");
       legendWrap.className = "yna4-gross-uph-legend";
       legendWrap.setAttribute("aria-hidden", "true");
-      addGrossUphLegendItem(legendWrap, "목표 200", "#DF5353", true);
+      var legendTargetText = addGrossUphLegendItem(
+        legendWrap,
+        "목표 " + readTarget(),
+        "#DF5353",
+        true
+      );
       addGrossUphLegendItem(legendWrap, "선택일", "#7cb5ec", false);
       addGrossUphLegendItem(legendWrap, "1일 전", "#434348", true);
       toolbarRight.appendChild(legendWrap);
+      var centerTag = document.createElement("span");
+      centerTag.className = "yna4-gross-uph-center";
+      centerTag.textContent = centerLabelText();
+      centerTag.title = "상단 센터 전환 기준";
+
+      var targetWrap = document.createElement("label");
+      targetWrap.className = "yna4-gross-uph-target";
+      targetWrap.title = "목표 HTP (빨간 점선). 바꾸면 바로 반영";
+      var targetLab = document.createElement("span");
+      targetLab.textContent = "목표";
+      var inpTarget = document.createElement("input");
+      inpTarget.type = "number";
+      inpTarget.min = "1";
+      inpTarget.max = "9999";
+      inpTarget.step = "10";
+      inpTarget.className = "yna4-gross-uph-target-input";
+      inpTarget.value = String(readTarget());
+      targetWrap.appendChild(targetLab);
+      targetWrap.appendChild(inpTarget);
+
       rowDate.appendChild(dayToday);
       rowDate.appendChild(dayYest);
       rowDate.appendChild(btnFetch);
+      rowDate.appendChild(centerTag);
+      rowDate.appendChild(targetWrap);
       rowDate.appendChild(toolbarRight);
 
       var chartWrap = document.createElement("div");
@@ -8397,32 +8446,81 @@
 
       var lastJson = null;
       var fetching = false;
-      btnFetch.addEventListener("click", async function () {
-        if (fetching) return;
+      var refetchAfter = false;
+
+      /** 응답의 목표값 대신 사용자가 정한 목표로 그림 */
+      async function drawWithTarget(json) {
+        var target = readTarget();
+        legendTargetText.textContent = "목표 " + target;
+        await renderGrossUphChart(
+          chartBox,
+          Object.assign({}, json, { fixedTargetUph: target }),
+          hostEl,
+          "_yna4GrossChartCard"
+        );
+      }
+
+      async function runFetch(auto) {
+        if (fetching) {
+          if (auto) refetchAfter = true;
+          return;
+        }
         fetching = true;
         btnFetch.disabled = true;
         var dayOff = inpYest.checked ? 1 : 0;
-        var fetchLabel = btnFetch.textContent;
+        var fetchLabel = "조회";
         btnFetch.textContent = "조회 중…";
+        centerTag.textContent = centerLabelText();
         try {
           var reqBody = buildPayload(dayOff);
           var json = await postGrossUph(reqBody);
           lastJson = json;
-          await renderGrossUphChart(chartBox, json, hostEl, "_yna4GrossChartCard");
+          await drawWithTarget(json);
         } catch (eFetch) {
           chartBox.textContent = "";
           lastJson = null;
           if (typeof console !== "undefined" && console.warn) {
             console.warn("[YAN4 Gross UPH]", eFetch);
           }
-          alert(
-            "[Gross UPH] " +
-              (eFetch && eFetch.message ? eFetch.message : String(eFetch))
-          );
+          var msg = eFetch && eFetch.message ? eFetch.message : String(eFetch);
+          if (auto) {
+            chartBox.textContent = "센터 전환 후 조회 실패 · " + msg;
+          } else {
+            alert("[Gross UPH] " + msg);
+          }
         } finally {
           fetching = false;
           btnFetch.disabled = false;
           btnFetch.textContent = fetchLabel;
+          if (refetchAfter) {
+            refetchAfter = false;
+            runFetch(true);
+          }
+        }
+      }
+
+      btnFetch.addEventListener("click", function () {
+        runFetch(false);
+      });
+
+      inpTarget.addEventListener("change", function () {
+        var n = normalizeTarget(inpTarget.value);
+        if (n == null) n = readTarget();
+        inpTarget.value = String(n);
+        try {
+          localStorage.setItem(TARGET_STORAGE_KEY, String(n));
+        } catch (eSv) {}
+        legendTargetText.textContent = "목표 " + n;
+        if (lastJson) drawWithTarget(lastJson);
+      });
+
+      // 상단 센터 전환 → 새 센터 기준으로 다시 조회 (이미 그래프를 본 경우)
+      window.addEventListener("cfs-center-changed", function () {
+        centerTag.textContent = centerLabelText();
+        if (lastJson || fetching) {
+          runFetch(true);
+        } else {
+          chartBox.textContent = "";
         }
       });
     }
@@ -15981,6 +16079,9 @@
         sel +
           " .yna4-pane-mod--gross-uph .yna4-gross-uph-toolbar-right{display:flex;flex-wrap:wrap;align-items:center;gap:var(--yna4-sp-2);margin-left:auto;flex-shrink:0;padding-left:var(--yna4-sp-2);}",
         sel +
+          " .yna4-pane-mod--gross-uph .yna4-gross-uph-center{font-size:10px;font-weight:700;color:#1e3a8a;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:1px 6px;white-space:nowrap;}" +
+          " .yna4-pane-mod--gross-uph .yna4-gross-uph-target{display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:700;color:#334155;white-space:nowrap;}" +
+          " .yna4-pane-mod--gross-uph .yna4-gross-uph-target-input{width:56px;font-size:10px;font-weight:600;padding:1px 4px;border:1px solid #cbd5e1;border-radius:8px;min-height:20px;box-sizing:border-box;text-align:right;}" +
           " .yna4-pane-mod--gross-uph .yna4-gross-uph-legend{display:flex;flex-wrap:wrap;align-items:center;gap:var(--yna4-sp-2);font-size:9px;font-weight:700;color:#334155;line-height:1;}",
         sel +
           " .yna4-pane-mod--gross-uph .yna4-gross-uph-legend-item{display:inline-flex;align-items:center;gap:4px;white-space:nowrap;}",
