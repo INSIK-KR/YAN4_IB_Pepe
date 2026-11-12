@@ -1890,6 +1890,7 @@
     vehicleNo: "",
     priority: "",
     ct: "",
+    fromCenter: "",
   };
 
   function transferInfoHasData(info) {
@@ -1926,6 +1927,11 @@
       "Ct",
     ]);
     var iStatus = atsFindTableCol(map, ["상태"]);
+    var iFrom = atsFindTableCol(map, [
+      "보내는센터",
+      "보내는 센터",
+      "보내는 센터코드",
+    ]);
     var iLoad = atsFindTableCol(map, ["상차완료시간", "상차완료 시간"]);
     var iVehicle = atsFindTableCol(map, ["차량번호"]);
     var iUnload = atsFindTableCol(map, [
@@ -1966,6 +1972,10 @@
         ct:
           iCt >= 0 && tds[iCt]
             ? normalizeCellText(tds[iCt].textContent)
+            : "",
+        fromCenter:
+          iFrom >= 0 && tds[iFrom]
+            ? normalizeCellText(tds[iFrom].textContent)
             : "",
       };
       if (/검색\s*결과/.test(out.status)) continue;
@@ -2060,6 +2070,7 @@
       row.vehicleNo = transferInfoCache[cart].vehicleNo || "";
       row.priority = transferInfoCache[cart].priority || "";
       row.ct = transferInfoCache[cart].ct || "";
+      row.fromCenter = transferInfoCache[cart].fromCenter || "";
     }
   }
 
@@ -3618,6 +3629,7 @@
     "하차시간",
     "상태",
     "보충기한",
+    "FROM FC",
   ];
 
   var ATS_ROW_CELL_KEYS = [
@@ -3635,6 +3647,7 @@
     "unloadTime",
     "status",
     "atsDeadline",
+    "fromCenter",
   ];
 
   var ATS_TABLE_COL_COUNT = ATS_ROW_CELL_KEYS.length;
@@ -4019,7 +4032,7 @@
   function stripAtsCellsExcludedFromPrintClone(tr) {
     if (!tr || !tr.querySelectorAll) return;
     var nodes = tr.querySelectorAll(
-      ".yna4-ats-col--sku, .yna4-ats-col--load"
+      ".yna4-ats-col--sku, .yna4-ats-col--load, .yna4-ats-col--fromfc"
     );
     var i;
     for (i = 0; i < nodes.length; i++) {
@@ -4846,6 +4859,7 @@
     "yna4-ats-col--unload",
     "yna4-ats-col--status",
     "yna4-ats-col--deadline",
+    "yna4-ats-col--fromfc",
   ];
 
   /** ①~⑪ 모든 패널 동일 열폭 (ch = 글자 수 기준, 값 안 잘리는 최소) */
@@ -4864,6 +4878,7 @@
     "10ch",
     "6ch",
     "6ch",
+    "7ch",
   ];
 
   function buildAtsTableShell(dashId) {
@@ -5136,6 +5151,7 @@
       ".yna4-shell-page-ats-inner button.yna4-ats-btn--auto:hover:not(:disabled){background:#fef2f2!important}" +
       ".yna4-shell-page-ats-inner button.yna4-ats-btn--auto.yna4-ats-btn--auto-on{color:#fff!important;-webkit-text-fill-color:#fff!important;background:#dc2626!important;border-color:#b91c1c!important}" +
       ".yna4-ats-deadline-offset{display:inline-flex;align-items:center;gap:3px;margin-left:8px;font-size:10px;font-weight:600;color:#334155;white-space:nowrap}" +
+      ".yna4-ats-deadline-offset-minus{margin-left:4px;margin-right:-1px;font-weight:800;color:#b91c1c}" +
       ".yna4-ats-deadline-offset-input{width:48px;font-size:10px;font-weight:600;padding:1px 4px;border:1px solid #cbd5e1;border-radius:8px;min-height:20px;box-sizing:border-box;text-align:right}" +
       ".yna4-shell-page-ats-inner select.yna4-ats-auto-interval{font-family:Segoe UI,Malgun Gothic,sans-serif;font-size:10px;font-weight:600;line-height:1.15;color:#334155;background:#fff;border:1px solid #cbd5e1;border-radius:10px;padding:2px 4px;min-height:22px;box-sizing:border-box;cursor:pointer}" +
       ".yna4-shell-page-ats-inner button.yna4-ats-btn--primary{color:#fff!important;-webkit-text-fill-color:#fff!important;background:#dc2626!important;border-color:#b91c1c!important}" +
@@ -5314,7 +5330,10 @@
     offsetWrap.title =
       "보충마감 = 출고마감 - 입력한 분 (기본 50분) · 다음 조회 실행부터 적용";
     var offsetLab = document.createElement("span");
-    offsetLab.textContent = "보충마감 출고 -";
+    offsetLab.textContent = "보충마감설정";
+    var offsetMinus = document.createElement("span");
+    offsetMinus.className = "yna4-ats-deadline-offset-minus";
+    offsetMinus.textContent = "-";
     var inpOffset = document.createElement("input");
     inpOffset.type = "number";
     inpOffset.min = "0";
@@ -5329,9 +5348,10 @@
       if (n == null) n = getAtsDeadlineOffsetMin();
       inpOffset.value = String(n);
       saveAtsDeadlineOffsetMin(n);
-      setStatus("보충마감 출고 -" + n + "분 · 다음 조회 실행부터 적용");
+      setStatus("보충마감설정 -" + n + "분 · 다음 조회 실행부터 적용");
     });
     offsetWrap.appendChild(offsetLab);
+    offsetWrap.appendChild(offsetMinus);
     offsetWrap.appendChild(inpOffset);
     offsetWrap.appendChild(offsetUnit);
     cutlineActions.appendChild(offsetWrap);
