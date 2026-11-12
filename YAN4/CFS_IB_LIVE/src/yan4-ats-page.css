@@ -1018,12 +1018,29 @@ background-color: #fdba74 !important;
 }
 
 /* ---------- 미니 개요 ---------- */
+.yna4-ats-ov-summary-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 2px 0 8px;
+}
 .yna4-ats-ov-summary {
   font-size: 12px;
   font-weight: 700;
   color: #1e3a8a;
-  margin: 2px 0 8px;
 }
+.yna4-ats-ov-teams-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 3px 12px;
+  border: 1px solid #6366f1;
+  border-radius: 10px;
+  background: #eef2ff;
+  color: #3730a3;
+  font: 700 11px "Segoe UI", "Malgun Gothic", sans-serif;
+  cursor: pointer;
+}
+.yna4-ats-ov-teams-btn:hover { background: #e0e7ff; }
 .yna4-ats-ov-empty {
   color: #64748b;
   font-size: 12px;
