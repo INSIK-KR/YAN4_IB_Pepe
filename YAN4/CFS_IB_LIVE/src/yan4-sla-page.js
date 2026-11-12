@@ -106,6 +106,7 @@
   ];
   var TOTE_MOVE_PAGE_SIZE = 200;
   var TOTE_STOW_CHUNK_MAX_DAYS = 3;
+  /** YAN4 에이징 토큰 — 다른 센터 기본값으로 쓰지 않음 */
   var TOTE_STOW_BARCODE_TOKENS = ["RCRT18", "RCRT88"];
   /** BUC2 에이징 FULLNAME */
   var BUC2_AGING_BARCODE_TOKENS = [
@@ -119,8 +120,14 @@
   var GWJ1_AGING_LOC_PREFIXES = ["177-RCRT3-9-"];
   /** GWJ3은 140-RCRT3-5-1~999 만 */
   var GWJ3_AGING_LOC_PREFIXES = ["140-RCRT3-5-"];
-  /** 센터별 에이징 토큰. 빈 목록은 에이징 없는 센터. 표에 없는 센터는 RCRT18·RCRT88 */
+  /**
+   * 센터별 에이징 토큰. 빈 목록은 에이징 없는 센터.
+   * 표에 없는 센터는 에이징 없음 (YAN4 값을 빌려 쓰지 않음). GWJ1·GWJ3 은 로케이션 접두어로 따로 판단.
+   */
   var AGING_BARCODE_TOKENS_BY_CENTER = {
+    YAN4: TOTE_STOW_BARCODE_TOKENS,
+    /* 1016-RCRT88-1 쉬링크, -2 계란 프리팩, -3 10도 프리팩, -4 토트 재고 이동 — 모두 에이징 */
+    SEN2: ["RCRT88"],
     BUC2: BUC2_AGING_BARCODE_TOKENS,
     SIH1: ["RCRT9", "RCRT18"],
     YON5: ["RCRT18", "RCRT40"],
@@ -1283,7 +1290,7 @@
   }
 
   function agingBarcodeTokensForActiveCenter() {
-    return AGING_BARCODE_TOKENS_BY_CENTER[poFcCode()] || TOTE_STOW_BARCODE_TOKENS;
+    return AGING_BARCODE_TOKENS_BY_CENTER[poFcCode()] || [];
   }
 
   function toteBarcodeMatchesSlaZones(barcode) {
