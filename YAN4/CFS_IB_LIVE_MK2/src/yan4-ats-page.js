@@ -4890,7 +4890,7 @@
   var atsCtViewChanged = null;
   var atsCtFilterSource = null;
   var ATS_CT_EMPTY_KEY = "__EMPTY__";
-  /** 미니 개요 탭 — 마지막 탭 기억, 마지막 구간별 행(필터 전), 펼친 CT */
+  /** CT 현황판 탭 — 마지막 탭 기억, 마지막 구간별 행(필터 전), 펼친 CT */
   var ATS_VIEW_TAB_STORAGE_KEY = "yna4_ats_view_tab_v1";
   var atsLastBuckets = null;
   var atsOverviewOpen = Object.create(null);
@@ -5785,7 +5785,7 @@
     var tabOverview = document.createElement("button");
     tabOverview.type = "button";
     tabOverview.className = "yna4-ats-view-tab";
-    tabOverview.textContent = "미니 개요 (CT별)";
+    tabOverview.textContent = "CT 현황판";
     viewTabs.appendChild(tabDash);
     viewTabs.appendChild(tabOverview);
 
@@ -6031,7 +6031,7 @@
       }
     }
 
-    /* ---------- 미니 개요: CT별 남은 보충 요약 ---------- */
+    /* ---------- CT 현황판: CT별 남은 보충 요약 ---------- */
     function loadAtsViewTab() {
       try {
         if (localStorage.getItem(ATS_VIEW_TAB_STORAGE_KEY) === "overview") return "overview";
@@ -6153,7 +6153,7 @@
       return arr.length > 1 ? arr[0] + " 외 " + (arr.length - 1) : arr[0];
     }
 
-    /** 미니 개요 CT 요약 → 팀즈 표 (펼침 상세 제외) */
+    /** CT 현황판 요약 → 팀즈 표 (펼침 상세 제외) */
     function copyAtsOverviewToTeams(groups, summaryText) {
       var now = new Date();
       var hm = String(now.getHours()).padStart(2, "0") + ":" + String(now.getMinutes()).padStart(2, "0");
@@ -6174,7 +6174,7 @@
       });
       var sections = [
         {
-          title: "CT별 남은 보충 (" + hm + " 기준) · " + summaryText,
+          title: "CT 현황판 (" + hm + " 기준) · " + summaryText,
           headerCells: header,
           dataRows: rows,
         },
