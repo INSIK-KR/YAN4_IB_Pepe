@@ -640,8 +640,8 @@ text-align: center;
   padding: 16px !important;
 }
 
-.yna4-ats-row--no-stock .yna4-ats-table td:first-child,
-.yna4-ats-row--no-stock td:first-child {
+.yna4-ats-row--no-stock .yna4-ats-table td.yna4-ats-col--sku,
+.yna4-ats-row--no-stock td.yna4-ats-col--sku {
 color: #b45309;
   font-weight: 600;
 }
