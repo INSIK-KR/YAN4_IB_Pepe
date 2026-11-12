@@ -936,8 +936,8 @@ background-color: #fdba74 !important;
   align-items: center;
   gap: 4px;
 }
-.yna4-ats-ct-sort-btn,
 .yna4-ats-ct-filter-btn {
+  flex: 0 0 auto;
   width: 18px;
   height: 18px;
   padding: 0;
@@ -949,20 +949,43 @@ background-color: #fdba74 !important;
   line-height: 16px;
   cursor: pointer;
 }
-.yna4-ats-ct-sort-btn::before { content: "\2195"; }
-.yna4-ats-ct-sort-btn[data-dir="asc"]::before { content: "\25B2"; }
-.yna4-ats-ct-sort-btn[data-dir="desc"]::before { content: "\25BC"; }
-.yna4-ats-ct-sort-btn[data-dir="asc"],
-.yna4-ats-ct-sort-btn[data-dir="desc"],
 .yna4-ats-ct-filter-btn.is-active {
   background: #dc2626;
   border-color: #dc2626;
   color: #fff;
 }
 .yna4-ats-ct-filter-btn::before { content: "\25BE"; }
+.yna4-ats-ct-filter-btn[data-dir="asc"]::before { content: "\25B2"; }
+.yna4-ats-ct-filter-btn[data-dir="desc"]::before { content: "\25BC"; }
+/* 머리글 글자+버튼이 잘려 버튼이 가려지지 않게 */
+.yna4-ats-table th.yna4-ats-col--vehicle {
+  padding-left: 4px;
+  padding-right: 4px;
+  text-overflow: clip;
+}
+.yna4-ats-ct-head > span { flex: 0 0 auto; }
+.yna4-ats-ct-sort-row {
+  display: flex;
+  gap: 4px;
+}
+.yna4-ats-ct-sort-row button {
+  flex: 1 1 0;
+  padding: 3px 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 11px;
+  cursor: pointer;
+}
+.yna4-ats-ct-sort-row button.is-on {
+  background: #dc2626;
+  border-color: #dc2626;
+  color: #fff;
+}
+/* 셸(z 2147483646) 위에 떠야 보이고 눌림 */
 .yna4-ats-ct-filter-pop {
   position: fixed;
-  z-index: 9999;
+  z-index: 2147483647;
   width: 280px;
   max-height: 360px;
   display: flex;

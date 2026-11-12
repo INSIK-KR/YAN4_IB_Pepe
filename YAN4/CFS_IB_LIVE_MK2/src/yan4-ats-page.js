@@ -4874,7 +4874,7 @@
     "15em",
     "5ch",
     "7ch",
-    "8ch",
+    "12.5ch",
     "10ch",
     "10ch",
     "6ch",
@@ -4898,7 +4898,7 @@
   function atsCtViewState(dashId) {
     var st = atsCtViewByDash[dashId];
     if (!st) {
-      st = { dir: 0, excluded: Object.create(null), vexcluded: Object.create(null) };
+      st = { dir: 0, sortBy: "ct", excluded: Object.create(null), vexcluded: Object.create(null) };
       atsCtViewByDash[dashId] = st;
     }
     return st;
@@ -4945,15 +4945,17 @@
     if (!st || !rows || !rows.length) return rows || [];
     var out = [];
     var i, key;
+    var vkey;
     for (i = 0; i < rows.length; i++) {
       key = atsCtKeyForRow(rows[i]);
+      vkey = atsVehicleKeyForRow(rows[i]);
       if (st.excluded[key || ATS_CT_EMPTY_KEY]) continue;
-      if (st.vexcluded && st.vexcluded[atsVehicleKeyForRow(rows[i]) || ATS_CT_EMPTY_KEY]) continue;
-      out.push({ r: rows[i], k: key, i: i });
+      if (st.vexcluded && st.vexcluded[vkey || ATS_CT_EMPTY_KEY]) continue;
+      out.push({ r: rows[i], k: st.sortBy === "vehicle" ? vkey : key, i: i });
     }
     if (st.dir) {
       out.sort(function (a, b) {
-        // CT 없는 행은 방향과 상관없이 맨 아래
+        // 값 없는 행은 방향과 상관없이 맨 아래
         if (!a.k !== !b.k) return a.k ? -1 : 1;
         var c = atsCtCompareKeys(a.k, b.k) * st.dir;
         return c || a.i - b.i;
@@ -4967,28 +4969,21 @@
   function refreshAtsCtHeaderButtons(table, dashId) {
     if (!table) return;
     var st = atsCtViewState(dashId);
-    var sb = table.querySelector(".yna4-ats-ct-sort-btn");
     var fb = table.querySelector(".yna4-ats-ct-filter-btn:not(.yna4-ats-veh-filter-btn)");
     var vb = table.querySelector(".yna4-ats-veh-filter-btn");
-    if (vb) {
-      var von = atsVehFilterActive(dashId);
-      vb.classList.toggle("is-active", von);
-      vb.title = von ? "차량번호 필터 적용 중 · 클릭: 변경" : "차량번호 필터";
+    function show(btn, what, mine, filtered) {
+      if (!btn) return;
+      var d = mine && st.dir ? (st.dir === 1 ? "asc" : "desc") : "none";
+      btn.setAttribute("data-dir", d);
+      btn.classList.toggle("is-active", filtered || d !== "none");
+      var bits = [];
+      if (d === "asc") bits.push("오름차순");
+      if (d === "desc") bits.push("내림차순");
+      if (filtered) bits.push("필터 적용 중");
+      btn.title = what + " 정렬·필터" + (bits.length ? " · " + bits.join(" · ") : "");
     }
-    if (sb) {
-      sb.setAttribute("data-dir", st.dir === 1 ? "asc" : st.dir === -1 ? "desc" : "none");
-      sb.title =
-        st.dir === 1
-          ? "CT 오름차순 · 클릭: 내림차순"
-          : st.dir === -1
-          ? "CT 내림차순 · 클릭: 정렬 해제"
-          : "CT 정렬 · 클릭: 오름차순";
-    }
-    if (fb) {
-      var on = atsCtFilterActive(dashId);
-      fb.classList.toggle("is-active", on);
-      fb.title = on ? "CT 필터 적용 중 · 클릭: 변경" : "CT 필터";
-    }
+    show(fb, "CT", (st.sortBy || "ct") === "ct", atsCtFilterActive(dashId));
+    show(vb, "차량번호", st.sortBy === "vehicle", atsVehFilterActive(dashId));
   }
 
   function closeAtsCtFilterPop() {
@@ -5010,8 +5005,34 @@
     pop.className = "yna4-ats-ct-filter-pop";
     var title = document.createElement("div");
     title.className = "yna4-ats-ct-filter-title";
-    title.textContent = what + " 필터 · " + (ATS_DASH_PANEL_TITLES[dashId - 1] || "");
+    title.textContent = what + " 정렬·필터 · " + (ATS_DASH_PANEL_TITLES[dashId - 1] || "");
     pop.appendChild(title);
+    var sortKind = isVeh ? "vehicle" : "ct";
+    var sortRow = document.createElement("div");
+    sortRow.className = "yna4-ats-ct-sort-row";
+    [
+      [1, "오름차순 ▲"],
+      [-1, "내림차순 ▼"],
+      [0, "정렬 해제"],
+    ].forEach(function (o) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.textContent = o[1];
+      var cur = (st.sortBy || "ct") === sortKind ? st.dir : 0;
+      if (o[0] !== 0 && cur === o[0]) b.className = "is-on";
+      b.addEventListener("click", function () {
+        if (o[0] === 0) {
+          if ((st.sortBy || "ct") === sortKind) st.dir = 0;
+        } else {
+          st.sortBy = sortKind;
+          st.dir = o[0];
+        }
+        closeAtsCtFilterPop();
+        if (typeof atsCtViewChanged === "function") atsCtViewChanged();
+      });
+      sortRow.appendChild(b);
+    });
+    pop.appendChild(sortRow);
     var search = document.createElement("input");
     search.type = "search";
     search.placeholder = what + " 검색";
@@ -5106,7 +5127,12 @@
     var r = btn.getBoundingClientRect();
     var left = Math.max(8, Math.min(r.left, window.innerWidth - pop.offsetWidth - 8));
     pop.style.left = left + "px";
-    pop.style.top = r.bottom + 4 + "px";
+    // 아래 공간이 모자라면 버튼 위로 띄움
+    var top = r.bottom + 4;
+    if (top + pop.offsetHeight > window.innerHeight - 8) {
+      top = Math.max(8, r.top - 4 - pop.offsetHeight);
+    }
+    pop.style.top = top + "px";
     setTimeout(function () {
       document.addEventListener("mousedown", function onDoc() {
         document.removeEventListener("mousedown", onDoc);
@@ -5115,28 +5141,19 @@
     }, 0);
   }
 
-  /** CT 머리글: 글자 + 정렬·필터 버튼 (버튼 모양은 CSS — 팀즈 복사 머리글은 "CT" 그대로) */
+  /** CT 머리글: 글자 + 정렬·필터 버튼 하나 (버튼 모양은 CSS — 팀즈 복사 머리글은 "CT" 그대로) */
   function mountAtsCtHeaderControls(th, dashId) {
     th.textContent = "";
     var wrap = document.createElement("span");
     wrap.className = "yna4-ats-ct-head";
     var lab = document.createElement("span");
     lab.textContent = "CT";
-    var sb = document.createElement("button");
-    sb.type = "button";
-    sb.className = "yna4-ats-ct-sort-btn";
-    sb.setAttribute("aria-label", "CT 정렬");
-    sb.setAttribute("data-dir", "none");
     var fb = document.createElement("button");
     fb.type = "button";
     fb.className = "yna4-ats-ct-filter-btn";
-    fb.setAttribute("aria-label", "CT 필터");
-    sb.addEventListener("click", function (ev) {
-      ev.stopPropagation();
-      var st = atsCtViewState(dashId);
-      st.dir = st.dir === 0 ? 1 : st.dir === 1 ? -1 : 0;
-      if (typeof atsCtViewChanged === "function") atsCtViewChanged();
-    });
+    fb.setAttribute("aria-label", "CT 정렬·필터");
+    fb.setAttribute("data-dir", "none");
+    fb.title = "CT 정렬·필터";
     fb.addEventListener("click", function (ev) {
       ev.stopPropagation();
       if (document.getElementById("yna4AtsCtFilterPop")) {
@@ -5146,12 +5163,11 @@
       openAtsCtFilterPop(fb, dashId, "ct");
     });
     wrap.appendChild(lab);
-    wrap.appendChild(sb);
     wrap.appendChild(fb);
     th.appendChild(wrap);
   }
 
-  /** 차량번호 머리글: 글자 + 필터 버튼 (정렬은 기존 나열 순서 그대로) */
+  /** 차량번호 머리글: 글자 + 정렬·필터 버튼 하나 */
   function mountAtsVehHeaderControls(th, dashId) {
     th.textContent = "";
     var wrap = document.createElement("span");
@@ -5161,8 +5177,9 @@
     var fb = document.createElement("button");
     fb.type = "button";
     fb.className = "yna4-ats-ct-filter-btn yna4-ats-veh-filter-btn";
-    fb.setAttribute("aria-label", "차량번호 필터");
-    fb.title = "차량번호 필터";
+    fb.setAttribute("aria-label", "차량번호 정렬·필터");
+    fb.setAttribute("data-dir", "none");
+    fb.title = "차량번호 정렬·필터";
     fb.addEventListener("click", function (ev) {
       ev.stopPropagation();
       if (document.getElementById("yna4AtsCtFilterPop")) {
