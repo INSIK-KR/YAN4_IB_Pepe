@@ -127,7 +127,7 @@
     DAJ1: ["RCRT4"],
     GMH1: ["RCRT55"],
     INC11: [],
-    INC12: [],
+    INC12: ["RCRT20", "RCRT30", "RCRT40"],
     INC15: [],
     INC22: [],
     INC37: [],
