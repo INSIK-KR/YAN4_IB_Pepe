@@ -443,7 +443,19 @@
   }
 
   /** 서버 세션의 실제 현재 센터 — 확인되면 앱 기준 센터(cfsActiveCenterId)도 맞춤 */
+  /** 앱 기준 센터가 바뀌면 다른 카드(Gross HTP 등)에 알림 */
+  function notifyActiveCenterChanged(prevId) {
+    var id = activeCenterId();
+    if (id === prevId) return;
+    try {
+      window.dispatchEvent(
+        new CustomEvent("cfs-center-changed", { detail: { id: id, prevId: prevId } })
+      );
+    } catch (eEv) {}
+  }
+
   async function detectCurrentCenter() {
+    var prevId = activeCenterId();
     var r = await inboundGetText(CURRENT_CENTER_PAGE);
     if (!r || r.status < 200 || r.status >= 400) {
       throw new Error("inbound HTTP " + (r && r.status));
@@ -453,11 +465,13 @@
     try {
       localStorage.setItem(ACTIVE_CENTER_KEY, id);
     } catch (e) {}
+    notifyActiveCenterChanged(prevId);
     return id;
   }
 
   async function switchActiveCenter(centerId) {
     var want = String(centerId);
+    var prevId = activeCenterId();
     var msg = await changeCenter(want);
     var got = "";
     try {
@@ -466,6 +480,7 @@
       try {
         localStorage.setItem(ACTIVE_CENTER_KEY, want);
       } catch (e) {}
+      notifyActiveCenterChanged(prevId);
       return { message: msg, verified: false };
     }
     if (got !== want) {
