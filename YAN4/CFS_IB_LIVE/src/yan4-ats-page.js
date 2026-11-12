@@ -6068,9 +6068,11 @@
       return neg ? t + " 지남" : t;
     }
 
-    function atsDashBadge(pi) {
-      var t = ATS_DASH_PANEL_TITLES[pi - 1] || "";
-      return t.split(" ")[0] || String(pi);
+    function atsOverviewTemp(row, pi) {
+      var z = String((row && row.tempZone) || "").trim();
+      if (z) return z;
+      var t = String(ATS_DASH_PANEL_TITLES[pi - 1] || "").replace(/^\S+\s+/, "");
+      return t.split(" — ")[0] || "";
     }
 
     function collectAtsOverviewGroups(buckets) {
@@ -6097,10 +6099,12 @@
               prio: [],
               from: [],
               vehicle: [],
+              temps: [],
               unload: "",
               deadline: "",
               remain: Infinity,
               moving: 0,
+              kind: 2,
             };
             byKey[key] = g;
             groups.push(g);
@@ -6111,8 +6115,16 @@
           if (r.priority && g.prio.indexOf(r.priority) < 0) g.prio.push(r.priority);
           if (r.fromCenter && g.from.indexOf(r.fromCenter) < 0) g.from.push(r.fromCenter);
           if (r.vehicleNo && g.vehicle.indexOf(r.vehicleNo) < 0) g.vehicle.push(r.vehicleNo);
+          var tz = atsOverviewTemp(r, pi);
+          if (tz && g.temps.indexOf(tz) < 0) g.temps.push(tz);
           if (r.unloadTime && !g.unload) g.unload = r.unloadTime;
           if (String(r.status || "").trim() === "이동중") g.moving++;
+          var kind = atsLocationIsBufferZone(r.location)
+            ? 0
+            : /직납/.test(atsCtLabelFromLocation(r.location) || "")
+            ? 1
+            : 2;
+          if (kind < g.kind) g.kind = kind;
           var rem = atsRemainMinutes(r.atsDeadline);
           if (rem < g.remain) {
             g.remain = rem;
@@ -6127,6 +6139,7 @@
         gg.prioRank = atsPriorityRank(gg.prio[0]);
       });
       groups.sort(function (a, b) {
+        if (a.kind !== b.kind) return a.kind - b.kind;
         var c = atsCompareRank(a.prioRank, b.prioRank);
         if (c) return c;
         if (a.remain !== b.remain) return a.remain < b.remain ? -1 : 1;
@@ -6178,7 +6191,7 @@
       table.className = "yna4-ats-ov-table";
       var thead = document.createElement("thead");
       var hr = document.createElement("tr");
-      ["", "우선순위", "CT", "FROM FC", "차량번호", "하차시간", "건수", "보충수량", "보충기한", "남은 시간"].forEach(function (h) {
+      ["", "우선순위", "CT", "온도대", "FROM FC", "차량번호", "하차시간", "건수", "보충수량", "보충기한", "남은 시간"].forEach(function (h) {
         var th = document.createElement("th");
         th.textContent = h;
         hr.appendChild(th);
@@ -6197,6 +6210,7 @@
           open ? "▾" : "▸",
           atsJoinShort(g.prio),
           g.key,
+          g.temps.join(" · "),
           atsJoinShort(g.from),
           atsJoinShort(g.vehicle),
           formatAtsDateTimeCompact(g.unload || ""),
@@ -6208,7 +6222,7 @@
         cells.forEach(function (c, ci) {
           var td = document.createElement("td");
           td.textContent = c;
-          if (ci === 9) td.className = "yna4-ats-ov-remain";
+          if (ci === 10) td.className = "yna4-ats-ov-remain";
           if (ci === 2) td.className = "yna4-ats-ov-ctcell";
           tr.appendChild(td);
         });
@@ -6222,11 +6236,11 @@
         var dtr = document.createElement("tr");
         dtr.className = "yna4-ats-ov-detail";
         var dtd = document.createElement("td");
-        dtd.colSpan = 10;
+        dtd.colSpan = 11;
         var dt = document.createElement("table");
         dt.className = "yna4-ats-ov-detail-table";
         var dh = document.createElement("tr");
-        ["구간", "SKU ID", "상품명", "보충", "재고", "로케이션", "상태", "보충기한"].forEach(function (h) {
+        ["온도대", "SKU ID", "상품명", "보충", "재고", "로케이션", "상태", "보충기한"].forEach(function (h) {
           var th = document.createElement("th");
           th.textContent = h;
           dh.appendChild(th);
@@ -6236,7 +6250,7 @@
           var r = x.row;
           var rr = document.createElement("tr");
           [
-            atsDashBadge(x.dash),
+            atsOverviewTemp(r, x.dash),
             r.skuId || "",
             r.name || "",
             r.obQty || "",
