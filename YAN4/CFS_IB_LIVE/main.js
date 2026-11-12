@@ -31,7 +31,7 @@ const STORAGE_FILE = "yan4-shell-storage.json";
 const CHROME_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 const SHAREPOINT_SLA_DEFAULT_URL =
-  "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=9c695e4e-8353-4f76-a750-7d46f46d8d1f";
+  "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=21c20135-156b-4c7b-b339-01b4ac1731cb";
 const CHROME_DOWNLOAD_WAIT_MS = 90000;
 const CHROME_DOWNLOAD_POLL_MS = 500;
 const APP_EXPIRES_AT = Date.parse("2026-12-31T23:59:59+09:00");
