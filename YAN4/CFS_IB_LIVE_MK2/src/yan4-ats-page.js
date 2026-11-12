@@ -3615,6 +3615,7 @@
   ];
 
   var ATS_TABLE_HEADERS = [
+    "FROM FC",
     "SKU ID",
     "Barcode",
     "보충",
@@ -3629,10 +3630,10 @@
     "하차시간",
     "상태",
     "보충기한",
-    "FROM FC",
   ];
 
   var ATS_ROW_CELL_KEYS = [
+    "fromCenter",
     "skuId",
     "barcode",
     "obQty",
@@ -3647,19 +3648,18 @@
     "unloadTime",
     "status",
     "atsDeadline",
-    "fromCenter",
   ];
 
   var ATS_TABLE_COL_COUNT = ATS_ROW_CELL_KEYS.length;
   /** 팀즈 복사·필터용 로케이션(GC) 열 (0-based) */
-  var ATS_COL_LOCATION = 5;
+  var ATS_COL_LOCATION = ATS_ROW_CELL_KEYS.indexOf("location");
   var ATS_DEADLINE_CHIP_STORAGE_KEY = "yna4_ats_deadline_chip_on_v1";
   var ATS_CUTLINE_SEL_STORAGE_KEY = "yna4_ats_cutline_sel_v1";
   var ATS_PRINT_DASH_CHIP_STORAGE_KEY = "yna4_ats_print_dash_chip_on_v1";
   var ATS_ZONE_MODE_STORAGE_KEY = "yna4_ats_zone_mode_v1";
   var ATS_SORT_MODE_STORAGE_KEY = "yna4_ats_sort_mode_v1";
   var ATS_URGENT_MODE_STORAGE_KEY = "yna4_ats_urgent_mode_v1";
-  var ATS_COL_ATS_DEADLINE = 13;
+  var ATS_COL_ATS_DEADLINE = ATS_ROW_CELL_KEYS.indexOf("atsDeadline");
 
   var ATS_TEAMS_COPY_BUTTONS = [
     { label: "EGG·SR", dashboards: [1, 2], title: "①② CHILLED 10·15구 · [SR] 표(HTML)+TSV" },
@@ -3700,7 +3700,7 @@
     return s.trim();
   }
 
-  var ATS_COL_STATUS = 12;
+  var ATS_COL_STATUS = ATS_ROW_CELL_KEYS.indexOf("status");
 
   function atsTrExcludedFromTeamsCopy(tr) {
     if (!tr) return true;
@@ -4845,6 +4845,7 @@
   }
 
   var ATS_TABLE_COL_CLASSES = [
+    "yna4-ats-col--fromfc",
     "yna4-ats-col--sku",
     "yna4-ats-col--barcode",
     "yna4-ats-col--obqty",
@@ -4859,11 +4860,11 @@
     "yna4-ats-col--unload",
     "yna4-ats-col--status",
     "yna4-ats-col--deadline",
-    "yna4-ats-col--fromfc",
   ];
 
   /** ①~⑪ 모든 패널 동일 열폭 (ch = 글자 수 기준, 값 안 잘리는 최소) */
   var ATS_TABLE_COL_WIDTHS = [
+    "7ch",
     "9ch",
     "15ch",
     "3.5ch",
@@ -4878,7 +4879,6 @@
     "10ch",
     "6ch",
     "6ch",
-    "7ch",
   ];
 
   function buildAtsTableShell(dashId) {
