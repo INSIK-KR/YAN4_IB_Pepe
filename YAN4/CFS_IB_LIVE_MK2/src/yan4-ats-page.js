@@ -4881,6 +4881,250 @@
     "6ch",
   ];
 
+  /**
+   * CT 열 정렬·필터 — 패널별 화면 보기 상태(메모리). 데이터 단계에서 적용해
+   * 팀즈 복사·PDF·보충마감 버튼 건수도 화면에 보이는 행 기준으로 맞춤.
+   */
+  var atsCtViewByDash = Object.create(null);
+  /** mount 에서 연결: CT 보기 바뀌면 다시 그리기 / 필터 후보 목록 */
+  var atsCtViewChanged = null;
+  var atsCtFilterSource = null;
+  var ATS_CT_EMPTY_KEY = "__EMPTY__";
+  /** 미니 개요 탭 — 마지막 탭 기억, 마지막 구간별 행(필터 전), 펼친 CT */
+  var ATS_VIEW_TAB_STORAGE_KEY = "yna4_ats_view_tab_v1";
+  var atsLastBuckets = null;
+  var atsOverviewOpen = Object.create(null);
+
+  function atsCtViewState(dashId) {
+    var st = atsCtViewByDash[dashId];
+    if (!st) {
+      st = { dir: 0, excluded: Object.create(null) };
+      atsCtViewByDash[dashId] = st;
+    }
+    return st;
+  }
+
+  /** 정렬·필터 기준 CT — 실제 컨테이너 바코드 또는 로케이션 고정 문구(직납 등) */
+  function atsCtKeyForRow(row) {
+    if (!row || row.noStock) return "";
+    return String(atsCtDisplayForRow(row) || "").trim();
+  }
+
+  function atsCtFilterActive(dashId) {
+    var st = atsCtViewByDash[dashId];
+    if (!st) return false;
+    for (var k in st.excluded) {
+      if (Object.prototype.hasOwnProperty.call(st.excluded, k)) return true;
+    }
+    return false;
+  }
+
+  function atsCtCompareKeys(a, b) {
+    if (a === b) return 0;
+    if (!a) return 1;
+    if (!b) return -1;
+    return a.localeCompare(b, "ko", { numeric: true });
+  }
+
+  function applyAtsCtView(dashId, rows) {
+    var st = atsCtViewByDash[dashId];
+    if (!st || !rows || !rows.length) return rows || [];
+    var out = [];
+    var i, key;
+    for (i = 0; i < rows.length; i++) {
+      key = atsCtKeyForRow(rows[i]);
+      if (st.excluded[key || ATS_CT_EMPTY_KEY]) continue;
+      out.push({ r: rows[i], k: key, i: i });
+    }
+    if (st.dir) {
+      out.sort(function (a, b) {
+        // CT 없는 행은 방향과 상관없이 맨 아래
+        if (!a.k !== !b.k) return a.k ? -1 : 1;
+        var c = atsCtCompareKeys(a.k, b.k) * st.dir;
+        return c || a.i - b.i;
+      });
+    }
+    return out.map(function (x) {
+      return x.r;
+    });
+  }
+
+  function refreshAtsCtHeaderButtons(table, dashId) {
+    if (!table) return;
+    var st = atsCtViewState(dashId);
+    var sb = table.querySelector(".yna4-ats-ct-sort-btn");
+    var fb = table.querySelector(".yna4-ats-ct-filter-btn");
+    if (sb) {
+      sb.setAttribute("data-dir", st.dir === 1 ? "asc" : st.dir === -1 ? "desc" : "none");
+      sb.title =
+        st.dir === 1
+          ? "CT 오름차순 · 클릭: 내림차순"
+          : st.dir === -1
+          ? "CT 내림차순 · 클릭: 정렬 해제"
+          : "CT 정렬 · 클릭: 오름차순";
+    }
+    if (fb) {
+      var on = atsCtFilterActive(dashId);
+      fb.classList.toggle("is-active", on);
+      fb.title = on ? "CT 필터 적용 중 · 클릭: 변경" : "CT 필터";
+    }
+  }
+
+  function closeAtsCtFilterPop() {
+    var old = document.getElementById("yna4AtsCtFilterPop");
+    if (old && old.parentNode) old.parentNode.removeChild(old);
+  }
+
+  function openAtsCtFilterPop(btn, dashId) {
+    closeAtsCtFilterPop();
+    var st = atsCtViewState(dashId);
+    var values = typeof atsCtFilterSource === "function" ? atsCtFilterSource(dashId) : [];
+    var pop = document.createElement("div");
+    pop.id = "yna4AtsCtFilterPop";
+    pop.className = "yna4-ats-ct-filter-pop";
+    var title = document.createElement("div");
+    title.className = "yna4-ats-ct-filter-title";
+    title.textContent = "CT 필터 · " + (ATS_DASH_PANEL_TITLES[dashId - 1] || "");
+    pop.appendChild(title);
+    var search = document.createElement("input");
+    search.type = "search";
+    search.placeholder = "CT 검색";
+    search.className = "yna4-ats-ct-filter-search";
+    pop.appendChild(search);
+    var allLab = document.createElement("label");
+    allLab.className = "yna4-ats-ct-filter-item yna4-ats-ct-filter-item--all";
+    var allCb = document.createElement("input");
+    allCb.type = "checkbox";
+    allLab.appendChild(allCb);
+    allLab.appendChild(document.createTextNode(" 전체"));
+    pop.appendChild(allLab);
+    var list = document.createElement("div");
+    list.className = "yna4-ats-ct-filter-list";
+    pop.appendChild(list);
+    var cbs = [];
+    var i;
+    if (!values.length) {
+      list.textContent = "표시할 CT 없음";
+    }
+    for (i = 0; i < values.length; i++) {
+      (function (v) {
+        var lab = document.createElement("label");
+        lab.className = "yna4-ats-ct-filter-item";
+        var cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = !st.excluded[v.key || ATS_CT_EMPTY_KEY];
+        cb.setAttribute("data-key", v.key || ATS_CT_EMPTY_KEY);
+        lab.appendChild(cb);
+        var tx = document.createElement("span");
+        tx.textContent = (v.key || "(CT 없음)") + " (" + v.count + ")";
+        lab.appendChild(tx);
+        lab.setAttribute("data-search", String(v.key || "").toLowerCase());
+        list.appendChild(lab);
+        cbs.push(cb);
+      })(values[i]);
+    }
+    function syncAll() {
+      var on = 0;
+      for (var j = 0; j < cbs.length; j++) if (cbs[j].checked) on++;
+      allCb.checked = cbs.length > 0 && on === cbs.length;
+      allCb.indeterminate = on > 0 && on < cbs.length;
+    }
+    syncAll();
+    allCb.addEventListener("change", function () {
+      for (var j = 0; j < cbs.length; j++) {
+        if (cbs[j].parentNode.style.display !== "none") cbs[j].checked = allCb.checked;
+      }
+      syncAll();
+    });
+    list.addEventListener("change", syncAll);
+    search.addEventListener("input", function () {
+      var q = String(search.value || "").trim().toLowerCase();
+      var items = list.querySelectorAll(".yna4-ats-ct-filter-item");
+      for (var j = 0; j < items.length; j++) {
+        var hit = !q || String(items[j].getAttribute("data-search") || "").indexOf(q) >= 0;
+        items[j].style.display = hit ? "" : "none";
+      }
+    });
+    var actions = document.createElement("div");
+    actions.className = "yna4-ats-ct-filter-actions";
+    var btnClear = document.createElement("button");
+    btnClear.type = "button";
+    btnClear.textContent = "초기화";
+    var btnOk = document.createElement("button");
+    btnOk.type = "button";
+    btnOk.className = "is-primary";
+    btnOk.textContent = "확인";
+    actions.appendChild(btnClear);
+    actions.appendChild(btnOk);
+    pop.appendChild(actions);
+    function apply(clear) {
+      st.excluded = Object.create(null);
+      if (!clear) {
+        for (var j = 0; j < cbs.length; j++) {
+          if (!cbs[j].checked) st.excluded[cbs[j].getAttribute("data-key")] = 1;
+        }
+      }
+      closeAtsCtFilterPop();
+      if (typeof atsCtViewChanged === "function") atsCtViewChanged();
+    }
+    btnClear.addEventListener("click", function () {
+      apply(true);
+    });
+    btnOk.addEventListener("click", function () {
+      apply(false);
+    });
+    pop.addEventListener("mousedown", function (ev) {
+      ev.stopPropagation();
+    });
+    document.body.appendChild(pop);
+    var r = btn.getBoundingClientRect();
+    var left = Math.max(8, Math.min(r.left, window.innerWidth - pop.offsetWidth - 8));
+    pop.style.left = left + "px";
+    pop.style.top = r.bottom + 4 + "px";
+    setTimeout(function () {
+      document.addEventListener("mousedown", function onDoc() {
+        document.removeEventListener("mousedown", onDoc);
+        closeAtsCtFilterPop();
+      });
+    }, 0);
+  }
+
+  /** CT 머리글: 글자 + 정렬·필터 버튼 (버튼 모양은 CSS — 팀즈 복사 머리글은 "CT" 그대로) */
+  function mountAtsCtHeaderControls(th, dashId) {
+    th.textContent = "";
+    var wrap = document.createElement("span");
+    wrap.className = "yna4-ats-ct-head";
+    var lab = document.createElement("span");
+    lab.textContent = "CT";
+    var sb = document.createElement("button");
+    sb.type = "button";
+    sb.className = "yna4-ats-ct-sort-btn";
+    sb.setAttribute("aria-label", "CT 정렬");
+    sb.setAttribute("data-dir", "none");
+    var fb = document.createElement("button");
+    fb.type = "button";
+    fb.className = "yna4-ats-ct-filter-btn";
+    fb.setAttribute("aria-label", "CT 필터");
+    sb.addEventListener("click", function (ev) {
+      ev.stopPropagation();
+      var st = atsCtViewState(dashId);
+      st.dir = st.dir === 0 ? 1 : st.dir === 1 ? -1 : 0;
+      if (typeof atsCtViewChanged === "function") atsCtViewChanged();
+    });
+    fb.addEventListener("click", function (ev) {
+      ev.stopPropagation();
+      if (document.getElementById("yna4AtsCtFilterPop")) {
+        closeAtsCtFilterPop();
+        return;
+      }
+      openAtsCtFilterPop(fb, dashId);
+    });
+    wrap.appendChild(lab);
+    wrap.appendChild(sb);
+    wrap.appendChild(fb);
+    th.appendChild(wrap);
+  }
+
   function buildAtsTableShell(dashId) {
     var wrap = document.createElement("div");
     wrap.className = "yna4-ats-panel-table-wrap";
@@ -4907,6 +5151,9 @@
       colCls = ATS_TABLE_COL_CLASSES[hi] || "";
       if (colCls) th.className = colCls;
       th.textContent = ATS_TABLE_HEADERS[hi];
+      if (colCls === "yna4-ats-col--ct" && dashId >= 1 && dashId <= ATS_DASH_COUNT) {
+        mountAtsCtHeaderControls(th, dashId);
+      }
       thr.appendChild(th);
     }
     thead.appendChild(thr);
@@ -5528,9 +5775,80 @@
 
     dashboardsScroll.appendChild(dashboardsGrid);
 
+    var viewTabs = document.createElement("div");
+    viewTabs.className = "yna4-ats-view-tabs";
+    viewTabs.setAttribute("role", "tablist");
+    var tabDash = document.createElement("button");
+    tabDash.type = "button";
+    tabDash.className = "yna4-ats-view-tab";
+    tabDash.textContent = "대시보드";
+    var tabOverview = document.createElement("button");
+    tabOverview.type = "button";
+    tabOverview.className = "yna4-ats-view-tab";
+    tabOverview.textContent = "미니 개요 (CT별)";
+    viewTabs.appendChild(tabDash);
+    viewTabs.appendChild(tabOverview);
+
+    var overviewHost = document.createElement("div");
+    overviewHost.className = "yna4-ats-dashboards-scroll yna4-ats-overview";
+
     root.appendChild(toolbar);
+    root.appendChild(viewTabs);
     root.appendChild(dashboardsScroll);
+    root.appendChild(overviewHost);
     hostEl.appendChild(root);
+
+    var atsViewTab = loadAtsViewTab();
+    function applyAtsViewTab() {
+      var ov = atsViewTab === "overview";
+      tabDash.classList.toggle("is-on", !ov);
+      tabOverview.classList.toggle("is-on", ov);
+      dashboardsScroll.style.display = ov ? "none" : "";
+      overviewHost.style.display = ov ? "" : "none";
+      if (ov) renderAtsOverview();
+    }
+    function setAtsViewTab(t) {
+      atsViewTab = t === "overview" ? "overview" : "dash";
+      try {
+        localStorage.setItem(ATS_VIEW_TAB_STORAGE_KEY, atsViewTab);
+      } catch (eVs) {}
+      applyAtsViewTab();
+    }
+    tabDash.addEventListener("click", function () {
+      setAtsViewTab("dash");
+    });
+    tabOverview.addEventListener("click", function () {
+      setAtsViewTab("overview");
+    });
+    // 남은 시간은 1분마다 새로 계산
+    var atsOverviewTimer = setInterval(function () {
+      if (!root.isConnected) {
+        clearInterval(atsOverviewTimer);
+        return;
+      }
+      if (atsViewTab === "overview") renderAtsOverview();
+    }, 60000);
+    atsCtViewChanged = function () {
+      renderAllDashboardPanels(false);
+    };
+    atsCtFilterSource = function (dashId) {
+      var rows = (atsLastBuckets && atsLastBuckets[dashId]) || [];
+      var counts = Object.create(null);
+      var order = [];
+      for (var i = 0; i < rows.length; i++) {
+        var k = atsCtKeyForRow(rows[i]);
+        if (counts[k] == null) {
+          counts[k] = 0;
+          order.push(k);
+        }
+        counts[k]++;
+      }
+      order.sort(atsCtCompareKeys);
+      return order.map(function (k) {
+        return { key: k, count: counts[k] };
+      });
+    };
+    applyAtsViewTab();
 
     var atsAllRows = [];
     var glocBusy = false;
@@ -5713,16 +6031,251 @@
       }
     }
 
+    /* ---------- 미니 개요: CT별 남은 보충 요약 ---------- */
+    function loadAtsViewTab() {
+      try {
+        if (localStorage.getItem(ATS_VIEW_TAB_STORAGE_KEY) === "overview") return "overview";
+      } catch (eVt) {}
+      return "dash";
+    }
+
+    function atsPriorityRank(p) {
+      var s = String(p || "").trim();
+      if (!s) return [2, 0, ""];
+      var n = parseFloat(s.replace(/[^0-9.]/g, ""));
+      if (/^\s*\d/.test(s) && isFinite(n)) return [0, n, s];
+      return [1, 0, s];
+    }
+
+    function atsCompareRank(a, b) {
+      if (a[0] !== b[0]) return a[0] - b[0];
+      if (a[1] !== b[1]) return a[1] - b[1];
+      return String(a[2]).localeCompare(String(b[2]), "ko", { numeric: true });
+    }
+
+    /** 보충기한 HH:MM → 지금부터 남은 분 (지난 6시간 ~ 앞으로 18시간 범위) */
+    function atsRemainMinutes(hm) {
+      var rel = atsDeadlineRelMinutes(hm);
+      return isFinite(rel) ? rel - 360 : Infinity;
+    }
+
+    function atsFormatRemain(min) {
+      if (!isFinite(min)) return "—";
+      var neg = min < 0;
+      var m = Math.abs(Math.round(min));
+      var h = Math.floor(m / 60);
+      var t = (h ? h + "시간 " : "") + (m % 60) + "분";
+      return neg ? t + " 지남" : t;
+    }
+
+    function atsDashBadge(pi) {
+      var t = ATS_DASH_PANEL_TITLES[pi - 1] || "";
+      return t.split(" ")[0] || String(pi);
+    }
+
+    function collectAtsOverviewGroups(buckets) {
+      var byKey = Object.create(null);
+      var groups = [];
+      var pi, list, i, r, dk, key, g, q;
+      if (!buckets) return groups;
+      for (pi = 1; pi <= ATS_DASH_COUNT; pi++) {
+        if (pi === ATS_DASH_NO_STOCK) continue;
+        list = buckets[pi] || [];
+        for (i = 0; i < list.length; i++) {
+          r = list[i];
+          if (!r || r.noStock) continue;
+          dk = atsReplenishDoneKey(r.skuId, r.location);
+          if (atsReplenishDoneKeys.has(dk)) continue;
+          if (atsRcrtDisplayDoneKeys.has(dk) && !atsAdditionalReplenishKeys.has(dk)) continue;
+          key = atsCtKeyForRow(r) || "(CT 없음)";
+          g = byKey[key];
+          if (!g) {
+            g = {
+              key: key,
+              rows: [],
+              obSum: 0,
+              prio: [],
+              from: [],
+              vehicle: [],
+              unload: "",
+              deadline: "",
+              remain: Infinity,
+              moving: 0,
+            };
+            byKey[key] = g;
+            groups.push(g);
+          }
+          g.rows.push({ row: r, dash: pi });
+          q = parseObQtyNumber(r.obQty);
+          if (isFinite(q)) g.obSum += q;
+          if (r.priority && g.prio.indexOf(r.priority) < 0) g.prio.push(r.priority);
+          if (r.fromCenter && g.from.indexOf(r.fromCenter) < 0) g.from.push(r.fromCenter);
+          if (r.vehicleNo && g.vehicle.indexOf(r.vehicleNo) < 0) g.vehicle.push(r.vehicleNo);
+          if (r.unloadTime && !g.unload) g.unload = r.unloadTime;
+          if (String(r.status || "").trim() === "이동중") g.moving++;
+          var rem = atsRemainMinutes(r.atsDeadline);
+          if (rem < g.remain) {
+            g.remain = rem;
+            g.deadline = r.atsDeadline || "";
+          }
+        }
+      }
+      groups.forEach(function (gg) {
+        gg.prio.sort(function (a, b) {
+          return atsCompareRank(atsPriorityRank(a), atsPriorityRank(b));
+        });
+        gg.prioRank = atsPriorityRank(gg.prio[0]);
+      });
+      groups.sort(function (a, b) {
+        var c = atsCompareRank(a.prioRank, b.prioRank);
+        if (c) return c;
+        if (a.remain !== b.remain) return a.remain < b.remain ? -1 : 1;
+        return atsCtCompareKeys(a.key, b.key);
+      });
+      return groups;
+    }
+
+    function atsJoinShort(arr) {
+      if (!arr.length) return "";
+      return arr.length > 1 ? arr[0] + " 외 " + (arr.length - 1) : arr[0];
+    }
+
+    function renderAtsOverview() {
+      if (!overviewHost) return;
+      overviewHost.textContent = "";
+      if (!atsLastBuckets) {
+        var p0 = document.createElement("p");
+        p0.className = "yna4-ats-ov-empty";
+        p0.textContent = "조회 실행 후 CT별 남은 보충이 표시됩니다.";
+        overviewHost.appendChild(p0);
+        return;
+      }
+      var groups = collectAtsOverviewGroups(atsLastBuckets);
+      var totalOb = 0, overdue = 0, soon = 0, totalRows = 0;
+      groups.forEach(function (g) {
+        totalOb += g.obSum;
+        totalRows += g.rows.length;
+        if (g.remain < 0) overdue++;
+        else if (g.remain <= 30) soon++;
+      });
+      var sum = document.createElement("div");
+      sum.className = "yna4-ats-ov-summary";
+      sum.textContent =
+        "남은 CT " + groups.length + "개 · " + totalRows + "건 · 보충 " +
+        (formatObQtyNumber(totalOb) || "0") + "unit" +
+        (overdue ? " · 기한 지남 " + overdue : "") +
+        (soon ? " · 30분 이내 " + soon : "") +
+        " · 진열완료(초록)·부분진열(주황) 제외 · 줄을 누르면 펼침";
+      overviewHost.appendChild(sum);
+      if (!groups.length) {
+        var p1 = document.createElement("p");
+        p1.className = "yna4-ats-ov-empty";
+        p1.textContent = "남은 보충 없음";
+        overviewHost.appendChild(p1);
+        return;
+      }
+      var table = document.createElement("table");
+      table.className = "yna4-ats-ov-table";
+      var thead = document.createElement("thead");
+      var hr = document.createElement("tr");
+      ["", "우선순위", "CT", "FROM FC", "차량번호", "하차시간", "건수", "보충수량", "보충기한", "남은 시간"].forEach(function (h) {
+        var th = document.createElement("th");
+        th.textContent = h;
+        hr.appendChild(th);
+      });
+      thead.appendChild(hr);
+      table.appendChild(thead);
+      var tbody = document.createElement("tbody");
+      groups.forEach(function (g) {
+        var open = !!atsOverviewOpen[g.key];
+        var tr = document.createElement("tr");
+        tr.className = "yna4-ats-ov-ct";
+        if (g.remain < 0) tr.classList.add("is-overdue");
+        else if (g.remain <= 30) tr.classList.add("is-soon");
+        if (open) tr.classList.add("is-open");
+        var cells = [
+          open ? "▾" : "▸",
+          atsJoinShort(g.prio),
+          g.key,
+          atsJoinShort(g.from),
+          atsJoinShort(g.vehicle),
+          formatAtsDateTimeCompact(g.unload || ""),
+          String(g.rows.length) + (g.moving ? " (이동중 " + g.moving + ")" : ""),
+          formatObQtyNumber(g.obSum) || "0",
+          g.deadline || "",
+          atsFormatRemain(g.remain),
+        ];
+        cells.forEach(function (c, ci) {
+          var td = document.createElement("td");
+          td.textContent = c;
+          if (ci === 9) td.className = "yna4-ats-ov-remain";
+          if (ci === 2) td.className = "yna4-ats-ov-ctcell";
+          tr.appendChild(td);
+        });
+        tr.addEventListener("click", function () {
+          if (atsOverviewOpen[g.key]) delete atsOverviewOpen[g.key];
+          else atsOverviewOpen[g.key] = 1;
+          renderAtsOverview();
+        });
+        tbody.appendChild(tr);
+        if (!open) return;
+        var dtr = document.createElement("tr");
+        dtr.className = "yna4-ats-ov-detail";
+        var dtd = document.createElement("td");
+        dtd.colSpan = 10;
+        var dt = document.createElement("table");
+        dt.className = "yna4-ats-ov-detail-table";
+        var dh = document.createElement("tr");
+        ["구간", "SKU ID", "상품명", "보충", "재고", "로케이션", "상태", "보충기한"].forEach(function (h) {
+          var th = document.createElement("th");
+          th.textContent = h;
+          dh.appendChild(th);
+        });
+        dt.appendChild(dh);
+        g.rows.forEach(function (x) {
+          var r = x.row;
+          var rr = document.createElement("tr");
+          [
+            atsDashBadge(x.dash),
+            r.skuId || "",
+            r.name || "",
+            r.obQty || "",
+            r.qty || "",
+            r.location || "",
+            r.status || "",
+            r.atsDeadline || "",
+          ].forEach(function (c) {
+            var td = document.createElement("td");
+            td.textContent = c;
+            td.title = c;
+            rr.appendChild(td);
+          });
+          dt.appendChild(rr);
+        });
+        dtd.appendChild(dt);
+        dtr.appendChild(dtd);
+        tbody.appendChild(dtr);
+      });
+      table.appendChild(tbody);
+      overviewHost.appendChild(table);
+    }
+
     function renderAllDashboardPanels(resetDeadlineChipsAllOn) {
       var buckets = partitionAtsRowsByDashboard(atsAllRows);
-      var pi, cnt;
+      atsLastBuckets = buckets;
+      var pi, cnt, shown, ctFiltered;
       for (pi = 1; pi <= ATS_DASH_COUNT; pi++) {
-        cnt = sumAtsObQtyUnits(buckets[pi]);
+        shown = applyAtsCtView(pi, buckets[pi]);
+        ctFiltered = atsCtFilterActive(pi);
+        cnt = sumAtsObQtyUnits(shown);
         dashPanelMetas[pi].textContent =
-          (formatObQtyNumber(cnt) || "0") + "unit";
+          (formatObQtyNumber(cnt) || "0") + "unit" +
+          (ctFiltered ? " · CT 필터 " + shown.length + "/" + buckets[pi].length + "행" : "");
         dashPanelMetas[pi].title = "보충 unit 합";
-        renderTable(dashPanelTbodies[pi], buckets[pi]);
+        renderTable(dashPanelTbodies[pi], shown);
+        refreshAtsCtHeaderButtons(dashPanelTables[pi], pi);
       }
+      if (atsViewTab === "overview") renderAtsOverview();
       if (resetDeadlineChipsAllOn) {
         setAtsDeadlineChipsAllOnForTables(dashPanelTables);
         setAtsPrintDashChipsAllOn();
@@ -5788,6 +6341,8 @@
 
     function clearAllDashboardPanels() {
       var pi;
+      atsLastBuckets = null;
+      if (atsViewTab === "overview") renderAtsOverview();
       for (pi = 1; pi <= ATS_DASH_COUNT; pi++) {
         dashPanelMetas[pi].textContent = "";
         renderTable(dashPanelTbodies[pi], []);
