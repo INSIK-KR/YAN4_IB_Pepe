@@ -40,30 +40,30 @@
   window.__YAN4_SLA_UI_REV__ = SLA_UI_REV;
 
   var SHAREPOINT_SLA_URL_DEFAULT =
-    "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=21c20135-156b-4c7b-b339-01b4ac1731cb";
+    "https://coupangfsnam.sharepoint.com/sites/YAN4IBTARO/_layouts/15/download.aspx?UniqueId=21c20135-156b-4c7b-b339-01b4ac1731cb";
   /** 센터명 → SLA xlsx. 없는 센터는 YAN4 파일 */
   var SHAREPOINT_SLA_URL_BY_CENTER = {
-    BUC2: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=a5db6583-0b39-47eb-b7e8-111c7859ab15",
-    GWJ1: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=68099238-3745-40fe-bbe3-7487d7e91943",
-    GWJ3: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=b9b0b81f-ad0f-408f-804d-2155988fbf18",
-    SEN2: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=c7421ac3-cb14-4153-a578-554fc9bd7b73",
-    INC11: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=a1d176ce-55a8-42ef-a867-0d471eda7617",
-    INC12: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=5c1832a4-18c6-425b-a9e0-8ac964a0f47f",
-    INC15: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=0b884fd8-dcf5-46f5-981f-536bfdcad937",
-    INC37: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=5b88e0b2-fa19-4176-9428-d2a680912e66",
-    PYT2: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=35754657-787a-40bd-b16f-1e990e01e19b",
-    SIH1: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=6fa4a042-ec85-4086-9e65-c355ea15f6f8",
-    YON5: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=c9224dcd-db48-456c-9095-caaa8e9a3a7f",
-    CHW2: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=e096a471-4637-4eab-87f3-a2da31ceb065",
-    DAE4: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=96d021c4-d77d-4881-8bdb-e35ab07b9ee8",
-    DAJ1: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=ebc10700-b315-435a-a1ea-0dadb1e0ecb2",
-    GMH1: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=f5521f67-abc5-418a-9ff0-810d21ce8a8b",
-    GON1: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=579a5bed-5e2f-4d9c-a28f-01b345f3783a",
-    GYS1: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=dbf1e569-da57-47fd-aaa9-96645f3c758b",
-    INC22: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=17bf0dd5-ee3a-4cf7-b1d7-b2dd91c6a934",
+    BUC2: "https://coupangfsnam.sharepoint.com/sites/YAN4IBTARO/_layouts/15/download.aspx?UniqueId=a5db6583-0b39-47eb-b7e8-111c7859ab15",
+    GWJ1: "https://coupangfsnam.sharepoint.com/sites/YAN4IBTARO/_layouts/15/download.aspx?UniqueId=68099238-3745-40fe-bbe3-7487d7e91943",
+    GWJ3: "https://coupangfsnam.sharepoint.com/sites/YAN4IBTARO/_layouts/15/download.aspx?UniqueId=b9b0b81f-ad0f-408f-804d-2155988fbf18",
+    SEN2: "https://coupangfsnam.sharepoint.com/sites/YAN4IBTARO/_layouts/15/download.aspx?UniqueId=c7421ac3-cb14-4153-a578-554fc9bd7b73",
+    INC11: "https://coupangfsnam.sharepoint.com/sites/YAN4IBTARO/_layouts/15/download.aspx?UniqueId=a1d176ce-55a8-42ef-a867-0d471eda7617",
+    INC12: "https://coupangfsnam.sharepoint.com/sites/YAN4IBTARO/_layouts/15/download.aspx?UniqueId=5c1832a4-18c6-425b-a9e0-8ac964a0f47f",
+    INC15: "https://coupangfsnam.sharepoint.com/sites/YAN4IBTARO/_layouts/15/download.aspx?UniqueId=0b884fd8-dcf5-46f5-981f-536bfdcad937",
+    INC37: "https://coupangfsnam.sharepoint.com/sites/YAN4IBTARO/_layouts/15/download.aspx?UniqueId=5b88e0b2-fa19-4176-9428-d2a680912e66",
+    PYT2: "https://coupangfsnam.sharepoint.com/sites/YAN4IBTARO/_layouts/15/download.aspx?UniqueId=35754657-787a-40bd-b16f-1e990e01e19b",
+    SIH1: "https://coupangfsnam.sharepoint.com/sites/YAN4IBTARO/_layouts/15/download.aspx?UniqueId=6fa4a042-ec85-4086-9e65-c355ea15f6f8",
+    YON5: "https://coupangfsnam.sharepoint.com/sites/YAN4IBTARO/_layouts/15/download.aspx?UniqueId=c9224dcd-db48-456c-9095-caaa8e9a3a7f",
+    CHW2: "https://coupangfsnam.sharepoint.com/sites/YAN4IBTARO/_layouts/15/download.aspx?UniqueId=e096a471-4637-4eab-87f3-a2da31ceb065",
+    DAE4: "https://coupangfsnam.sharepoint.com/sites/YAN4IBTARO/_layouts/15/download.aspx?UniqueId=96d021c4-d77d-4881-8bdb-e35ab07b9ee8",
+    DAJ1: "https://coupangfsnam.sharepoint.com/sites/YAN4IBTARO/_layouts/15/download.aspx?UniqueId=ebc10700-b315-435a-a1ea-0dadb1e0ecb2",
+    GMH1: "https://coupangfsnam.sharepoint.com/sites/YAN4IBTARO/_layouts/15/download.aspx?UniqueId=f5521f67-abc5-418a-9ff0-810d21ce8a8b",
+    GON1: "https://coupangfsnam.sharepoint.com/sites/YAN4IBTARO/_layouts/15/download.aspx?UniqueId=579a5bed-5e2f-4d9c-a28f-01b345f3783a",
+    GYS1: "https://coupangfsnam.sharepoint.com/sites/YAN4IBTARO/_layouts/15/download.aspx?UniqueId=dbf1e569-da57-47fd-aaa9-96645f3c758b",
+    INC22: "https://coupangfsnam.sharepoint.com/sites/YAN4IBTARO/_layouts/15/download.aspx?UniqueId=17bf0dd5-ee3a-4cf7-b1d7-b2dd91c6a934",
   };
   var SHAREPOINT_SLA_REFERER =
-    "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/Shared%20Documents/Forms/AllItems.aspx";
+    "https://coupangfsnam.sharepoint.com/sites/YAN4IBTARO/Shared%20Documents/Forms/AllItems.aspx?id=%2Fsites%2FYAN4IBTARO%2FShared%20Documents%2FNetwork%20IB";
 
   var INBOUND_ORIGIN = "https://inbound.coupang.com";
   var TRANSFER_LIST_REFERER =
