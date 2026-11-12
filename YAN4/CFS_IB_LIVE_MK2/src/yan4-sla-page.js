@@ -9460,15 +9460,18 @@
     });
   }
 
-  /** 운영일 시작(7시)부터 지난 분. 예약시간이 있으면 예약시간, 없으면 하차시간 기준 */
+  /**
+   * 운영일 시작(7시)부터 지난 분.
+   * 하차가 찍혔으면 하차시간(예약보다 일찍 내려도 그 시각), 아직이면 예약시간 기준.
+   */
   function progressVendorSortMinutes(v) {
     var m = 0;
-    if (v.bookingTimes && v.bookingTimes.length) {
+    if (v.unloadAt && !isNaN(v.unloadAt.getTime())) {
+      m = v.unloadAt.getHours() * 60 + v.unloadAt.getMinutes();
+    } else if (v.bookingTimes && v.bookingTimes.length) {
       m =
         Number(v.bookingTimes[0].slice(0, 2)) * 60 +
         Number(v.bookingTimes[0].slice(3));
-    } else if (v.unloadAt) {
-      m = v.unloadAt.getHours() * 60 + v.unloadAt.getMinutes();
     }
     return (m - OPERATIONAL_DAY_START_HOUR * 60 + 1440) % 1440;
   }
