@@ -159,7 +159,7 @@
     },
     {
       id: "p2workerScan",
-      label: "작업자 스캔 추적",
+      label: "STOW SCAN TRACKING",
       kind: "workerScanTrace",
       gridRowSpan: 2,
     },
@@ -13210,29 +13210,10 @@
     rowDate.appendChild(lblD);
     rowDate.appendChild(inpD);
 
-    var rowPresto = document.createElement("div");
-    rowPresto.className = "yna4-pane-row";
-    var lblPu = document.createElement("span");
-    lblPu.className = "yna4-pane-k";
-    lblPu.textContent = "ID";
-    var inpPrestoUser = document.createElement("input");
-    inpPrestoUser.type = "text";
-    inpPrestoUser.className = "yna4-pane-inp";
-    inpPrestoUser.placeholder = "개인 AD ID";
-    inpPrestoUser.autocomplete = "off";
-    inpPrestoUser.title = "서비스 계정(svc) 불가 · DBeaver와 같은 개인 AD";
-    inpPrestoUser.style.flex = "1";
-    inpPrestoUser.style.minWidth = "4em";
-    var inpPrestoPw = document.createElement("input");
-    inpPrestoPw.type = "password";
-    inpPrestoPw.className = "yna4-pane-inp";
-    inpPrestoPw.placeholder = "AD PW";
-    inpPrestoPw.autocomplete = "off";
-    inpPrestoPw.style.flex = "1";
-    inpPrestoPw.style.minWidth = "4em";
-    rowPresto.appendChild(lblPu);
-    rowPresto.appendChild(inpPrestoUser);
-    rowPresto.appendChild(inpPrestoPw);
+    var prestoAcc = buildPrestoAccountRow();
+    var rowPresto = prestoAcc.row;
+    var inpPrestoUser = prestoAcc.user;
+    var inpPrestoPw = prestoAcc.pw;
 
     var actions = document.createElement("div");
     actions.className = "yna4-pane-actions";
@@ -13278,73 +13259,27 @@
       btnSavePresto.disabled = on;
     }
 
-    function recvLoadPrestoForm() {
-      if (
-        !window.yan4ShellDesktop ||
-        typeof window.yan4ShellDesktop.storageGet !== "function"
-      ) {
-        return;
-      }
-      window.yan4ShellDesktop
-        .storageGet(RECV_PRESTO_STORAGE_KEYS)
-        .then(function (store) {
-          store = store || {};
-          if (store.yan4PrestoUser) inpPrestoUser.value = store.yan4PrestoUser;
-          if (store.yan4PrestoPassword) inpPrestoPw.value = store.yan4PrestoPassword;
-          if (store.yan4PrestoUser) {
-            setRecvStatus(
-              "Presto 계정 저장됨 (" +
-                store.yan4PrestoUser +
-                ") · 토트·날짜 후 작업 시작"
-            );
-          }
-        })
-        .catch(function () {});
-    }
-    recvLoadPrestoForm();
-
-    btnSavePresto.addEventListener("click", async function () {
-      var u = String(inpPrestoUser.value || "").trim();
-      var p = String(inpPrestoPw.value || "");
-      if (!u) {
-        alert("Presto 아이디를 입력하세요.");
-        return;
-      }
-      if (/svc|service|_sa$|^sa_|bot|robot|pipeline/i.test(u)) {
-        var okSvc = confirm(
-          "「" +
-            u +
-            "」은(는) 서비스 계정처럼 보입니다.\n" +
-            "PC에서는 Presto가 서비스 계정을 막습니다.\n" +
-            "DBeaver에 쓰는 개인 AD 계정인가요? 그래도 저장할까요?"
-        );
-        if (!okSvc) return;
-      }
-      if (
-        !window.yan4ShellDesktop ||
-        typeof window.yan4ShellDesktop.storageSet !== "function"
-      ) {
-        alert("데스크톱 앱에서만 계정을 저장할 수 있습니다.");
-        return;
-      }
-      try {
-        await window.yan4ShellDesktop.storageSet({
-          yan4PrestoUser: u,
-          yan4PrestoPassword: p,
-          yan4PrestoHost: "presto-gw.coupang.net",
-          yan4PrestoPort: 443,
-          yan4PrestoCatalog: "hive",
-          yan4PrestoSchema: "ods",
-        });
+    bindPrestoAccountInputs(
+      prestoAcc,
+      function (store) {
+        if (store.yan4PrestoUser) {
+          setRecvStatus(
+            "Presto 계정 저장됨 (" +
+              store.yan4PrestoUser +
+              ") · 토트·날짜 후 작업 시작"
+          );
+        }
+      },
+      function (u) {
+        if (recvExportRunning) return;
         setRecvStatus(
           "Presto 계정 저장 완료 (" + u + ") · 개인 AD여야 로컬 조회 가능"
         );
-      } catch (eSave) {
-        alert(
-          "저장 실패: " +
-            (eSave && eSave.message ? eSave.message : String(eSave))
-        );
       }
+    );
+
+    btnSavePresto.addEventListener("click", async function () {
+      await prestoSaveAccount(inpPrestoUser.value, inpPrestoPw.value);
     });
 
     btnRun.addEventListener("click", async function () {
@@ -13433,7 +13368,106 @@
     });
   }
 
-  /** 작업자 스캔 추적 — 작업자 PDA 진열 스캔 내역(stow_work_logs) Presto 조회 → Excel */
+  /**
+   * Presto 계정 칸 — 입고내역 RWA · STOW SCAN TRACKING 공용.
+   * 같은 저장값을 쓰고, 한쪽에서 저장하면 "yan4-presto-account-saved" 로 다른 칸도 바로 바뀜.
+   */
+  var PRESTO_ACCOUNT_SAVED_EVENT = "yan4-presto-account-saved";
+
+  function buildPrestoAccountRow() {
+    var row = document.createElement("div");
+    row.className = "yna4-pane-row";
+    var lbl = document.createElement("span");
+    lbl.className = "yna4-pane-k";
+    lbl.textContent = "ID";
+    var user = document.createElement("input");
+    user.type = "text";
+    user.className = "yna4-pane-inp";
+    user.placeholder = "개인 AD ID";
+    user.autocomplete = "off";
+    user.title = "서비스 계정(svc) 불가 · DBeaver와 같은 개인 AD";
+    user.style.flex = "1";
+    user.style.minWidth = "4em";
+    var pw = document.createElement("input");
+    pw.type = "password";
+    pw.className = "yna4-pane-inp";
+    pw.placeholder = "AD PW";
+    pw.autocomplete = "off";
+    pw.style.flex = "1";
+    pw.style.minWidth = "4em";
+    row.appendChild(lbl);
+    row.appendChild(user);
+    row.appendChild(pw);
+    return { row: row, user: user, pw: pw };
+  }
+
+  /** 저장값을 칸에 채우고 콜백(store) — 다른 카드에서 저장해도 따라 바뀜 */
+  function bindPrestoAccountInputs(acc, onLoaded, onSaved) {
+    function fill(u, p) {
+      if (u != null) acc.user.value = u;
+      if (p != null) acc.pw.value = p;
+    }
+    if (window.yan4ShellDesktop && typeof window.yan4ShellDesktop.storageGet === "function") {
+      window.yan4ShellDesktop
+        .storageGet(RECV_PRESTO_STORAGE_KEYS)
+        .then(function (store) {
+          store = store || {};
+          fill(store.yan4PrestoUser || null, store.yan4PrestoPassword || null);
+          if (typeof onLoaded === "function") onLoaded(store);
+        })
+        .catch(function () {});
+    }
+    window.addEventListener(PRESTO_ACCOUNT_SAVED_EVENT, function (ev) {
+      var d = (ev && ev.detail) || {};
+      fill(d.user, d.pw);
+      if (typeof onSaved === "function" && d.user) onSaved(d.user);
+    });
+  }
+
+  /** 계정 저장 — 성공하면 저장한 아이디, 취소·실패면 "" */
+  async function prestoSaveAccount(u, p) {
+    u = String(u || "").trim();
+    p = String(p || "");
+    if (!u) {
+      alert("Presto 아이디를 입력하세요.");
+      return "";
+    }
+    if (/svc|service|_sa$|^sa_|bot|robot|pipeline/i.test(u)) {
+      var okSvc = confirm(
+        "「" +
+          u +
+          "」은(는) 서비스 계정처럼 보입니다.\n" +
+          "PC에서는 Presto가 서비스 계정을 막습니다.\n" +
+          "DBeaver에 쓰는 개인 AD 계정인가요? 그래도 저장할까요?"
+      );
+      if (!okSvc) return "";
+    }
+    if (!window.yan4ShellDesktop || typeof window.yan4ShellDesktop.storageSet !== "function") {
+      alert("데스크톱 앱에서만 계정을 저장할 수 있습니다.");
+      return "";
+    }
+    try {
+      await window.yan4ShellDesktop.storageSet({
+        yan4PrestoUser: u,
+        yan4PrestoPassword: p,
+        yan4PrestoHost: "presto-gw.coupang.net",
+        yan4PrestoPort: 443,
+        yan4PrestoCatalog: "hive",
+        yan4PrestoSchema: "ods",
+      });
+    } catch (eSave) {
+      alert("저장 실패: " + (eSave && eSave.message ? eSave.message : String(eSave)));
+      return "";
+    }
+    try {
+      window.dispatchEvent(
+        new CustomEvent(PRESTO_ACCOUNT_SAVED_EVENT, { detail: { user: u, pw: p } })
+      );
+    } catch (eEv) {}
+    return u;
+  }
+
+  /** STOW SCAN TRACKING — 작업자 PDA 진열 스캔 내역(stow_work_logs) Presto 조회 → Excel */
   var WORKER_SCAN_ID_RE = /^[A-Za-z0-9._-]+$/;
 
   function workerScanBuildSql(centerId, userIds, ymd) {
@@ -13490,12 +13524,20 @@
     inpDate.value = recvTodayYmd();
     addRow("작업일", inpDate);
 
+    var scanAcc = buildPrestoAccountRow();
+    mod.appendChild(scanAcc.row);
+
     var actions = document.createElement("div");
     actions.className = "yna4-pane-actions";
+    var btnSaveAcc = document.createElement("button");
+    btnSaveAcc.type = "button";
+    btnSaveAcc.className = "yna4-pane-btn";
+    btnSaveAcc.textContent = "계정 저장";
     var btnRun = document.createElement("button");
     btnRun.type = "button";
     btnRun.className = "yna4-pane-btn yna4-pane-btn--primary";
     btnRun.textContent = "조회 후 Excel 저장";
+    actions.appendChild(btnSaveAcc);
     actions.appendChild(btnRun);
     mod.appendChild(actions);
 
@@ -13510,9 +13552,26 @@
 
     var status = document.createElement("div");
     status.className = "yna4-pane-status";
-    status.textContent = "현재 센터 기준 조회 · Presto 계정은 입고내역 RWA 칸에서 저장";
+    status.textContent = "현재 센터 기준 조회 · Presto 계정은 입고내역 RWA와 같이 씀";
     mod.appendChild(status);
     paneBody.appendChild(mod);
+
+    bindPrestoAccountInputs(
+      scanAcc,
+      function (store) {
+        if (!store.yan4PrestoUser) {
+          status.textContent = "Presto 계정(개인 AD) 입력 후 계정 저장 · 입고내역 RWA와 같이 씀";
+        }
+      },
+      function (u) {
+        if (running) return;
+        status.textContent = "Presto 계정 저장 완료 (" + u + ") · 입고내역 RWA와 같이 씀";
+      }
+    );
+    btnSaveAcc.addEventListener("click", async function () {
+      if (running) return;
+      await prestoSaveAccount(scanAcc.user.value, scanAcc.pw.value);
+    });
 
     var running = false;
     var activeProgressId = "";
@@ -16576,7 +16635,7 @@
         try {
           initWorkerScanTracePane(paneBody);
         } catch (eWorkerScan) {
-          paneBody.textContent = "초기화 실패(작업자 스캔 추적)";
+          paneBody.textContent = "초기화 실패(STOW SCAN TRACKING)";
           if (typeof console !== "undefined" && console.warn) {
             console.warn("[YAN4 Shell] worker scan pane failed", eWorkerScan);
           }
