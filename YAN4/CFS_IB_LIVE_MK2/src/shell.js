@@ -7127,16 +7127,16 @@
     };
     /** SharePoint SLA 파일. 센터 전환 이름에 없으면 YAN4 */
     var SHAREPOINT_SLA_URL_BY_CENTER = {
-      BUC2: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=85a4c065-b1b6-48a9-b33c-edec3d6041da",
-      GWJ1: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=a4eaa0dd-ddd6-461d-9b05-276fa82682d2",
-      GWJ3: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=abd65e66-46ee-4dfe-a136-21198d6f5b08",
-      SEN2: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=0de8964f-92b5-48db-9478-eac3f56611d4",
+      BUC2: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=a5db6583-0b39-47eb-b7e8-111c7859ab15",
+      GWJ1: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=68099238-3745-40fe-bbe3-7487d7e91943",
+      GWJ3: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=b9b0b81f-ad0f-408f-804d-2155988fbf18",
+      SEN2: "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=c7421ac3-cb14-4153-a578-554fc9bd7b73",
     };
     function sharePointSlaDownloadUrl() {
       var code = cfsActiveCenterCode("YAN4");
       return (
         SHAREPOINT_SLA_URL_BY_CENTER[code] ||
-        "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=9c695e4e-8353-4f76-a750-7d46f46d8d1f"
+        "https://coupangfsnam.sharepoint.com/sites/FreshFinanceR2/_layouts/15/download.aspx?UniqueId=21c20135-156b-4c7b-b339-01b4ac1731cb"
       );
     }
 
