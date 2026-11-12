@@ -6153,6 +6153,40 @@
       return arr.length > 1 ? arr[0] + " 외 " + (arr.length - 1) : arr[0];
     }
 
+    /** 미니 개요 CT 요약 → 팀즈 표 (펼침 상세 제외) */
+    function copyAtsOverviewToTeams(groups, summaryText) {
+      var now = new Date();
+      var hm = String(now.getHours()).padStart(2, "0") + ":" + String(now.getMinutes()).padStart(2, "0");
+      var header = ["우선순위", "CT", "온도대", "FROM FC", "차량번호", "하차시간", "건수", "보충수량", "보충기한", "남은 시간"];
+      var rows = groups.map(function (g) {
+        return [
+          atsJoinShort(g.prio),
+          g.key,
+          g.temps.join(" · "),
+          atsJoinShort(g.from),
+          atsJoinShort(g.vehicle),
+          formatAtsDateTimeCompact(g.unload || ""),
+          String(g.rows.length) + (g.moving ? " (이동중 " + g.moving + ")" : ""),
+          formatObQtyNumber(g.obSum) || "0",
+          g.deadline || "",
+          atsFormatRemain(g.remain),
+        ];
+      });
+      var sections = [
+        {
+          title: "CT별 남은 보충 (" + hm + " 기준) · " + summaryText,
+          headerCells: header,
+          dataRows: rows,
+        },
+      ];
+      copyHtmlPlainToClipboardAts(
+        buildAtsTeamsHtmlFromSections(sections),
+        buildAtsTeamsCopyTsvLines(sections).join("\n")
+      ).then(function (ok) {
+        setStatus(ok ? "팀즈 복사 완료 · CT " + rows.length + "줄" : "팀즈 복사 실패", ok ? "ok" : "err");
+      });
+    }
+
     function renderAtsOverview() {
       if (!overviewHost) return;
       overviewHost.textContent = "";
@@ -6171,6 +6205,8 @@
         if (g.remain < 0) overdue++;
         else if (g.remain <= 30) soon++;
       });
+      var sumBar = document.createElement("div");
+      sumBar.className = "yna4-ats-ov-summary-bar";
       var sum = document.createElement("div");
       sum.className = "yna4-ats-ov-summary";
       sum.textContent =
@@ -6179,7 +6215,20 @@
         (overdue ? " · 기한 지남 " + overdue : "") +
         (soon ? " · 30분 이내 " + soon : "") +
         " · 진열완료(초록)·부분진열(주황) 제외 · 줄을 누르면 펼침";
-      overviewHost.appendChild(sum);
+      sumBar.appendChild(sum);
+      if (groups.length) {
+        var btnOvTeams = document.createElement("button");
+        btnOvTeams.type = "button";
+        btnOvTeams.className = "yna4-ats-ov-teams-btn";
+        btnOvTeams.textContent = "팀즈 복사";
+        btnOvTeams.title = "CT별 요약 표를 팀즈에 붙여넣기용(HTML+TSV)으로 복사";
+        btnOvTeams.addEventListener("click", function (ev) {
+          ev.stopPropagation();
+          copyAtsOverviewToTeams(groups, sum.textContent.split(" · 진열완료")[0]);
+        });
+        sumBar.appendChild(btnOvTeams);
+      }
+      overviewHost.appendChild(sumBar);
       if (!groups.length) {
         var p1 = document.createElement("p");
         p1.className = "yna4-ats-ov-empty";
