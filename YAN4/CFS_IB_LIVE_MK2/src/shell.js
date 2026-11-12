@@ -14481,6 +14481,21 @@
 
     btnRun.addEventListener("click", async function () {
       if (prepackRunning) return;
+      var prepackCenter = String(cfsActiveCenterCode("") || "").trim().toUpperCase();
+      if (prepackCenter !== "YAN4") {
+        setStatus(
+          "YAN4 기준에서만 작업 가능 · 현재 " + (prepackCenter || "센터 확인 불가"),
+          0,
+          "err"
+        );
+        alert(
+          "Prepack&SR Daily Patrol은 YAN4 기준에서만 작업할 수 있습니다.\n" +
+            "현재 기준: " +
+            (prepackCenter || "확인 불가") +
+            "\n센터를 YAN4로 전환한 뒤 다시 시작하세요."
+        );
+        return;
+      }
       if (typeof XLSX === "undefined") {
         alert("XLSX 라이브러리 없음");
         return;
