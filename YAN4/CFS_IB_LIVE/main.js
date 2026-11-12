@@ -1203,7 +1203,7 @@ function createSplash() {
     alwaysOnTop: true,
     title: CFS_APP_LABEL,
     icon: fs.existsSync(iconPath) ? iconPath : undefined,
-    backgroundColor: "#f4dcba",
+    backgroundColor: "#f2cb95",
     show: false,
     webPreferences: {
       contextIsolation: true,
