@@ -4898,7 +4898,7 @@
   function atsCtViewState(dashId) {
     var st = atsCtViewByDash[dashId];
     if (!st) {
-      st = { dir: 0, excluded: Object.create(null) };
+      st = { dir: 0, excluded: Object.create(null), vexcluded: Object.create(null) };
       atsCtViewByDash[dashId] = st;
     }
     return st;
@@ -4919,6 +4919,20 @@
     return false;
   }
 
+  /** 차량번호 필터 기준 — 행의 차량번호 그대로(없으면 빈 값) */
+  function atsVehicleKeyForRow(row) {
+    return String((row && row.vehicleNo) || "").trim();
+  }
+
+  function atsVehFilterActive(dashId) {
+    var st = atsCtViewByDash[dashId];
+    if (!st || !st.vexcluded) return false;
+    for (var k in st.vexcluded) {
+      if (Object.prototype.hasOwnProperty.call(st.vexcluded, k)) return true;
+    }
+    return false;
+  }
+
   function atsCtCompareKeys(a, b) {
     if (a === b) return 0;
     if (!a) return 1;
@@ -4934,6 +4948,7 @@
     for (i = 0; i < rows.length; i++) {
       key = atsCtKeyForRow(rows[i]);
       if (st.excluded[key || ATS_CT_EMPTY_KEY]) continue;
+      if (st.vexcluded && st.vexcluded[atsVehicleKeyForRow(rows[i]) || ATS_CT_EMPTY_KEY]) continue;
       out.push({ r: rows[i], k: key, i: i });
     }
     if (st.dir) {
@@ -4953,7 +4968,13 @@
     if (!table) return;
     var st = atsCtViewState(dashId);
     var sb = table.querySelector(".yna4-ats-ct-sort-btn");
-    var fb = table.querySelector(".yna4-ats-ct-filter-btn");
+    var fb = table.querySelector(".yna4-ats-ct-filter-btn:not(.yna4-ats-veh-filter-btn)");
+    var vb = table.querySelector(".yna4-ats-veh-filter-btn");
+    if (vb) {
+      var von = atsVehFilterActive(dashId);
+      vb.classList.toggle("is-active", von);
+      vb.title = von ? "차량번호 필터 적용 중 · 클릭: 변경" : "차량번호 필터";
+    }
     if (sb) {
       sb.setAttribute("data-dir", st.dir === 1 ? "asc" : st.dir === -1 ? "desc" : "none");
       sb.title =
@@ -4975,20 +4996,25 @@
     if (old && old.parentNode) old.parentNode.removeChild(old);
   }
 
-  function openAtsCtFilterPop(btn, dashId) {
+  function openAtsCtFilterPop(btn, dashId, kind) {
     closeAtsCtFilterPop();
+    var isVeh = kind === "vehicle";
+    var what = isVeh ? "차량번호" : "CT";
     var st = atsCtViewState(dashId);
-    var values = typeof atsCtFilterSource === "function" ? atsCtFilterSource(dashId) : [];
+    var exKey = isVeh ? "vexcluded" : "excluded";
+    if (!st[exKey]) st[exKey] = Object.create(null);
+    var values =
+      typeof atsCtFilterSource === "function" ? atsCtFilterSource(dashId, isVeh ? "vehicle" : "ct") : [];
     var pop = document.createElement("div");
     pop.id = "yna4AtsCtFilterPop";
     pop.className = "yna4-ats-ct-filter-pop";
     var title = document.createElement("div");
     title.className = "yna4-ats-ct-filter-title";
-    title.textContent = "CT 필터 · " + (ATS_DASH_PANEL_TITLES[dashId - 1] || "");
+    title.textContent = what + " 필터 · " + (ATS_DASH_PANEL_TITLES[dashId - 1] || "");
     pop.appendChild(title);
     var search = document.createElement("input");
     search.type = "search";
-    search.placeholder = "CT 검색";
+    search.placeholder = what + " 검색";
     search.className = "yna4-ats-ct-filter-search";
     pop.appendChild(search);
     var allLab = document.createElement("label");
@@ -5004,7 +5030,7 @@
     var cbs = [];
     var i;
     if (!values.length) {
-      list.textContent = "표시할 CT 없음";
+      list.textContent = "표시할 " + what + " 없음";
     }
     for (i = 0; i < values.length; i++) {
       (function (v) {
@@ -5012,11 +5038,11 @@
         lab.className = "yna4-ats-ct-filter-item";
         var cb = document.createElement("input");
         cb.type = "checkbox";
-        cb.checked = !st.excluded[v.key || ATS_CT_EMPTY_KEY];
+        cb.checked = !st[exKey][v.key || ATS_CT_EMPTY_KEY];
         cb.setAttribute("data-key", v.key || ATS_CT_EMPTY_KEY);
         lab.appendChild(cb);
         var tx = document.createElement("span");
-        tx.textContent = (v.key || "(CT 없음)") + " (" + v.count + ")";
+        tx.textContent = (v.key || "(" + what + " 없음)") + " (" + v.count + ")";
         lab.appendChild(tx);
         lab.setAttribute("data-search", String(v.key || "").toLowerCase());
         list.appendChild(lab);
@@ -5058,10 +5084,10 @@
     actions.appendChild(btnOk);
     pop.appendChild(actions);
     function apply(clear) {
-      st.excluded = Object.create(null);
+      st[exKey] = Object.create(null);
       if (!clear) {
         for (var j = 0; j < cbs.length; j++) {
-          if (!cbs[j].checked) st.excluded[cbs[j].getAttribute("data-key")] = 1;
+          if (!cbs[j].checked) st[exKey][cbs[j].getAttribute("data-key")] = 1;
         }
       }
       closeAtsCtFilterPop();
@@ -5117,10 +5143,35 @@
         closeAtsCtFilterPop();
         return;
       }
-      openAtsCtFilterPop(fb, dashId);
+      openAtsCtFilterPop(fb, dashId, "ct");
     });
     wrap.appendChild(lab);
     wrap.appendChild(sb);
+    wrap.appendChild(fb);
+    th.appendChild(wrap);
+  }
+
+  /** 차량번호 머리글: 글자 + 필터 버튼 (정렬은 기존 나열 순서 그대로) */
+  function mountAtsVehHeaderControls(th, dashId) {
+    th.textContent = "";
+    var wrap = document.createElement("span");
+    wrap.className = "yna4-ats-ct-head";
+    var lab = document.createElement("span");
+    lab.textContent = "차량번호";
+    var fb = document.createElement("button");
+    fb.type = "button";
+    fb.className = "yna4-ats-ct-filter-btn yna4-ats-veh-filter-btn";
+    fb.setAttribute("aria-label", "차량번호 필터");
+    fb.title = "차량번호 필터";
+    fb.addEventListener("click", function (ev) {
+      ev.stopPropagation();
+      if (document.getElementById("yna4AtsCtFilterPop")) {
+        closeAtsCtFilterPop();
+        return;
+      }
+      openAtsCtFilterPop(fb, dashId, "vehicle");
+    });
+    wrap.appendChild(lab);
     wrap.appendChild(fb);
     th.appendChild(wrap);
   }
@@ -5153,6 +5204,9 @@
       th.textContent = ATS_TABLE_HEADERS[hi];
       if (colCls === "yna4-ats-col--ct" && dashId >= 1 && dashId <= ATS_DASH_COUNT) {
         mountAtsCtHeaderControls(th, dashId);
+      }
+      if (colCls === "yna4-ats-col--vehicle" && dashId >= 1 && dashId <= ATS_DASH_COUNT) {
+        mountAtsVehHeaderControls(th, dashId);
       }
       thr.appendChild(th);
     }
@@ -5831,12 +5885,13 @@
     atsCtViewChanged = function () {
       renderAllDashboardPanels(false);
     };
-    atsCtFilterSource = function (dashId) {
+    atsCtFilterSource = function (dashId, kind) {
       var rows = (atsLastBuckets && atsLastBuckets[dashId]) || [];
+      var keyOf = kind === "vehicle" ? atsVehicleKeyForRow : atsCtKeyForRow;
       var counts = Object.create(null);
       var order = [];
       for (var i = 0; i < rows.length; i++) {
-        var k = atsCtKeyForRow(rows[i]);
+        var k = keyOf(rows[i]);
         if (counts[k] == null) {
           counts[k] = 0;
           order.push(k);
@@ -6329,11 +6384,15 @@
       var pi, cnt, shown, ctFiltered;
       for (pi = 1; pi <= ATS_DASH_COUNT; pi++) {
         shown = applyAtsCtView(pi, buckets[pi]);
-        ctFiltered = atsCtFilterActive(pi);
+        ctFiltered = [];
+        if (atsCtFilterActive(pi)) ctFiltered.push("CT");
+        if (atsVehFilterActive(pi)) ctFiltered.push("차량");
         cnt = sumAtsObQtyUnits(shown);
         dashPanelMetas[pi].textContent =
           (formatObQtyNumber(cnt) || "0") + "unit" +
-          (ctFiltered ? " · CT 필터 " + shown.length + "/" + buckets[pi].length + "행" : "");
+          (ctFiltered.length
+            ? " · " + ctFiltered.join("·") + " 필터 " + shown.length + "/" + buckets[pi].length + "행"
+            : "");
         dashPanelMetas[pi].title = "보충 unit 합";
         renderTable(dashPanelTbodies[pi], shown);
         refreshAtsCtHeaderButtons(dashPanelTables[pi], pi);
