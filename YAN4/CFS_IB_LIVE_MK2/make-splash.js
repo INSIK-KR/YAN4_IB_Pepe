@@ -2,6 +2,8 @@
 
 /**
  * 로딩 그림 원본은 build/splash-source.png (완성 이미지).
+ * build/splash-source-2.png 가 있으면 renderer/splash-full-2.png 도 만듦
+ * (앱 로딩 창은 두 장 중 랜덤, 포터블 압축 해제 BMP 는 1번만).
  * 가로·세로 50%로 줄이고 비율은 유지한 채
  *  - build/splash.bmp          (포터블 압축 해제 중, 실제 BMP)
  *  - renderer/splash-full.png  (앱 시작 로딩 창)
@@ -18,6 +20,8 @@ const title = (pkg.build && pkg.build.productName) || "CFS IB LIVE";
 const bmpOut = path.join(root, "build", "splash.bmp");
 const pngOut = path.join(root, "renderer", "splash-full.png");
 const source = path.join(root, "build", "splash-source.png");
+const source2 = path.join(root, "build", "splash-source-2.png");
+const pngOut2 = path.join(root, "renderer", "splash-full-2.png");
 
 function psq(s) {
   return "'" + String(s).replace(/'/g, "''") + "'";
@@ -35,12 +39,11 @@ function runPs(ps) {
   }
 }
 
-if (fs.existsSync(source)) {
-  const ps = [
+function halfSizeScript(srcPath, outs) {
+  return [
     "$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'",
     "Add-Type -AssemblyName System.Drawing",
-    "$src=" + psq(source),
-    "$img=[System.Drawing.Image]::FromFile($src)",
+    "$img=[System.Drawing.Image]::FromFile(" + psq(srcPath) + ")",
     "$w=[int][Math]::Max(1, [Math]::Round($img.Width * 0.5))",
     "$h=[int][Math]::Max(1, [Math]::Round($img.Height * 0.5))",
     "$bmp=New-Object System.Drawing.Bitmap $w,$h,([System.Drawing.Imaging.PixelFormat]::Format24bppRgb)",
@@ -50,14 +53,30 @@ if (fs.existsSync(source)) {
     "$g.PixelOffsetMode='HighQuality'",
     "$g.DrawImage($img, 0, 0, $w, $h)",
     "$g.Dispose()",
-    "$bmp.Save(" + psq(bmpOut) + ",[System.Drawing.Imaging.ImageFormat]::Bmp)",
-    "$bmp.Save(" + psq(pngOut) + ",[System.Drawing.Imaging.ImageFormat]::Png)",
-    "$bmp.Dispose()",
-    "$img.Dispose()",
-    "Write-Output ($w.ToString() + 'x' + $h.ToString())",
-  ].join("\n");
-  runPs(ps);
+  ]
+    .concat(
+      outs.map(function (o) {
+        return "$bmp.Save(" + psq(o.path) + ",[System.Drawing.Imaging.ImageFormat]::" + o.fmt + ")";
+      })
+    )
+    .concat(["$bmp.Dispose()", "$img.Dispose()", "Write-Output ($w.ToString() + 'x' + $h.ToString())"])
+    .join("\n");
+}
+
+if (fs.existsSync(source)) {
+  runPs(
+    halfSizeScript(source, [
+      { path: bmpOut, fmt: "Bmp" },
+      { path: pngOut, fmt: "Png" },
+    ])
+  );
   console.log("[make-splash] splash-source.png → splash.bmp, renderer/splash-full.png (50%)");
+  if (fs.existsSync(source2)) {
+    runPs(halfSizeScript(source2, [{ path: pngOut2, fmt: "Png" }]));
+    console.log("[make-splash] splash-source-2.png → renderer/splash-full-2.png (50%)");
+  } else if (fs.existsSync(pngOut2)) {
+    fs.unlinkSync(pngOut2);
+  }
   process.exit(0);
 }
 
