@@ -5925,6 +5925,18 @@
     var atsAllRows = [];
     var glocBusy = false;
     var atsCutlineItems = [];
+    /** 튜토리얼 예시 데이터 추출용 — 마지막 조회 결과 */
+    window.__YAN4_ATS_TUTORIAL__ = window.__YAN4_ATS_TUTORIAL__ || {};
+    window.__YAN4_ATS_TUTORIAL__.capture = function () {
+      var st = hostEl.querySelector(".yna4-ats-status");
+      return {
+        capturedAt: new Date(),
+        rows: atsAllRows,
+        cutlineItems: atsCutlineItems,
+        lastRunAt: atsLastPipelineRunAt,
+        status: st ? st.textContent : "",
+      };
+    };
     var ATS_CUTLINE_CB_CLASS = "yna4-ats-cutline-cb";
     var cutlineLoadBusy = false;
 
