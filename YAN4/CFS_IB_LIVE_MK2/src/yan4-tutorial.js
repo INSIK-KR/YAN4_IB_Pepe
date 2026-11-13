@@ -232,6 +232,17 @@
   function slaDirectCell() {
     return q(".yna4-sla-pivot-tr--direct " + SLA_CELL, slaP());
   }
+  /** 열려 있는 드릴을 닫음 — 같은 칸을 더블클릭하면 닫혀 버리므로 직접 해 보기 전에 */
+  function slaCloseDrill() {
+    var d = slaDrillHost();
+    if (!d) return;
+    d.textContent = "";
+    d.removeAttribute("data-open-row");
+    d.removeAttribute("data-open-col");
+    qa(".yna4-sla-pivot-num--selected", slaP()).forEach(function (td) {
+      td.classList.remove("yna4-sla-pivot-num--selected");
+    });
+  }
   function drillOpenedBy(prefixRe) {
     return function (k0) {
       var k = slaDrillKey();
@@ -300,6 +311,7 @@
       },
       {
         tab: "피벗 표",
+        before: slaCloseDrill,
         t: slaFirstCell,
         act: "이 칸을 더블클릭해 보세요",
         snap: slaDrillKey,
@@ -491,7 +503,8 @@
       },
       {
         t: function () {
-          return q(".yna4-ats-ov-table tbody tr:not(.yna4-ats-ov-detail)", atsP());
+          /* 이미 펼친 줄(is-open)은 누르면 접히므로, 아직 안 펼친 첫 CT 줄 */
+          return q("tr.yna4-ats-ov-ct:not(.is-open)", atsP());
         },
         act: "이 줄을 눌러 펼쳐 보세요",
         snap: function () {
@@ -963,6 +976,12 @@
 
   function render() {
     var step = cur.steps[cur.i];
+    if (typeof step.before === "function" && cur.beforeAt !== cur.i) {
+      cur.beforeAt = cur.i;
+      try {
+        step.before();
+      } catch (eBefore) {}
+    }
     if (step.tab && selectSlaTab(step.tab)) {
       var me = cur;
       setTimeout(function () {
