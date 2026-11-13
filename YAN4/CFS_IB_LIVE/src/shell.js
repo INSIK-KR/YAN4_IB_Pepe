@@ -527,6 +527,11 @@
   });
   var unloadSlaSavedIbcLinks = Object.create(null);
   var unloadSlaCachedYmd = "";
+  /** 통합 결과 직전 분석의 전체 하차 줄(진열 끝난 IBC 포함) — 하차 전 업체 판단용 */
+  var unloadSlaAllParsed = [];
+  /** 쉽먼트 입차예약 연결 결과 { key, ymd, pack, byIbc, matched, error } */
+  var unloadShipJoin = null;
+  var unloadShipBusy = false;
   var UNLOAD_SLA_DEADLINE_HOURS = 12;
   var UNLOAD_SLA_MS_1H = 60 * 60 * 1000;
   var UNLOAD_SLA_MS_2H = 2 * UNLOAD_SLA_MS_1H;
@@ -560,7 +565,10 @@
       "<div class='yna4-pane-sla-kpi' id='" +
       ROOT_ID +
       "-unload-sla-kpi'></div>" +
-      "<p class='yna4-pane-sla-hint'>주황: 3시간 이내 · 노랑: 2시간 이내 · 빨강: 1시간 이내 · 검정줄: 데드라인 지남 · 초록: 여유 · 긴급도 1초마다 갱신</p>" +
+      "<p class='yna4-pane-sla-hint'>주황: 3시간 이내 · 노랑: 2시간 이내 · 빨강: 1시간 이내 · 검정줄: 데드라인 지남 · 초록: 여유 · 회색: 하차 전 예약 업체 · 긴급도 1초마다 갱신</p>" +
+      "<p class='yna4-pane-sla-hint yna4-unload-ship-line' id='" +
+      ROOT_ID +
+      "-unload-sla-ship'></p>" +
       "<div class='yna4-pane-row yna4-pane-sla-filter' id='" +
       ROOT_ID +
       "-unload-sla-worker-bar' style='display:none'>" +
@@ -572,7 +580,7 @@
       "<div class='yna4-pane-sla-table-wrap'>" +
       "<table class='yna4-pane-sla-table'>" +
       "<thead><tr>" +
-      "<th>긴급도(남은시간)</th><th>하차번호</th><th>업체명</th><th>하차작업자</th><th>하차일시</th><th>SLA (+12h)</th><th>입고</th><th>진열완료</th><th>진열오류</th><th>SKU 추적</th><th>남은 진열</th>" +
+      "<th>긴급도(남은시간)</th><th>하차번호</th><th>업체명</th><th>하차작업자</th><th>하차일시</th><th>예약시간</th><th>SLA (+12h)</th><th>입고</th><th>진열완료</th><th>진열오류</th><th>SKU 추적</th><th>남은 진열</th>" +
       "</tr></thead>" +
       "<tbody id='" +
       ROOT_ID +
@@ -1876,6 +1884,7 @@
       );
     }
     var out = [];
+    var allRows = [];
     var workerNames = Object.create(null);
     var parsed = 0;
     var r;
@@ -1894,6 +1903,10 @@
         errQty = isNaN(eQty) ? 0 : eQty;
       }
       var remainQty = recv - disp - errQty;
+      allRows.push({
+        ibc: map.idxIbc >= 0 ? c[map.idxIbc] || "" : "",
+        vendor: map.idxVendor >= 0 ? c[map.idxVendor] || "" : "",
+      });
       if (remainQty <= 0) continue;
       var worker = map.idxWorker >= 0 ? c[map.idxWorker] || "" : "";
       if (worker) workerNames[worker] = 1;
@@ -1916,8 +1929,14 @@
     out.sort(function (a, b) {
       return a.deadline - b.deadline;
     });
+    allRows.forEach(function (x) {
+      x.ibcUrl = unloadAbsInboundHref(
+        unloadSlaSavedIbcLinks[String(x.ibc || "").trim()] || ""
+      );
+    });
     return {
       pending: out,
+      all: allRows,
       parsed: parsed,
       dataLineCount: Math.max(0, aoa.length - (map.headerRow + 1)),
       hasWorkerCol: map.idxWorker >= 0,
@@ -1967,16 +1986,22 @@
       ok +
       "</span><span>남은총량 " +
       remainTotal +
-      "</span>";
+      "</span>" +
+      (unloadShipJoin && unloadShipJoin.pack
+        ? "<span>하차 전 " + unloadShipBeforeRows().length + "</span>"
+        : "");
   }
 
-  function unloadSlaRenderRows(rows) {
+  function unloadSlaRenderRows(rows, withBefore) {
     var tbody = document.getElementById(ROOT_ID + "-unload-sla-tbody");
     if (!tbody) return;
+    var beforeHtml = withBefore ? unloadShipBeforeRowsHtml() : "";
     if (!rows.length) {
       tbody.innerHTML =
-        unloadSlaLastEmptyBodyHtml ||
-        "<tr><td colspan='11' style='text-align:center;padding:12px;color:#64748b'>미진열 없음</td></tr>";
+        (unloadSlaLastEmptyBodyHtml ||
+          "<tr><td colspan='12' style='text-align:center;padding:12px;color:#64748b'>미진열 없음</td></tr>") +
+        beforeHtml;
+      unloadSlaRenderKpi(rows, Date.now());
       return;
     }
     var now = Date.now();
@@ -1999,6 +2024,7 @@
           "<span class='yna4-gap-remain-qty'>" +
           unloadSlaEscapeHtml(String(x.remainQty)) +
           "</span>";
+        var ship = unloadShipInfoForRow(x);
         return (
           "<tr class='yna4-sla-tr " +
           urgency.cls +
@@ -2010,13 +2036,16 @@
           ibcHtml +
           "</td>" +
           "<td>" +
-          unloadSlaEscapeHtml(x.vendor) +
+          unloadSlaEscapeHtml(ship.name || x.vendor) +
           "</td>" +
           "<td>" +
           unloadSlaEscapeHtml(unloadSlaFormatWorkerLabel(x.worker)) +
           "</td>" +
           "<td class='mono'>" +
           unloadSlaFmtDT(x.unload) +
+          "</td>" +
+          "<td class='mono'>" +
+          unloadSlaEscapeHtml(ship.times) +
           "</td>" +
           "<td class='mono'>" +
           unloadSlaFmtDT(x.deadline) +
@@ -2039,7 +2068,7 @@
           "</tr>"
         );
       })
-      .join("");
+      .join("") + beforeHtml;
     unloadSlaRenderKpi(rows, now);
   }
 
@@ -2110,12 +2139,12 @@
       var tbody0 = document.getElementById(ROOT_ID + "-unload-sla-tbody");
       if (tbody0) {
         tbody0.innerHTML =
-          "<tr><td colspan='11' style='text-align:center;padding:12px;color:#64748b'>선택한 작업자 미진열 없음</td></tr>";
+          "<tr><td colspan='12' style='text-align:center;padding:12px;color:#64748b'>선택한 작업자 미진열 없음</td></tr>";
       }
       unloadSlaRenderKpi([], Date.now());
       return;
     }
-    unloadSlaRenderRows(filtered);
+    unloadSlaRenderRows(filtered, v === "");
     if (unloadSlaModalVisible) unloadSlaStartTimer();
   }
 
@@ -2152,6 +2181,14 @@
       );
     },
     operationalYmd: unloadOperationalYmd,
+    /** 하차표 텍스트로 통합 결과 + 쉽먼트 연결 (카드 「통합 결과」와 같은 동작) */
+    openResultWithShipments: function (tsvText, htmlText, ymd) {
+      unloadLastMergedText = String(tsvText || "");
+      unloadLastMergedHtml = String(htmlText || "");
+      unloadSlaRunAnalysisFromText(unloadLastMergedText, unloadLastMergedHtml);
+      unloadSlaOpenModal();
+      return unloadShipEnsure(ymd || unloadSelectedSearchYmd());
+    },
   };
 
   /** IBC 상세 → 발주 SKU 중 미진열(gap) 전건 (gap 내림차순, sku=외부 SKU ID) */
@@ -2197,12 +2234,318 @@
     locationStock: unloadGapFetchLocationStock,
   };
 
+  /* ── 쉽먼트 입차예약 연결: 예약시간 · 쉽먼트 업체명 · 하차 전 예약 업체 ──
+   * WMS 하차 목록에는 업체 ID가 없어 업체명으로 먼저 잇고,
+   * 안 맞는 IBC 만 상세의 발주번호 ↔ 쉽먼트 트럭 상세의 발주번호로 잇는다. */
+  var UNLOAD_SHIP_SCHEDULE_URL =
+    "https://shipments.coupang.net/ibs/inbound-booking-schedule";
+  var UNLOAD_SHIP_SCHEDULE_REFERER =
+    "https://shipments.coupang.net/app/inbound-schedule";
+  var UNLOAD_SHIP_TRUCK_URL =
+    "https://shipments.coupang.net/ibs/inbound-booking/truck/";
+  var UNLOAD_SHIP_TRUCK_REFERER =
+    "https://shipments.coupang.net/app/inbound-booking/truck/detail?id=";
+
+  /** 상단 센터 전환 기준 센터 코드 — 없으면 YAN4 */
+  function unloadShipCenterCode() {
+    try {
+      var api = window.__CFS_CENTER__;
+      if (api && typeof api.activeId === "function") {
+        var name = api.name(api.activeId());
+        if (name && !/^\d+$/.test(name)) return name;
+      }
+    } catch (eC) {}
+    return "YAN4";
+  }
+
+  /** 시간 제한 없이 GET (큰 응답이 잘리지 않게) */
+  function unloadShipGet(url, referer, accept) {
+    return new Promise(function (resolve, reject) {
+      if (typeof GM_xmlhttpRequest !== "function") {
+        reject(new Error("GM_xmlhttpRequest 필요"));
+        return;
+      }
+      GM_xmlhttpRequest({
+        method: "GET",
+        url: url,
+        headers: {
+          Accept: accept || "application/json, text/plain, */*",
+          Referer: referer,
+        },
+        timeout: 0,
+        onload: function (r) {
+          if (r.status >= 200 && r.status < 400) resolve(String(r.responseText || ""));
+          else reject(new Error("HTTP " + r.status));
+        },
+        onerror: function () {
+          reject(new Error("네트워크 오류"));
+        },
+      });
+    });
+  }
+
+  /** 업체명 비교용 — 공백·법인 표기·문장부호 무시 */
+  function unloadShipNameKey(s) {
+    return String(s || "")
+      .replace(/\(주\)|㈜|주식회사|\(유\)|유한회사|\(사\)/g, "")
+      .replace(/[\s.,·\-()\[\]]/g, "")
+      .toLowerCase();
+  }
+
+  /** 입차예약 응답 → 업체별(업체 ID, 없으면 이름) 도착·예약 시각 · 트럭 */
+  function unloadShipParseSchedule(text) {
+    var obj = JSON.parse(String(text || ""));
+    if (!obj || obj.success !== true || !obj.body) throw new Error("쉽먼트 응답 오류");
+    var vendors = Object.create(null);
+    var order = [];
+    var keyByName = Object.create(null);
+    var trucks = [];
+    function vendorFor(id, name) {
+      var key = id ? "id:" + id : "n:" + unloadShipNameKey(name);
+      var v = vendors[key];
+      if (!v) {
+        v = vendors[key] = { key: key, id: id || "", name: "", ARRIVED: [], BOOKED: [] };
+        order.push(v);
+      }
+      if (name && !v.name) v.name = String(name).trim();
+      if (name && unloadShipNameKey(name) && !keyByName[unloadShipNameKey(name)]) {
+        keyByName[unloadShipNameKey(name)] = key;
+      }
+      return v;
+    }
+    function addTime(v, status, time) {
+      if (v[status].indexOf(time) < 0) v[status].push(time);
+    }
+    var times = obj.body.inboundBookingTimeList || [];
+    var ti, si, mi, raw, time, slots, slot, status, v, milkrun;
+    for (ti = 0; ti < times.length; ti++) {
+      raw = String(times[ti].inboundTime || "").trim();
+      if (!/^\d{4}$/.test(raw)) continue;
+      time = raw.slice(0, 2) + ":" + raw.slice(2);
+      slots = times[ti].inboundBookingSlotList || [];
+      for (si = 0; si < slots.length; si++) {
+        slot = slots[si];
+        status = slot.bookingStatus;
+        if (status !== "ARRIVED" && status !== "BOOKED") continue;
+        var vid = slot.vendorId != null ? String(slot.vendorId) : "";
+        if (!vid && !slot.vendorName) continue;
+        v = vendorFor(vid, slot.vendorName);
+        addTime(v, status, time);
+        if (slot.deliveryTruckSeq != null) {
+          trucks.push({ key: v.key, seq: String(slot.deliveryTruckSeq) });
+        }
+        milkrun = slot.milkrunVendorIdList || [];
+        for (mi = 0; mi < milkrun.length; mi++) {
+          if (milkrun[mi] == null || String(milkrun[mi]) === vid) continue;
+          addTime(vendorFor(String(milkrun[mi]), ""), status, time);
+        }
+      }
+    }
+    order.forEach(function (x) {
+      x.ARRIVED.sort();
+      x.BOOKED.sort();
+    });
+    return { vendors: vendors, order: order, keyByName: keyByName, trucks: trucks };
+  }
+
+  /** 도착 시각이 있으면 도착, 없으면 예약 시각 */
+  function unloadShipTimesText(v) {
+    if (!v) return "-";
+    if (v.ARRIVED.length) return v.ARRIVED.join(", ");
+    if (v.BOOKED.length) return v.BOOKED.join(", ") + " 예약";
+    return "-";
+  }
+
+  function unloadShipLoginText(err) {
+    var msg = String((err && err.message) || err || "");
+    if ((err && err.name === "SyntaxError") || /HTTP 40[13]\b/.test(msg)) {
+      return "쉽먼트 로그인 필요";
+    }
+    return "쉽먼트 조회 실패 (" + msg + ")";
+  }
+
+  function unloadShipSetLine(text) {
+    var el = document.getElementById(ROOT_ID + "-unload-sla-ship");
+    if (el) el.textContent = text || "";
+  }
+
+  /**
+   * 1) 업체명으로 잇기 2) 남은 IBC 는 상세의 발주번호 ↔ 트럭 상세 발주번호.
+   * 아직 못 이은 예약 업체가 없으면 상세 조회는 하지 않는다.
+   */
+  async function unloadShipCollect(ymd, allRows) {
+    unloadShipSetLine("쉽먼트 입차예약 불러오는 중…");
+    var q = new URLSearchParams({
+      centerCode: unloadShipCenterCode(),
+      scheduleDate: String(ymd || "").replace(/\D/g, ""),
+    });
+    var pack = unloadShipParseSchedule(
+      await unloadShipGet(
+        UNLOAD_SHIP_SCHEDULE_URL + "?" + q.toString(),
+        UNLOAD_SHIP_SCHEDULE_REFERER
+      )
+    );
+    var byIbc = Object.create(null);
+    var matched = Object.create(null);
+    var seen = Object.create(null);
+    var rest = [];
+    (allRows || []).forEach(function (r) {
+      var ibc = String(r.ibc || "").trim();
+      if (!ibc || seen[ibc]) return;
+      seen[ibc] = true;
+      var key = pack.keyByName[unloadShipNameKey(r.vendor)];
+      if (key) {
+        byIbc[ibc] = key;
+        matched[key] = true;
+      } else {
+        rest.push(r);
+      }
+    });
+    function waiting() {
+      return pack.order.some(function (v) {
+        return !matched[v.key];
+      });
+    }
+    if (rest.length && waiting()) {
+      var keyByPo = Object.create(null);
+      var trucks = pack.trucks.filter(function (t) {
+        return !matched[t.key];
+      });
+      var i, j, text, obj, pos;
+      for (i = 0; i < trucks.length; i++) {
+        unloadShipSetLine("쉽먼트 트럭 상세 " + (i + 1) + "/" + trucks.length);
+        try {
+          text = await unloadShipGet(
+            UNLOAD_SHIP_TRUCK_URL + encodeURIComponent(trucks[i].seq),
+            UNLOAD_SHIP_TRUCK_REFERER + encodeURIComponent(trucks[i].seq)
+          );
+          obj = JSON.parse(text);
+          pos = (obj && obj.body && obj.body.truckBookingPoInfoModelList) || [];
+          for (j = 0; j < pos.length; j++) {
+            if (pos[j] && pos[j].purchaseOrderSeq != null) {
+              keyByPo[String(pos[j].purchaseOrderSeq)] = trucks[i].key;
+            }
+          }
+        } catch (eTruck) {
+          console.warn("[YAN4 Direct SLA 트럭 상세]", trucks[i].seq, eTruck);
+        }
+      }
+      if (Object.keys(keyByPo).length) {
+        for (i = 0; i < rest.length && waiting(); i++) {
+          if (!rest[i].ibcUrl) continue;
+          unloadShipSetLine("IBC 발주번호 확인 " + (i + 1) + "/" + rest.length);
+          try {
+            var detailHtml = await unloadShipGet(
+              rest[i].ibcUrl,
+              unloadInboundOrigin() + "/",
+              "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+            );
+            var poUrls = unloadGapParsePoUrlsFromDetailHtml(detailHtml, rest[i].ibcUrl);
+            for (j = 0; j < poUrls.length; j++) {
+              var key2 = keyByPo[unloadGapPurchaseOrderIdFromUrl(poUrls[j])];
+              if (key2) {
+                byIbc[String(rest[i].ibc).trim()] = key2;
+                matched[key2] = true;
+                break;
+              }
+            }
+          } catch (eIbc) {
+            console.warn("[YAN4 Direct SLA IBC 상세]", rest[i].ibc, eIbc);
+          }
+        }
+      }
+    }
+    return { ymd: ymd, pack: pack, byIbc: byIbc, matched: matched };
+  }
+
+  function unloadShipInfoForRow(x) {
+    var j = unloadShipJoin;
+    if (!j || !j.pack) return { name: "", times: j && j.error ? "" : "-" };
+    var key = j.byIbc[String(x.ibc || "").trim()];
+    var v = key ? j.pack.vendors[key] : null;
+    return { name: v && v.name ? v.name : "", times: unloadShipTimesText(v) };
+  }
+
+  /** 예약은 있는데 하차 목록(진열 끝난 IBC 포함)에 없는 업체 — 예약시간 순 */
+  function unloadShipBeforeRows() {
+    var j = unloadShipJoin;
+    if (!j || !j.pack) return [];
+    return j.pack.order
+      .filter(function (v) {
+        return !j.matched[v.key];
+      })
+      .sort(function (a, b) {
+        var ta = (a.ARRIVED[0] || a.BOOKED[0] || "99:99");
+        var tb = (b.ARRIVED[0] || b.BOOKED[0] || "99:99");
+        return ta < tb ? -1 : ta > tb ? 1 : 0;
+      });
+  }
+
+  function unloadShipBeforeRowsHtml() {
+    return unloadShipBeforeRows()
+      .map(function (v) {
+        var label = v.ARRIVED.length ? "도착 · 하차 전" : "하차 전";
+        return (
+          "<tr class='yna4-sla-tr-before row-before'>" +
+          "<td>" + label + "</td>" +
+          "<td class='mono'>-</td>" +
+          "<td>" + unloadSlaEscapeHtml(v.name || "업체 ID " + v.id) + "</td>" +
+          "<td>-</td><td class='mono'>-</td>" +
+          "<td class='mono'>" + unloadSlaEscapeHtml(unloadShipTimesText(v)) + "</td>" +
+          "<td class='mono'>-</td><td class='mono'>-</td><td class='mono'>-</td>" +
+          "<td class='mono'>-</td><td class='mono'>-</td><td class='mono'>-</td>" +
+          "</tr>"
+        );
+      })
+      .join("");
+  }
+
+  function unloadShipSummaryText() {
+    var j = unloadShipJoin;
+    if (!j) return "";
+    if (j.error) return j.error + " — 예약시간 · 하차 전 업체 없이 표시합니다.";
+    var linked = Object.keys(j.matched).length;
+    return (
+      "쉽먼트 입차예약 연결 (" + j.ymd + ") · 예약 업체 " + j.pack.order.length +
+      " · 하차 확인 " + linked + " · 하차 전 " + unloadShipBeforeRows().length
+    );
+  }
+
+  /** 통합 결과를 열 때 한 번 — 같은 수집 결과·날짜면 다시 조회하지 않음 */
+  function unloadShipEnsure(ymd) {
+    var text = String(unloadLastMergedText || "");
+    var key = ymd + "|" + text.length + "|" + text.slice(0, 300);
+    if (unloadShipJoin && unloadShipJoin.key === key) {
+      unloadShipSetLine(unloadShipSummaryText());
+      return Promise.resolve(unloadShipJoin);
+    }
+    if (unloadShipBusy) return Promise.resolve(null);
+    unloadShipBusy = true;
+    unloadShipJoin = null;
+    return unloadShipCollect(ymd, unloadSlaAllParsed.slice())
+      .then(function (j) {
+        j.key = key;
+        unloadShipJoin = j;
+      })
+      .catch(function (e) {
+        console.warn("[YAN4 Direct SLA 쉽먼트]", e);
+        unloadShipJoin = { key: key, ymd: ymd, error: unloadShipLoginText(e) };
+      })
+      .then(function () {
+        unloadShipBusy = false;
+        unloadShipSetLine(unloadShipSummaryText());
+        unloadSlaApplyWorkerFilter();
+        return unloadShipJoin;
+      });
+  }
+
   function unloadSlaRunAnalysisFromText(tsvText, htmlText) {
     var statusEl = document.getElementById(ROOT_ID + "-unload-status");
     unloadSlaEnsureModal();
     unloadSlaRememberLinksFromMergedHtml(htmlText || "");
     var result = unloadSlaProcessText(tsvText || "");
     unloadSlaAllRows = result.pending || [];
+    unloadSlaAllParsed = result.all || [];
     unloadSlaWorkerChoices = result.workerChoices || [];
     unloadSlaHasWorkerCol = !!result.hasWorkerCol;
     unloadSlaLastEmptyBodyHtml = "";
@@ -2214,7 +2557,7 @@
         msg = "미진열 없음 - 입고=진열완료+진열오류";
       }
       unloadSlaLastEmptyBodyHtml =
-        "<tr><td colspan='11' style='text-align:center;padding:12px;color:#64748b'>" +
+        "<tr><td colspan='12' style='text-align:center;padding:12px;color:#64748b'>" +
         unloadSlaEscapeHtml(msg) +
         "</td></tr>";
     }
@@ -3761,6 +4104,7 @@
         }
         unloadSlaRunAnalysisFromText(srcText, unloadLastMergedHtml || "");
         unloadSlaOpenModal();
+        unloadShipEnsure(unloadSlaCachedYmd || unloadSelectedSearchYmd());
       } catch (eSla) {
         setUnloadStatus("통합 결과 실패");
         alert("[YAN4] 통합 결과 오류: " + (eSla && eSla.message ? eSla.message : eSla));
@@ -16207,6 +16551,9 @@
         ".yna4-sla-modal .yna4-pane-sla-table tr.row-warn-2h td{background:#fffbeb;}",
         ".yna4-sla-modal .yna4-pane-sla-table tr.row-warn-1h td{background:#fef2f2;}",
         ".yna4-sla-modal .yna4-pane-sla-table tr.row-ok td{background:#f0fdf4;}",
+        ".yna4-sla-modal .yna4-pane-sla-table tr.row-before td{background:#f8fafc;color:#94a3b8;}",
+        ".yna4-sla-modal .yna4-unload-ship-line{color:#0f4c8a;font-weight:700;}",
+        ".yna4-sla-modal .yna4-unload-ship-line:empty{display:none;}",
         ".yna4-gap-api-modal{position:fixed;inset:0;z-index:2147483647;}",
         ".yna4-gap-api-backdrop{position:absolute;inset:0;background:rgba(15,23,42,.55);}",
         ".yna4-gap-api-dialog{position:absolute;left:4vw;right:4vw;top:6vh;bottom:6vh;background:#fff;border-radius:10px;border:1px solid #cbd5e1;display:flex;flex-direction:column;overflow:hidden;}",
