@@ -565,7 +565,7 @@
       "<div class='yna4-pane-sla-kpi' id='" +
       ROOT_ID +
       "-unload-sla-kpi'></div>" +
-      "<p class='yna4-pane-sla-hint'>주황: 3시간 이내 · 노랑: 2시간 이내 · 빨강: 1시간 이내 · 검정줄: 데드라인 지남 · 초록: 여유 · 회색: 하차 전 예약 업체 · 입고 · 진열완료 · 진열오류 · 남은 진열은 발주서(PO) 기준, 연한 숫자는 발주서 확인 전 WMS 수량 · 긴급도 1초마다 갱신</p>" +
+      "<p class='yna4-pane-sla-hint'>주황: 3시간 이내 · 노랑: 2시간 이내 · 빨강: 1시간 이내 · 검정줄: 데드라인 지남 · 초록: 여유 · 회색: 하차 전 예약 업체 · 입고(업체확정) · 진열완료 · 남은 진열은 PO Management 기준(진열완료 빈칸은 재고 RCRT로 계산), 연한 숫자는 PO 확인 전 WMS 수량 · 긴급도 1초마다 갱신</p>" +
       "<p class='yna4-pane-sla-hint yna4-unload-ship-line' id='" +
       ROOT_ID +
       "-unload-sla-ship'></p>" +
@@ -2020,7 +2020,7 @@
         var qtyTd =
           x.qtySrc === "po"
             ? "<td class='mono'>"
-            : "<td class='mono qty-wms' title='발주서 수량을 아직 못 읽어 WMS 하차 목록 수량으로 표시'>";
+            : "<td class='mono qty-wms' title='PO 수량을 아직 못 읽어 WMS 하차 목록 수량으로 표시'>";
         return (
           "<tr class='yna4-sla-tr " +
           urgency.cls +
@@ -2427,28 +2427,193 @@
     }
   }
 
-  /** 진열이 끝난 발주서 수량은 더 바뀌지 않아 앱을 끌 때까지 기억 */
-  var unloadPoQtyDone = Object.create(null);
+  /* ── PO Management 하루치 (입고예정일 기준) ──
+   * 업체확정 발주수량 = 그날 입고 예정 물량, 진열완료 수량은 그대로 쓴다.
+   * 스큐상태 「취소」 줄은 버린다. PO 의 SKU ID 는 WMS 외부 SKU ID. */
+  var UNLOAD_PO_ORIGIN = "https://po-management.coupang.net";
+  var UNLOAD_PO_DOWNLOAD_URL = UNLOAD_PO_ORIGIN + "/po/sku/list-download";
+  var UNLOAD_PO_REFERER = UNLOAD_PO_ORIGIN + "/po/sku/list";
+  var UNLOAD_PO_PAGE_CAP = 120;
 
-  /** 발주서 SKU 줄의 입고·진열완료·진열오류 합 */
-  async function unloadPoQtyFetch(poUrl, referer) {
-    var key = unloadGapPurchaseOrderIdFromUrl(poUrl) || poUrl;
-    if (unloadPoQtyDone[key]) return unloadPoQtyDone[key];
-    var html = await unloadShipGet(
-      poUrl,
-      referer || unloadInboundOrigin() + "/",
-      "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-    );
-    var skus = unloadGapParseSkuRowsFromPoHtml(html, poUrl);
-    if (!skus.length) throw new Error("발주서 수량 표 없음");
-    var q = { recv: 0, disp: 0, err: 0 };
-    skus.forEach(function (x) {
-      q.recv += Number(x.recv) || 0;
-      q.disp += Number(x.disp) || 0;
-      q.err += Number(x.err) || 0;
+  function unloadPoPost(body) {
+    return new Promise(function (resolve, reject) {
+      if (typeof GM_xmlhttpRequest !== "function") {
+        reject(new Error("GM_xmlhttpRequest 필요"));
+        return;
+      }
+      GM_xmlhttpRequest({
+        method: "POST",
+        url: UNLOAD_PO_DOWNLOAD_URL,
+        headers: {
+          Accept: "application/json, text/javascript, */*; q=0.01",
+          Referer: UNLOAD_PO_REFERER,
+          Origin: UNLOAD_PO_ORIGIN,
+          "X-Requested-With": "XMLHttpRequest",
+          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        },
+        data: body,
+        timeout: 0,
+        onload: function (r) {
+          if (r.status >= 200 && r.status < 400) resolve(String(r.responseText || ""));
+          else reject(new Error("HTTP " + r.status));
+        },
+        onerror: function () {
+          reject(new Error("네트워크 오류"));
+        },
+      });
     });
-    if (q.recv > 0 && q.recv - q.disp - q.err <= 0) unloadPoQtyDone[key] = q;
-    return q;
+  }
+
+  function unloadPoBody(page, after, ymd) {
+    var d = String(ymd || "").replace(/-/g, "/");
+    var p = new URLSearchParams();
+    p.set("page", String(page));
+    p.set("size", "200");
+    p.set("conditionPurchaseSearchType", "");
+    p.set("purchaseSearchType", "WAREHOUSING_PLAN");
+    p.set("searchFromDate", d);
+    p.set("searchToDate", d);
+    p.set("requestDate", d + " - " + d);
+    [
+      "conditionPurchaseOrderRegType", "conditionUnitCategory1", "unitCategory1",
+      "conditionUnitCategory2Array", "conditionPurchaseOrderStatus", "conditionFcCodeArray",
+    ].forEach(function (k) {
+      p.set(k, "");
+    });
+    p.set("fcCodeArray", unloadShipCenterCode());
+    [
+      "conditionPurchaseOrderSkuStatusArray", "conditionSkuReceivedStatusType",
+      "skuReceivedStatusType", "conditionTaskType", "taskType", "conditionOrderType",
+      "orderType", "createdId", "createdName", "managerId", "managerName",
+      "vendorIdArray", "purchaseOrderSeqArray", "skuSeqArray",
+    ].forEach(function (k) {
+      p.set(k, "");
+    });
+    p.set(
+      "selected",
+      JSON.stringify([
+        { id: "purchaseOrderSeq", name: "발주번호" },
+        { id: "skuSeq", name: "SKU ID" },
+        { id: "purchaseOrderSkuStatus", name: "스큐상태" },
+        { id: "vendorConfirmedCount", name: "업체확정 발주수량" },
+        { id: "displaySumOfDisplayQty", name: "진열완료 수량" },
+      ])
+    );
+    if (after) p.set("after", String(after));
+    return p.toString();
+  }
+
+  /** 따옴표·줄바꿈 포함 CSV */
+  function unloadCsvRecords(text) {
+    var src = String(text || "").replace(/^﻿/, "");
+    var records = [];
+    var row = [];
+    var field = "";
+    var inQ = false;
+    for (var i = 0; i < src.length; i++) {
+      var ch = src[i];
+      if (inQ) {
+        if (ch === '"') {
+          if (src[i + 1] === '"') {
+            field += '"';
+            i++;
+          } else inQ = false;
+        } else field += ch;
+        continue;
+      }
+      if (ch === '"') inQ = true;
+      else if (ch === ",") {
+        row.push(field);
+        field = "";
+      } else if (ch === "\n") {
+        row.push(field);
+        field = "";
+        if (row.length > 1 || String(row[0] || "").trim()) records.push(row);
+        row = [];
+      } else if (ch !== "\r") field += ch;
+    }
+    row.push(field);
+    if (row.length > 1 || String(row[0] || "").trim()) records.push(row);
+    return records;
+  }
+
+  /** "1,075" → 1075 · 빈칸 → null */
+  function unloadPoNum(v) {
+    var t = String(v == null ? "" : v).replace(/[,\s]/g, "");
+    if (!t) return null;
+    var n = Number(t);
+    return isFinite(n) ? n : null;
+  }
+
+  /** 발주번호 → [{ sku, confirmed, displayed(null=빈칸) }] (취소 제외) */
+  async function unloadPoFetchDay(ymd) {
+    var header = "";
+    var chunks = [];
+    var after = "";
+    for (var page = 1; page <= UNLOAD_PO_PAGE_CAP; page++) {
+      unloadShipSetLine("PO Management " + page + "페이지…");
+      var raw = await unloadPoPost(unloadPoBody(page, after, ymd));
+      var obj;
+      try {
+        obj = JSON.parse(raw);
+      } catch (eJ) {
+        throw new Error(/^\s*</.test(raw) ? "PO Management 로그인 필요" : "PO Management 응답 오류");
+      }
+      if (page === 1 && obj && obj.valid === false && !obj.data) {
+        throw new Error("PO Management 조회 실패 (로그인·센터·날짜 확인)");
+      }
+      if (obj.header && !header) header = String(obj.header);
+      if (obj.data) chunks.push(String(obj.data));
+      if (!obj.after) break;
+      after = String(obj.after);
+    }
+    var head = unloadCsvRecords(header)[0] || [];
+    function col(names) {
+      for (var i = 0; i < head.length; i++) {
+        var h = String(head[i] || "").replace(/\s+/g, "");
+        for (var k = 0; k < names.length; k++) if (h === names[k]) return i;
+      }
+      return -1;
+    }
+    var iPo = col(["발주번호"]);
+    var iSku = col(["SKUID"]);
+    var iSt = col(["스큐상태"]);
+    var iConf = col(["업체확정발주수량"]);
+    var iDisp = col(["진열완료수량"]);
+    if (iPo < 0 || iSku < 0 || iConf < 0 || iDisp < 0) {
+      throw new Error("PO Management 열을 못 찾음 (" + head.join(",") + ")");
+    }
+    var byPo = Object.create(null);
+    var rows = 0;
+    unloadCsvRecords(chunks.join("")).forEach(function (c) {
+      var po = String(c[iPo] || "").replace(/\D/g, "");
+      if (!po || po === String(head[iPo] || "")) return;
+      if (iSt >= 0 && String(c[iSt] || "").trim() === "취소") return;
+      var confirmed = unloadPoNum(c[iConf]) || 0;
+      if (confirmed <= 0) return;
+      (byPo[po] = byPo[po] || []).push({
+        sku: String(c[iSku] || "").replace(/\D/g, ""),
+        confirmed: confirmed,
+        displayed: unloadPoNum(c[iDisp]),
+      });
+      rows++;
+    });
+    return { byPo: byPo, rows: rows };
+  }
+
+  /** 외부 SKU ID 로 재고 RCRT 남은 수량. 모르면 null */
+  async function unloadRcrtQtyForExternalSku(sku) {
+    var merged = await unloadGapFetchRcrtMergedFromApi(function (page) {
+      return unloadGapBuildInventoryExternalSkuSearchUrl(sku, page);
+    });
+    if (!merged.valid) return null;
+    var total = 0;
+    var entries = unloadGapRcrtMergedToEntries(merged);
+    for (var i = 0; i < entries.length; i++) {
+      if (entries[i].qty == null) return null;
+      total += entries[i].qty;
+    }
+    return total;
   }
 
   async function unloadRunParallel(items, fn) {
@@ -2507,7 +2672,7 @@
   async function unloadShipCollect(ymd, allRows) {
     var stat = {
       ibc: 0, byPo: 0, noPo: 0, noLink: 0, failed: 0, trucks: 0,
-      po: 0, poOk: 0, poFailed: 0, qtyIbc: 0,
+      poRows: 0, poMissing: 0, blankSku: 0, rcrtFailed: 0, qtyIbc: 0,
     };
     var book = null;
     var shipError = "";
@@ -2548,59 +2713,91 @@
       }
     });
 
-    /* 발주 → 가장 먼저 하차한 IBC */
-    var byUnload = rows.slice().sort(function (a, b) {
-      return (a.unload ? a.unload.getTime() : 0) - (b.unload ? b.unload.getTime() : 0);
-    });
-    var poOwner = Object.create(null);
-    var poList = [];
-    byUnload.forEach(function (r) {
-      var ibc = String(r.ibc).trim();
-      (infoByIbc[ibc] ? infoByIbc[ibc].urls : []).forEach(function (u) {
-        var pk = unloadGapPurchaseOrderIdFromUrl(u) || u;
-        if (poOwner[pk]) return;
-        poOwner[pk] = ibc;
-        poList.push({ key: pk, url: u, referer: r.ibcUrl });
-      });
-    });
-    stat.po = poList.length;
-    var poQty = Object.create(null);
-    var poDone = 0;
-    await unloadRunParallel(poList, async function (p) {
-      try {
-        poQty[p.key] = await unloadPoQtyFetch(p.url, p.referer);
-        stat.poOk++;
-      } catch (ePo) {
-        stat.poFailed++;
-        console.warn("[YAN4 Direct SLA 발주서]", p.key, ePo);
-      }
-      poDone++;
-      unloadShipSetLine("발주서 수량 확인 " + poDone + "/" + poList.length);
-    });
-
-    /* IBC 별 PO 수량 — 발주서 하나라도 못 읽으면 그 IBC 는 WMS 수량 그대로 */
+    /* PO Management 하루치 → 발주는 가장 먼저 하차한 IBC 에만 */
+    var po = null;
+    var poError = "";
+    try {
+      po = await unloadPoFetchDay(ymd);
+      stat.poRows = po.rows;
+    } catch (ePoMgmt) {
+      console.warn("[YAN4 Direct SLA PO Management]", ePoMgmt);
+      poError = String((ePoMgmt && ePoMgmt.message) || ePoMgmt);
+    }
     var qty = Object.create(null);
-    rows.forEach(function (r) {
-      var ibc = String(r.ibc).trim();
-      var info = infoByIbc[ibc];
-      if (!info || !info.urls.length) return;
-      var q = { recv: 0, disp: 0, err: 0 };
-      var ok = true;
-      info.urls.forEach(function (u) {
-        var pk = unloadGapPurchaseOrderIdFromUrl(u) || u;
-        if (poOwner[pk] !== ibc) return;
-        if (!poQty[pk]) {
-          ok = false;
-          return;
-        }
-        q.recv += poQty[pk].recv;
-        q.disp += poQty[pk].disp;
-        q.err += poQty[pk].err;
+    if (po) {
+      var byUnload = rows.slice().sort(function (a, b) {
+        return (a.unload ? a.unload.getTime() : 0) - (b.unload ? b.unload.getTime() : 0);
       });
-      if (!ok) return;
-      qty[ibc] = q;
-      stat.qtyIbc++;
-    });
+      var poOwner = Object.create(null);
+      var ownedByIbc = Object.create(null);
+      byUnload.forEach(function (r) {
+        var ibc = String(r.ibc).trim();
+        var info = infoByIbc[ibc];
+        if (!info || !info.ids.length) return;
+        var found = false;
+        var owned = [];
+        info.ids.forEach(function (id) {
+          if (!po.byPo[id]) return;
+          found = true;
+          if (poOwner[id]) return;
+          poOwner[id] = ibc;
+          owned.push(id);
+        });
+        if (found) ownedByIbc[ibc] = owned;
+        else stat.poMissing++;
+      });
+
+      /* 진열완료 빈칸 SKU → 재고 RCRT */
+      var blankSkus = [];
+      var blankSeen = Object.create(null);
+      Object.keys(ownedByIbc).forEach(function (ibc) {
+        ownedByIbc[ibc].forEach(function (id) {
+          po.byPo[id].forEach(function (x) {
+            if (x.displayed != null || !x.sku || blankSeen[x.sku]) return;
+            blankSeen[x.sku] = true;
+            blankSkus.push(x.sku);
+          });
+        });
+      });
+      stat.blankSku = blankSkus.length;
+      var rcrtLeft = Object.create(null);
+      var rcrtDone = 0;
+      await unloadRunParallel(blankSkus, async function (sku) {
+        var q = null;
+        try {
+          q = await unloadRcrtQtyForExternalSku(sku);
+        } catch (eR) {
+          console.warn("[YAN4 Direct SLA RCRT]", sku, eR);
+        }
+        if (q == null) stat.rcrtFailed++;
+        rcrtLeft[sku] = q;
+        rcrtDone++;
+        unloadShipSetLine("진열완료 빈칸 SKU 재고 RCRT " + rcrtDone + "/" + blankSkus.length);
+      });
+
+      /* IBC 별: 입고 = 업체확정, 진열완료 = 그대로 · 빈칸이면 업체확정 − RCRT 남은 수량 */
+      byUnload.forEach(function (r) {
+        var ibc = String(r.ibc).trim();
+        if (!ownedByIbc[ibc]) return;
+        var q = { recv: 0, disp: 0 };
+        ownedByIbc[ibc].forEach(function (id) {
+          po.byPo[id].forEach(function (x) {
+            q.recv += x.confirmed;
+            if (x.displayed != null) {
+              q.disp += Math.min(x.displayed, x.confirmed);
+              return;
+            }
+            var left = rcrtLeft[x.sku];
+            if (left == null) return; // RCRT 를 모르면 전량 남음으로 둔다
+            var rem = Math.min(x.confirmed, left);
+            rcrtLeft[x.sku] = left - rem;
+            q.disp += x.confirmed - rem;
+          });
+        });
+        qty[ibc] = q;
+        stat.qtyIbc++;
+      });
+    }
     return {
       ymd: ymd,
       pack: book ? book.pack : null,
@@ -2608,6 +2805,7 @@
       byIbc: byIbc,
       matched: matched,
       qty: qty,
+      poError: poError,
       stat: stat,
     };
   }
@@ -2667,9 +2865,13 @@
       (st.noLink ? " · 상세 링크 없음 " + st.noLink : "") +
       (st.failed ? " · 상세 실패 " + st.failed : "") +
       (j.pack ? " · 트럭 " + (st.trucks || 0) : "") +
-      " · 발주서 " + (st.poOk || 0) + "/" + (st.po || 0) +
-      (st.poFailed ? " (실패 " + st.poFailed + ")" : "") +
-      " · PO 수량 IBC " + (st.qtyIbc || 0) + "]";
+      (j.poError
+        ? " · PO 수량 못 읽음: " + j.poError
+        : " · PO " + (st.poRows || 0) + "줄 · PO 수량 IBC " + (st.qtyIbc || 0) +
+          (st.poMissing ? " · PO에 없는 IBC " + st.poMissing : "") +
+          (st.blankSku ? " · 진열 빈칸 SKU " + st.blankSku : "") +
+          (st.rcrtFailed ? " (RCRT 실패 " + st.rcrtFailed + ")" : "")) +
+      "]";
     if (!j.pack) {
       return (j.shipError || "쉽먼트 조회 실패") +
         " — 예약시간 · 하차 전 업체 없이 표시합니다." + qtyText;
@@ -2692,10 +2894,10 @@
     unloadSlaAllParsed.forEach(function (x) {
       var q = j.qty[String(x.ibc || "").trim()];
       if (q) {
-        var rem = q.recv - q.disp - q.err;
+        var rem = q.recv - q.disp;
         if (rem > 0) {
           out.push(Object.assign({}, x, {
-            recv: q.recv, disp: q.disp, errQty: q.err, remainQty: rem, qtySrc: "po",
+            recv: q.recv, disp: q.disp, errQty: "-", remainQty: rem, qtySrc: "po",
           }));
         }
       } else if (x.remainQty > 0) {
