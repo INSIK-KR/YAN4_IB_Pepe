@@ -3123,7 +3123,7 @@
       "</span><button type='button' class='yna4-pane-btn' data-role='plan-copy'>팀즈 복사</button></div>" +
       "<p class='yna4-pane-sla-hint'>PO Management 입고예정일 기준 · 예상 unit = 업체확정 발주수량(취소 제외) · 업체명 · 예약시간은 쉽먼트 · 줄을 누르면 온도별로 펼침</p>" +
       "<div class='yna4-pane-sla-table-wrap'><table class='yna4-pane-sla-table yna4-unload-plan-table'><thead><tr>" +
-      "<th></th><th>업체명</th><th>예약시간</th><th>상태</th><th>온도대</th><th>SKU</th><th>예상 unit</th><th>진열완료</th><th>남은</th>" +
+      "<th></th><th>업체명</th><th>예약시간</th><th>상태</th><th>온도대</th><th>SKU</th><th>예상 unit</th>" +
       "</tr></thead><tbody>";
     plan.groups.forEach(function (g) {
       var open = !!unloadPlanOpen[g.key];
@@ -3135,9 +3135,7 @@
         "<td>" + esc(g.status) + "</td>" +
         "<td>" + esc(g.tempOrder.join(" · ")) + "</td>" +
         "<td class='mono'>" + unloadFmtNum(g.skuCount) + "</td>" +
-        "<td class='mono'>" + unloadFmtNum(g.units) + "</td>" +
-        "<td class='mono'>" + unloadFmtNum(g.disp) + "</td>" +
-        "<td class='mono' style='font-weight:800'>" + unloadFmtNum(g.units - g.disp) + "</td>" +
+        "<td class='mono' style='font-weight:800'>" + unloadFmtNum(g.units) + "</td>" +
         "</tr>";
       if (!open) return;
       g.tempOrder.forEach(function (tk) {
@@ -3145,9 +3143,7 @@
         html +=
           "<tr class='plan-sub'><td></td><td>└ " + esc(tk) + "</td><td></td><td></td><td></td>" +
           "<td class='mono'>" + unloadFmtNum(Object.keys(t.sku).length) + "</td>" +
-          "<td class='mono'>" + unloadFmtNum(t.units) + "</td>" +
-          "<td class='mono'>" + unloadFmtNum(t.disp) + "</td>" +
-          "<td class='mono'>" + unloadFmtNum(t.units - t.disp) + "</td></tr>";
+          "<td class='mono'>" + unloadFmtNum(t.units) + "</td></tr>";
       });
     });
     host.innerHTML = html + "</tbody></table></div>";
@@ -3157,11 +3153,11 @@
   function unloadPlanCopyTeams() {
     var j = unloadShipJoin;
     if (!j || !j.plan || !j.plan.groups.length) return;
-    var cols = ["업체명", "예약시간", "상태", "온도대", "SKU", "예상 unit", "진열완료", "남은"];
+    var cols = ["업체명", "예약시간", "상태", "온도대", "SKU", "예상 unit"];
     var rows = j.plan.groups.map(function (g) {
       return [
         g.name, unloadPlanTimes(g), g.status, g.tempOrder.join(" · "),
-        unloadFmtNum(g.skuCount), unloadFmtNum(g.units), unloadFmtNum(g.disp), unloadFmtNum(g.units - g.disp),
+        unloadFmtNum(g.skuCount), unloadFmtNum(g.units),
       ];
     });
     var now = new Date();
