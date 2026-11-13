@@ -2957,7 +2957,7 @@
             ? " (응답 " + st.poDiag.raw + "줄 · 취소 " + st.poDiag.cancel + " · 수량0 " + st.poDiag.zero + " · " + j.ymd + " " + unloadShipCenterCode() + ")"
             : "") +
           " · PO 수량 IBC " + (st.qtyIbc || 0) +
-          (st.poMissing ? " · PO에 없는 IBC " + st.poMissing : "") +
+          (st.poMissing ? " · PO에서 발주번호를 못 찾은 IBC " + st.poMissing : "") +
           (st.blankSku ? " · 진열 빈칸 SKU " + st.blankSku : "") +
           (st.rcrtFailed ? " (RCRT 실패 " + st.rcrtFailed + ")" : "")) +
       "]";
