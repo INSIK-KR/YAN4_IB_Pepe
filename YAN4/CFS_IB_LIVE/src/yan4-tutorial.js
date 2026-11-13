@@ -1,0 +1,1008 @@
+/** YAN4 IB Shell — 게임식 튜토리얼 (강조 + 개구리 말풍선 + 다음/이전/건너뛰기)
+ *  - 상단 「튜토리얼」 버튼 → 기본 · SLA · ATS · 1~4페이지 투어
+ *  - 1·2페이지 카드 머리말의 개구리 버튼 → 그 카드만 짚는 짧은 투어
+ *  - 자동으로 띄우지 않음 (버튼으로만 연다)
+ */
+(function () {
+  "use strict";
+  if (window.__YAN4_TUTORIAL__) return;
+
+  var FROG_SRC = "./media/tutorial-frog.png";
+  var Z = 2147483647; /* 셸(#yna4UnifiedUiShell_v09) 2147483646 보다 위 */
+  var NO_TARGET_NOTE = "조회한 뒤 다시 보면 이 자리를 짚어 드립니다.";
+
+  /* ───────── 찾기 도우미 ───────── */
+  function isVis(el) {
+    if (!el || !el.getBoundingClientRect) return false;
+    var r = el.getBoundingClientRect();
+    if (r.width < 2 || r.height < 2) return false;
+    var cs = window.getComputedStyle(el);
+    return cs.visibility !== "hidden" && cs.display !== "none";
+  }
+  function qa(sel, root) {
+    try {
+      return Array.prototype.slice.call((root || document).querySelectorAll(sel));
+    } catch (e) {
+      return [];
+    }
+  }
+  function q(sel, root) {
+    var list = qa(sel, root);
+    for (var i = 0; i < list.length; i++) if (isVis(list[i])) return list[i];
+    return null;
+  }
+  function txt(el) {
+    return String((el && el.textContent) || "").replace(/\s+/g, " ").trim();
+  }
+  /** root 안에서 sel 중 글자가 text 로 시작하는 첫 보이는 요소 */
+  function byText(root, sel, text) {
+    var list = qa(sel, root);
+    for (var i = 0; i < list.length; i++) {
+      if (isVis(list[i]) && txt(list[i]).indexOf(text) === 0) return list[i];
+    }
+    return null;
+  }
+  function pageEl(key) {
+    return document.getElementById("yna4UnifiedUiShell_v09-shell-page-" + key);
+  }
+  function card(id) {
+    return document.querySelector('.yna4-pane-card[data-pane="' + id + '"]');
+  }
+  /** 카드 안 요소 찾기 함수 */
+  function inCard(id, sel, text) {
+    return function () {
+      var c = card(id);
+      if (!c) return null;
+      return text ? byText(c, sel, text) : q(sel, c);
+    };
+  }
+  function cardWhole(id) {
+    return function () {
+      return card(id);
+    };
+  }
+  function inPage(key, sel, text) {
+    return function () {
+      var p = pageEl(key);
+      if (!p) return null;
+      return text ? byText(p, sel, text) : q(sel, p);
+    };
+  }
+  function all() {
+    var fns = Array.prototype.slice.call(arguments);
+    return function () {
+      var out = [];
+      fns.forEach(function (f) {
+        var r = typeof f === "function" ? f() : q(f);
+        if (r) out.push(r);
+      });
+      return out;
+    };
+  }
+
+  /* ───────── MK2 SLA 탭 (개요 · 피벗 표 · 이동중) — MK1에는 없음 ───────── */
+  function slaTabs() {
+    return qa(".yna4-sla-tab", pageEl("sla"));
+  }
+  function hasSlaTabs() {
+    return slaTabs().length > 0;
+  }
+  function activeSlaTab() {
+    var t = slaTabs().filter(function (b) {
+      return b.classList.contains("yna4-sla-tab--active");
+    })[0];
+    return t ? txt(t) : "";
+  }
+  /** 탭을 바꿨으면 true */
+  function selectSlaTab(label) {
+    var tabs = slaTabs();
+    for (var i = 0; i < tabs.length; i++) {
+      if (txt(tabs[i]) === label) {
+        if (tabs[i].classList.contains("yna4-sla-tab--active")) return false;
+        try {
+          tabs[i].click();
+        } catch (e) {}
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /* ───────── 페이지 이동 ───────── */
+  function navBtn(page) {
+    var nav = qa("#banner .yna4-shell-page-nav button, .yna4-shell-page-nav button");
+    for (var i = 0; i < nav.length; i++) {
+      var b = nav[i];
+      if (page === "sla" && b.classList.contains("yna4-shell-page-nav--sla")) return b;
+      if (page === "ats" && b.classList.contains("yna4-shell-page-nav--ats")) return b;
+      if (
+        txt(b) === page &&
+        !b.classList.contains("yna4-shell-page-nav--sla") &&
+        !b.classList.contains("yna4-shell-page-nav--ats")
+      )
+        return b;
+    }
+    return null;
+  }
+  function gotoPage(page, done) {
+    if (!page) return done();
+    var p = pageEl(page);
+    if (p && p.style.display !== "none") return done();
+    var b = navBtn(page);
+    if (b && isVis(b)) {
+      try {
+        b.click();
+      } catch (e) {}
+      setTimeout(done, 350);
+    } else {
+      done();
+    }
+  }
+
+  /* ───────── 투어 내용 ───────── */
+  var TOURS = {};
+  var MENU = [];
+  function tour(id, name, page, steps, inMenu) {
+    TOURS[id] = { id: id, name: name, page: page, steps: steps };
+    if (inMenu) MENU.push(id);
+  }
+
+  tour(
+    "basic",
+    "기본 · 상단 바",
+    null,
+    [
+      {
+        title: "CFS IB LIVE 안내",
+        text:
+          "상단 바부터 차례로 안내합니다.<br>「다음」이나 → 키로 넘기고, Esc로 언제든 닫습니다.",
+      },
+      {
+        t: "#banner .yna4-shell-page-nav",
+        title: "페이지 버튼",
+        text:
+          "<b>SLA</b>·<b>ATS</b>가 핵심 화면입니다.<br>1·2페이지는 카드 모음, 3·4페이지는 화면 전체를 쓰는 작업 화면입니다.",
+      },
+      {
+        t: "#banner .center-group",
+        title: "센터 확인 · 전환",
+        text:
+          "「센터: YAN4 (1007) ✓」처럼 지금 센터가 표시됩니다.<br>다른 센터면 목록에서 고르고 「전환」을 누릅니다.",
+      },
+      {
+        t: "#btnLoginCoupang",
+        title: "WMS 로그인 (가장 먼저)",
+        text:
+          "SLA·ATS 조회 대부분이 WMS 세션을 씁니다.<br>로그인이 끝나면 버튼이 「로그인완료」로 바뀝니다. 세션이 풀리면 다시 눌러 재로그인합니다.",
+      },
+      {
+        t: all("#btnLoginPo", "#btnLoginMos", "#btnLoginShipments"),
+        title: "PO · MOS · SHPT",
+        text:
+          "<b>PO</b>: PO Management (SLA 진척)<br><b>MOS</b>: Gross HTP · Need help Tracking<br><b>SHPT</b>: 쉽먼트 입차예약시간<br>WMS → PO → MOS 순서로 로그인합니다.",
+      },
+      {
+        t: "#btnOpenSop",
+        title: "입고 매뉴얼 (SOP)",
+        text: "입고 SOP를 검색해서 해당 쪽을 바로 엽니다.",
+      },
+      {
+        t: "#yna4TutorialBtn",
+        title: "튜토리얼 다시 보기",
+        text:
+          "이 버튼에서 SLA · ATS · 페이지별 안내를 언제든 다시 봅니다.<br>1·2페이지 카드는 카드 오른쪽 위 <b>개구리 버튼</b>을 누르면 그 카드만 안내합니다.",
+      },
+    ],
+    true
+  );
+
+  tour(
+    "sla",
+    "SLA",
+    "sla",
+    [
+      {
+        title: "SLA 화면",
+        text:
+          "입고 진열 마감(SLA)을 조회하는 화면입니다.<br>순서: <b>로그인 → 센터 확인 → 「SLA 전체」 → 결과 보기</b>",
+      },
+      {
+        t: inPage("sla", ".yna4-sla-btn--primary"),
+        title: "「SLA 전체」",
+        text:
+          "진척 · 이관 · 직납을 한 번에 조회합니다.<br>끝나면 오른쪽에 요약과 조회 시각이 나옵니다.",
+      },
+      {
+        t: inPage("sla", ".yna4-sla-lookback"),
+        title: "기간",
+        text: "이관 조회 기간(7 · 15 · 30일)입니다. 직납 · 진척은 오늘 운영일만 봅니다.",
+      },
+      {
+        t: inPage("sla", ".yna4-sla-toolbar-check"),
+        title: "직납완료",
+        text:
+          "체크하면 직납 · 진척 조회를 건너뛰고 이관 SLA만 봅니다.<br>직납까지 보려면 체크를 풉니다.",
+      },
+      {
+        t: all(inPage("sla", ".yna4-sla-btn--auto"), inPage("sla", "button", "캡처")),
+        title: "30min Auto · 캡처",
+        text:
+          "<b>캡처</b>: 진척율 · SLA · 이동중을 이미지 한 장으로 복사합니다. 팀즈에 붙여넣으면 됩니다.<br><b>30min Auto</b>: 지금 조회 + 캡처하고 30분마다 반복합니다.",
+      },
+      {
+        when: hasSlaTabs,
+        t: function () {
+          return qa(".yna4-sla-tab", pageEl("sla")).filter(isVis);
+        },
+        title: "화면 탭",
+        text: "<b>개요</b> · <b>피벗 표</b> · <b>이동중</b>을 탭으로 오갑니다. 이어서 탭마다 짚어 봅니다.",
+      },
+      {
+        when: hasSlaTabs,
+        tab: "개요",
+        t: inPage("sla", ".yna4-sla-overview-host"),
+        title: "개요",
+        text: "조회 결과를 한 장으로 요약합니다. 채널별(RocketMart · 이관 · AG · 직납) · 온도대별로 남은 UNIT을 먼저 봅니다.",
+      },
+      {
+        tab: "개요",
+        t: inPage("sla", ".yna4-sla-progress-host"),
+        title: "A · 진척율",
+        text:
+          "금일(07:00 ~ 익일 06:59) 하차 · 입고 진행입니다.<br><b>하차 진척율</b> = 도착 대비 하차<br><b>매입 진척율</b> = 하차 대비 입고<br><b>Shrink</b> = 직납 · 이관 Shrink 품목",
+      },
+      {
+        tab: "피벗 표",
+        t: function () {
+          /* 조회 전(빈 안내 문구만 있을 때)은 짚지 않음 */
+          var h = q(".yna4-sla-pivot-host", pageEl("sla"));
+          return h && h.querySelector("table") ? h : null;
+        },
+        title: "B · 피벗 SLA 칸",
+        text:
+          "숫자는 그 시각까지 남은 UNIT입니다.<br><b>MISS</b>(SLA 1시간+ 초과) 칸부터, 그다음 가장 이른 시각 칸을 봅니다.<br>원하는 칸을 <b>더블클릭</b>하면 아래에 드릴이 열립니다.",
+      },
+      {
+        tab: "피벗 표",
+        t: inPage("sla", ".yna4-sla-pivot-drill-host"),
+        title: "C · 드릴 · 팀즈 공유",
+        text:
+          "차량 · CT · 토트 · 상품 · 유닛으로 실물을 찾습니다. 상태는 진열대기 · 진열중.<br><b>주황 행</b> = 고기 / 계란(축산)<br>「팀즈」를 누르면 표가 복사됩니다.",
+      },
+      {
+        tab: "피벗 표",
+        t: inPage("sla", ".yna4-sla-pivot-tr--direct"),
+        title: "D · 직납 드릴",
+        text:
+          "직납 칸을 누르면 RCRT에 남은 유닛을 실시간으로 봅니다(없으면 「-」).<br>진열 후 다시 누르면 진열된 만큼 숫자가 줄고, 바뀐 칸은 <b>연한 노랑</b>입니다.<br>「로그인 필요」가 나오면 WMS 재로그인 후 다시 누릅니다.",
+      },
+      {
+        tab: "이동중",
+        t: function () {
+          return (
+            q(".yna4-sla-moving-host", pageEl("sla")) ||
+            q(".yna4-sla-pivot-col--moving", pageEl("sla"))
+          );
+        },
+        title: "E · 이동중",
+        text:
+          "아직 센터에 안 온 UNIT입니다. 칸을 누르면 차량별 목록이 나옵니다.<br>FROM FC · 온도대 · 차량 · 상차시간 · CT · 유닛 · 기한 · 남은시간 — 기한이 지나면 「만료」.",
+      },
+      {
+        title: "현장 요약",
+        text:
+          "① MISS 칸부터, 그다음 가장 이른 시각 칸<br>② 칸을 눌러 상품 · 토트 · RCRT 위치 확인<br>③ 진열 후 다시 눌러 숫자가 줄었는지 확인",
+      },
+    ],
+    true
+  );
+
+  tour(
+    "ats",
+    "ATS",
+    "ats",
+    [
+      {
+        title: "ATS 화면",
+        text:
+          "보충(ATS) 목록을 만들고 팀즈 · 보충지로 나눠 주는 화면입니다.<br>순서: <b>「시간대 조회」 → 시간대 선택 → 「조회실행」</b>",
+      },
+      {
+        t: inPage("ats", ".yna4-ats-btn--cutline"),
+        title: "1 · 「시간대 조회」",
+        text: "보충 시간대와 잔여 건수를 불러옵니다.<br>안 되면 WMS 로그인 후 다시 누릅니다.",
+      },
+      {
+        t: inPage("ats", ".yna4-ats-toolbar-row--cutline"),
+        title: "2 · 보충 시간대 선택",
+        text: "처리할 시간대만 체크합니다. 「전체」 · 「해제」로 한 번에 켜고 끕니다.",
+      },
+      {
+        t: inPage("ats", ".yna4-ats-deadline-offset"),
+        title: "보충마감설정",
+        text: "보충마감 = 출고마감 − 입력한 분(기본 50분). 다음 조회실행부터 적용됩니다.",
+      },
+      {
+        t: inPage("ats", ".yna4-ats-btn--primary"),
+        title: "3 · 「조회실행」",
+        text:
+          "로케이션 재고까지 확인해 목록을 만듭니다.<br>끝나면 버퍼충족 · 대체없음 건수가 문구로 나옵니다.",
+      },
+      {
+        t: all(inPage("ats", ".yna4-ats-btn--auto"), inPage("ats", ".yna4-ats-auto-interval")),
+        title: "AUTO",
+        text: "켜면 고른 간격(10 · 20 · 30분)마다 조회실행합니다. 다시 누르면 꺼집니다.",
+      },
+      {
+        t: function () {
+          return qa(".yna4-ats-sort-mode-btn", pageEl("ats")).filter(isVis);
+        },
+        title: "나열 순서",
+        text:
+          "<b>기본</b>: 유통기한 → 보충마감 → 차량 → 로케이션<br><b>수량</b>: 보충수량 많은 순",
+      },
+      {
+        t: inPage("ats", ".yna4-ats-btn--urgent"),
+        title: "직납+18시이전",
+        text:
+          "급한 건만 골라 봅니다(직납 전부 + 상차 18시 이전).<br>누를 때마다 꺼짐 → 음영표시 → 해당행만 으로 바뀝니다.",
+      },
+      {
+        t: function () {
+          return qa(".yna4-ats-zone-mode-btn", pageEl("ats")).filter(function (b) {
+            return isVis(b) && !b.classList.contains("yna4-ats-sort-mode-btn");
+          });
+        },
+        title: "팀즈 모드 · PDF 모드",
+        text:
+          "<b>팀즈</b>: 구간 버튼을 누르면 그 구간 표가 복사됩니다 → 팀즈에 붙여넣기.<br><b>PDF</b>: 구간 버튼으로 보충지에 넣을 구간을 켜고 끕니다.",
+      },
+      {
+        t: function () {
+          return qa(".yna4-ats-zone-btn", pageEl("ats")).filter(isVis);
+        },
+        title: "구간 버튼",
+        text: "EGG · 냉장 · 상온 · 냉동 · RM · 버퍼존 등 온도대 · 작업 구간별 버튼입니다.",
+      },
+      {
+        t: "#btnAtsPrintMergePdf",
+        title: "보충지출력(PDF)",
+        text: "PDF 모드에서 켠 구간 · 보충마감만 담아 보충지를 뽑습니다. 초록(완료) 행은 빠집니다.",
+      },
+      {
+        t: inPage("ats", ".yna4-ats-deadline-chips"),
+        title: "보충마감 칩",
+        text: "조회 후 나타납니다. 마감별로 범위를 좁힐 때 씁니다.",
+      },
+      {
+        t: inPage("ats", ".yna4-ats-view-tabs"),
+        title: "대시보드 · CT 현황판",
+        text: "구간별 목록(대시보드)과 CT 기준 현황판을 오갑니다.",
+      },
+      {
+        t: inPage("ats", ".yna4-ats-dashboard-panel"),
+        title: "구간별 목록 보기",
+        text:
+          "①~⑬ 구간마다 <b>보충</b>할 수량 / 남은 <b>재고</b>, 실물 위치(<b>로케이션 · CT</b>)가 나옵니다.<br><b>초록</b> = 보충 끝 · <b>주황</b> = 일부 진열(「추가보충필요」면 남은 것 보충) · <b>음영</b> = 직납 / 18시 이전, 먼저 처리",
+      },
+      {
+        t: inPage("ats", ".yna4-ats-ct-filter-btn"),
+        title: "CT · 차량번호 정렬 · 필터",
+        text: "열 머리의 이 버튼으로 CT · 차량번호를 정렬하거나 골라 봅니다.",
+      },
+      {
+        title: "현장 요약",
+        text:
+          "받은 보충지는 <b>색 없는 행만</b>, 맨 오른쪽 「보충기한」이 이른 것부터.<br>로케이션에서 꺼내 CT 기준으로 「보충」 열 수량만큼 보충합니다.",
+      },
+    ],
+    true
+  );
+
+  /* 1·2페이지 카드 — 카드마다 개구리 버튼 */
+  var CARD_TOURS = {
+    po: {
+      name: "Direct Tracking (receiving)",
+      steps: [
+        {
+          t: cardWhole("po"),
+          title: "Direct Tracking",
+          text:
+            "직납 발주 중 수량 차이가 있는 발주만 골라 검품 · 하차와 맞춰 봅니다.<br>발주 = 회송+입고, 발주 = 진열완료인 건은 빠집니다. (WMS · PO 로그인)",
+        },
+        { t: inCard("po", "input[type=date], .yna4-pane-inp"), title: "입고일자", text: "발주 목록과 검품(B) 하차 조회에 같이 쓰는 날짜입니다." },
+        { t: inCard("po", "button", "작업 시작"), title: "작업 시작 · 중지", text: "발주 목록 → 차이 발주 상세 → 검품 조인 순서로 모읍니다. 멈추려면 「작업 중지」." },
+        { t: inCard("po", "button", "통합 결과"), title: "통합 결과", text: "마지막 실행 결과를 팝업 창으로 엽니다." },
+      ],
+    },
+    unload: {
+      name: "Direct SLA (RPA)",
+      steps: [
+        { t: cardWhole("unload"), title: "Direct SLA", text: "직납 하차 내역을 모아 하차 SLA 결과를 만듭니다. (WMS 로그인)" },
+        { t: all(inCard("unload", "button", "오늘"), inCard("unload", "button", "어제")), title: "오늘 · 어제", text: "조회할 날을 고릅니다." },
+        { t: inCard("unload", "button", "작업 시작"), title: "작업 시작 · 중지", text: "하차 목록을 모읍니다. 멈추려면 「작업 중지」." },
+        { t: inCard("unload", "button", "통합 결과"), title: "통합 결과", text: "모은 결과를 SLA 표로 엽니다.<br>오류가 나면 진단 칸에서 「칸 안 전체 선택」 후 내용을 전달합니다." },
+      ],
+    },
+    avail: {
+      name: "가용화내역조회",
+      steps: [
+        { t: cardWhole("avail"), title: "가용화내역조회", text: "SKU 한 개의 한 달 가용화 내역(ADJUST · PUTAWAY)을 봅니다.<br>Cycle count · Overage · General · Transfer error만 추립니다." },
+        { t: inCard("avail", "input.yna4-avail-inp"), title: "SKU ID", text: "조회할 SKU ID를 넣습니다." },
+        { t: inCard("avail", ".yna4-avail-month"), title: "월", text: "조회할 달입니다. 이번 달은 오늘까지 봅니다." },
+        { t: inCard("avail", "select"), title: "센터", text: "「현재」는 센터 전환 없이 조회합니다. 다른 센터를 고르면 전환해서 조회한 뒤 YAN4로 돌아옵니다." },
+        { t: all(inCard("avail", "button", "조회 실행"), inCard("avail", "button", "결과")), title: "조회 실행 · 결과", text: "7일씩 나눠 조회합니다. 「결과」로 마지막 결과를 다시 엽니다." },
+      ],
+    },
+    prepack: {
+      name: "Prepack&SR Daily Patrol",
+      steps: [
+        { t: cardWhole("prepack"), title: "Prepack&SR Daily Patrol", text: "프리팩 · SR 일일 점검표를 만듭니다." },
+        { t: inCard("prepack", "button", "작업 시작"), title: "작업 시작", text: "재고관리 파일을 내려받은 뒤 결과 창을 띄웁니다." },
+        { t: inCard("prepack", "button", "결과 다시 보기"), title: "결과 다시 보기", text: "마지막 결과 창을 다시 엽니다." },
+      ],
+    },
+    slot05: {
+      name: "STOW Error Tracking",
+      steps: [
+        { t: cardWhole("slot05"), title: "STOW Error Tracking", text: "진열 문제보고(STOW 오류)를 주기적으로 확인하고, 새 건이 생기면 알립니다." },
+        { t: all(inCard("slot05", "input[id$=stow-watch-start]"), inCard("slot05", "input[id$=stow-watch-end]")), title: "기간", text: "감시할 문제보고 기간입니다." },
+        { t: inCard("slot05", "input[id$=stow-watch-interval]"), title: "주기(초)", text: "몇 초마다 다시 확인할지 정합니다." },
+        { t: all(inCard("slot05", "button", "감시 시작"), inCard("slot05", "button", "감시 중지")), title: "감시 시작 · 중지", text: "감시를 켜고 끕니다. 월별 집계는 4페이지에서 봅니다." },
+      ],
+    },
+    slot12wide: {
+      name: "Gross HTP",
+      steps: [
+        { t: cardWhole("slot12wide"), title: "Gross HTP", text: "시간대별 입고 생산성(HTP) 그래프입니다. 상단에서 고른 센터 기준입니다. (MOS 로그인)" },
+        { t: all(inCard("slot12wide", "label", "오늘"), inCard("slot12wide", "label", "어제"), inCard("slot12wide", "button", "조회")), title: "오늘 · 어제 · 조회", text: "날을 고르고 「조회」를 누릅니다." },
+        { t: inCard("slot12wide", ".yna4-gross-uph-target"), title: "목표", text: "목표 HTP입니다. 그래프에 빨간 점선으로 그려지고, 바꾸면 바로 반영됩니다." },
+      ],
+    },
+    slot06: {
+      name: "Need help Tracking",
+      steps: [
+        { t: cardWhole("slot06"), title: "Need help Tracking", text: "작업자별 Need help 요청 내역을 모아 봅니다. (MOS 로그인)" },
+        { t: inCard("slot06", "textarea"), title: "작업자 ID", text: "한 줄에 하나씩 넣습니다. 예) V6703574" },
+        { t: inCard("slot06", "input"), title: "조회일", text: "조회할 날짜입니다." },
+        { t: all(inCard("slot06", "button", "조회 시작"), inCard("slot06", "button", "조회 중지")), title: "조회 시작 · 중지", text: "조회를 시작하고 멈춥니다." },
+      ],
+    },
+    p2recv: {
+      name: "입고내역 RWA (RPA)",
+      steps: [
+        { t: cardWhole("p2recv"), title: "입고내역 RWA", text: "RCRT 토트별 입고내역을 엑셀로 뽑습니다." },
+        { t: inCard("p2recv", "select"), title: "토트바코드", text: "RCRT22 · RCRT44 · 둘 다(시트 분리) · 전체 중에서 고릅니다." },
+        { t: inCard("p2recv", "input[id$=recv-date]"), title: "입고일시", text: "조회할 날짜입니다." },
+        { t: all(inCard("p2recv", "input[placeholder='개인 AD ID']"), inCard("p2recv", "input[placeholder='AD PW']"), inCard("p2recv", "button", "계정 저장")), title: "Presto 계정", text: "생산성까지 보려면 개인 AD 계정을 넣고 「계정 저장」합니다. 서비스 계정(svc)은 안 됩니다." },
+        { t: inCard("p2recv", "button", "작업 시작"), title: "작업 시작 · 중지", text: "토트 · 날짜를 고른 뒤 시작합니다." },
+      ],
+    },
+    p2workerScan: {
+      name: "STOW SCAN TRACKING",
+      steps: [
+        { t: cardWhole("p2workerScan"), title: "STOW SCAN TRACKING", text: "작업자의 진열 스캔 기록을 엑셀로 뽑습니다." },
+        { t: inCard("p2workerScan", "input[placeholder*='쉼표']"), title: "작업자 ID", text: "여러 명은 쉼표나 띄어쓰기로 구분합니다." },
+        { t: inCard("p2workerScan", "input[type=date]"), title: "작업일", text: "조회할 날짜입니다." },
+        { t: inCard("p2workerScan", "button", "계정 저장"), title: "계정 저장", text: "Presto 개인 AD 계정입니다. 입고내역 RWA와 같이 씁니다." },
+        { t: inCard("p2workerScan", "button", "조회 후 Excel 저장"), title: "조회 후 Excel 저장", text: "조회해서 엑셀로 저장합니다." },
+      ],
+    },
+    p2rcrt: {
+      name: "RCRT QR 출력",
+      steps: [
+        { t: cardWhole("p2rcrt"), title: "RCRT QR 출력", text: "RCRT 로케이션 QR 라벨을 PDF로 만듭니다." },
+        { t: function () { var c = card("p2rcrt"); return c ? qa("select", c).filter(isVis)[0] : null; }, title: "종류", text: "냉장 오전/오후 · 상온 · 냉동 · 프로젝트 · RCRT18 · RCRT88 중에서 고릅니다." },
+        { t: function () { var c = card("p2rcrt"); return c ? qa("select, input", c).filter(isVis).slice(1) : null; }, title: "매수", text: "몇 장 뽑을지 고르거나 「직접」으로 입력합니다. 아래에 번호 범위가 미리 보입니다." },
+        { t: inCard("p2rcrt", "button", "PDF 저장"), title: "PDF 저장", text: "Downloads 폴더에 PDF로 저장합니다." },
+      ],
+    },
+    p2bipyo: {
+      name: "수박비표 출력",
+      steps: [
+        { t: cardWhole("p2bipyo"), title: "수박비표 출력", text: "수박 비표(라벨)를 PDF로 만듭니다." },
+        { t: function () { var c = card("p2bipyo"); return c ? qa("input.yna4-pane-inp", c).filter(isVis) : null; }, title: "라벨 내용", text: "라벨에 찍힐 문구 · 무게 · 전화 · 번호 등을 채웁니다." },
+        { t: inCard("p2bipyo", ".yna4-bipyo-check"), title: "gomgom", text: "체크하면 gomgom 로고를 넣습니다." },
+        { t: inCard("p2bipyo", "button", "PDF 저장"), title: "PDF 저장", text: "Downloads 폴더에 PDF로 저장합니다." },
+      ],
+    },
+    p2dmg: {
+      name: "IB 오류처리",
+      lock: true,
+      steps: [
+        { t: cardWhole("p2dmg"), title: "IB 오류처리", text: "파손 · 오버 · 숏 등 신고 내용을 붙여넣으면 전산을 확인해 엑셀(TSV)로 정리합니다." },
+      ],
+    },
+    p2tote: {
+      name: "Tote-Move RCRT88 (RPA)",
+      lock: true,
+      steps: [
+        { t: cardWhole("p2tote"), title: "Tote-Move RCRT88", text: "기간 동안 RCRT88 토트 이동 · 진열 완료 내역을 모아 봅니다." },
+      ],
+    },
+    p2loc: {
+      name: "Location CONSOL",
+      lock: true,
+      steps: [
+        { t: cardWhole("p2loc"), title: "Location CONSOL", text: "로케이션 적재율을 모아(1CP · 1FP · 1AP · 1APR) 합칠 수 있는 로케이션을 대시보드로 보여 줍니다." },
+      ],
+    },
+    barcode128: {
+      name: "바코드 생성",
+      steps: [
+        { t: cardWhole("barcode128"), title: "바코드 생성", text: "아무 값이나 Code 128 바코드로 띄워 스캔할 수 있게 합니다." },
+        { t: all(inCard("barcode128", "input"), inCard("barcode128", "button", "보기")), title: "값 넣고 「보기」", text: "값을 넣고 「보기」를 누르면 바코드가 나옵니다." },
+      ],
+    },
+  };
+
+  function lockSteps(id) {
+    return [
+      {
+        t: function () {
+          var c = card(id);
+          if (!c) return null;
+          var inp = q(".yna4-pane-lock-inp", c);
+          return inp ? [inp, byText(c, "button", "확인")].filter(Boolean) : null;
+        },
+        title: "잠긴 카드",
+        text: "관리자 비밀번호를 넣고 「확인」을 누르면 열립니다. 비밀번호는 관리자에게 묻습니다.",
+      },
+    ];
+  }
+
+  function cardTourSteps(id) {
+    var spec = CARD_TOURS[id];
+    if (!spec) return null;
+    var steps = spec.steps.slice();
+    var c = card(id);
+    if (spec.lock && c && q(".yna4-pane-lock-inp", c)) steps = steps.concat(lockSteps(id));
+    return steps;
+  }
+
+  function pageCardsTour(pageKey) {
+    var p = pageEl(pageKey);
+    var steps = [
+      {
+        t: function () {
+          return q(".yna4-pane-card .yna4-tut-card-btn", pageEl(pageKey));
+        },
+        title: pageKey + "페이지 카드",
+        text:
+          "카드마다 하는 일이 다릅니다. 카드 오른쪽 위 <b>개구리 버튼</b>을 누르면 그 카드만 자세히 안내합니다.<br>이어서 카드를 하나씩 짚어 봅니다.",
+      },
+    ];
+    qa(".yna4-pane-card[data-pane]", p).forEach(function (c) {
+      var id = c.getAttribute("data-pane");
+      var spec = CARD_TOURS[id];
+      if (!spec || !isVis(c)) return;
+      var first = spec.steps[0];
+      steps.push({ t: cardWhole(id), title: spec.name, text: first.text });
+    });
+    return steps;
+  }
+
+  tour("p1", "1페이지 카드", "1", null, true);
+  tour("p2", "2페이지 카드", "2", null, true);
+
+  tour(
+    "p3",
+    "3페이지",
+    "3",
+    [
+      {
+        title: "3페이지 · 토트 바코드 화면",
+        text: "GC바코드 하나로 상품과 그 상품이 담긴 토트 바코드를 크게 띄웁니다. 스캐너로 바로 찍을 수 있습니다.",
+      },
+      { t: inPage("3", ".yna4-page3-toolbar"), title: "GC바코드 · 조회", text: "GC바코드를 넣고 「조회」를 누릅니다. 「중지」로 멈춥니다." },
+      { t: inPage("3", ".yna4-page3-name-head"), title: "상품명 · 총 유닛", text: "조회한 상품 이름과 총 유닛 수입니다." },
+      {
+        t: function () {
+          return qa(".yna4-page3-col", pageEl("3")).filter(isVis)[0] || null;
+        },
+        title: "토트바코드",
+        text: "상품이 담긴 토트 바코드입니다. 키보드 <b>Q</b> 이전 · <b>E</b> 다음으로 넘깁니다. 아래 숫자는 몇 번째 토트인지입니다.",
+      },
+      {
+        t: function () {
+          return qa(".yna4-page3-col", pageEl("3")).filter(isVis)[1] || null;
+        },
+        title: "상품바코드",
+        text: "상품 바코드입니다.",
+      },
+      { t: inPage("3", ".yna4-page3-qty-notice"), title: "실물수량확인!", text: "진열 전에 실물 수량을 꼭 확인합니다." },
+    ],
+    true
+  );
+
+  tour(
+    "p4",
+    "4페이지",
+    "4",
+    [
+      {
+        t: inPage("4", ".yna4-stow-error-toolbar"),
+        title: "4페이지 · STOW Error Tracking (월별)",
+        text: "월을 고르고 「조회」를 누릅니다. WMS는 최대 한 달씩 조회합니다.",
+      },
+      {
+        t: function () {
+          return q(".yna4-stow-error-summary", pageEl("4")) || q(".yna4-stow-error-body", pageEl("4"));
+        },
+        title: "결과",
+        text:
+          "문제보고일시 기준으로 OVERAGE / SHORTAGE만 집계합니다.<br>O+S 합 3건 미만 · 지정 관리자는 숨기고, OVERAGE 전산수량 0은 빼고 셉니다. 오류가 가장 많은 시간대로 조를 정합니다.",
+      },
+    ],
+    true
+  );
+
+  /* ───────── 스타일 ───────── */
+  function injectCss() {
+    if (document.getElementById("yna4-tut-css")) return;
+    var s = document.createElement("style");
+    s.id = "yna4-tut-css";
+    s.textContent = [
+      "#banner .login-group button#yna4TutorialBtn,#yna4TutorialBtn{background:#4ade80;color:#0f172a;min-width:0;width:auto;height:auto;padding:4px 8px;border:0;font-size:12px;font-weight:800;line-height:1.2;letter-spacing:0;display:inline-flex;align-items:center;gap:4px;}",
+      "#banner .login-group button#yna4TutorialBtn:hover{background:#22c55e;}",
+      "#yna4TutorialBtn img{width:16px;height:16px;border-radius:50%;background:#fff;display:block;}",
+      ".yna4-tut-menu{position:fixed;z-index:" + Z + ";background:#fff;border:1px solid #cbd5e1;border-radius:10px;box-shadow:0 12px 32px rgba(15,23,42,.28);padding:6px;min-width:190px;font-family:inherit;}",
+      ".yna4-tut-menu-h{font-size:11px;color:#64748b;padding:4px 8px 6px;font-weight:700;}",
+      ".yna4-tut-menu button{display:block;width:100%;text-align:left;border:0;background:transparent;padding:7px 10px;font-size:13px;font-weight:700;color:#0f172a;border-radius:6px;cursor:pointer;font-family:inherit;}",
+      ".yna4-tut-menu button:hover{background:#eff6ff;color:#1d4ed8;}",
+      ".yna4-tut-card-btn{margin-left:auto;flex:0 0 auto;width:24px;height:24px;padding:0;border:1px solid #93c5fd;border-radius:50%;background:#fff;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;overflow:hidden;}",
+      ".yna4-tut-card-btn:hover{border-color:#16a34a;box-shadow:0 0 0 2px rgba(22,163,74,.25);}",
+      ".yna4-tut-card-btn img{width:22px;height:22px;display:block;}",
+      ".yna4-tut-root{position:fixed;inset:0;z-index:" + Z + ";font-family:inherit;}",
+      ".yna4-tut-root.is-dim{background:rgba(15,23,42,.6);}",
+      ".yna4-tut-spot{position:fixed;border:3px solid #fbbf24;border-radius:8px;box-shadow:0 0 0 9999px rgba(15,23,42,.6);pointer-events:none;transition:all .2s ease;}",
+      ".yna4-tut-bubble{position:fixed;display:flex;gap:12px;align-items:flex-start;background:#fff;border-radius:14px;border:2px solid #1d4ed8;box-shadow:0 16px 40px rgba(15,23,42,.35);padding:12px 14px 10px 10px;box-sizing:border-box;color:#0f172a;}",
+      ".yna4-tut-frog{width:76px;height:76px;flex:0 0 auto;border-radius:50%;background:#e0f2fe;border:2px solid #bfdbfe;}",
+      ".yna4-tut-main{flex:1 1 auto;min-width:0;}",
+      ".yna4-tut-title{font-size:14px;font-weight:800;color:#1e3a8a;margin:2px 0 4px;}",
+      ".yna4-tut-text{font-size:13px;line-height:1.55;color:#1e293b;word-break:keep-all;}",
+      ".yna4-tut-text b{color:#b91c1c;}",
+      ".yna4-tut-note{margin-top:6px;font-size:12px;color:#64748b;}",
+      ".yna4-tut-foot{display:flex;align-items:center;gap:6px;margin-top:10px;}",
+      ".yna4-tut-count{font-size:12px;color:#64748b;font-weight:700;margin-right:auto;}",
+      ".yna4-tut-foot button{border:1px solid #cbd5e1;background:#fff;color:#334155;border-radius:7px;padding:5px 11px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;}",
+      ".yna4-tut-foot button:hover{background:#f1f5f9;}",
+      ".yna4-tut-foot button.yna4-tut-next{background:#1d4ed8;border-color:#1d4ed8;color:#fff;}",
+      ".yna4-tut-foot button.yna4-tut-next:hover{background:#1e40af;}",
+      ".yna4-tut-foot button:disabled{opacity:.4;cursor:default;}",
+    ].join("");
+    (document.head || document.documentElement).appendChild(s);
+  }
+
+  /* ───────── 실행기 ───────── */
+  var cur = null; /* { steps, i, root, spot, bubble } */
+
+  function resolveTargets(step) {
+    if (!step.t) return [];
+    var r;
+    try {
+      r = typeof step.t === "function" ? step.t() : q(step.t);
+    } catch (e) {
+      r = null;
+    }
+    if (!r) return [];
+    if (!Array.isArray(r)) r = [r];
+    return r.filter(isVis);
+  }
+
+  function unionRect(els) {
+    var L = Infinity, T = Infinity, R = -Infinity, B = -Infinity;
+    els.forEach(function (el) {
+      var r = el.getBoundingClientRect();
+      L = Math.min(L, r.left);
+      T = Math.min(T, r.top);
+      R = Math.max(R, r.right);
+      B = Math.max(B, r.bottom);
+    });
+    return { left: L, top: T, right: R, bottom: B };
+  }
+
+  function close() {
+    if (!cur) return;
+    try {
+      cur.root.remove();
+    } catch (e) {}
+    if (cur.slaTab0) selectSlaTab(cur.slaTab0);
+    window.removeEventListener("keydown", onKey, true);
+    window.removeEventListener("resize", onResize, true);
+    cur = null;
+  }
+
+  function onKey(ev) {
+    if (!cur) return;
+    var k = ev.key;
+    if (k === "Escape") close();
+    else if (k === "ArrowRight" || k === "Enter") go(cur.i + 1);
+    else if (k === "ArrowLeft") go(cur.i - 1);
+    else return;
+    ev.preventDefault();
+    ev.stopPropagation();
+  }
+  function onResize() {
+    if (cur) place();
+  }
+
+  function go(i) {
+    if (!cur) return;
+    if (i >= cur.steps.length) return close();
+    if (i < 0) return;
+    cur.i = i;
+    render();
+  }
+
+  function render() {
+    var step = cur.steps[cur.i];
+    if (step.tab && selectSlaTab(step.tab)) {
+      var me = cur;
+      setTimeout(function () {
+        if (cur === me) render();
+      }, 150);
+      return;
+    }
+    var els = resolveTargets(step);
+    cur.els = els;
+    if (els.length) {
+      var r0 = unionRect(els);
+      if (r0.top < 40 || r0.bottom > window.innerHeight - 10) {
+        try {
+          els[0].scrollIntoView({ block: "center", inline: "nearest" });
+        } catch (e) {}
+      }
+    }
+    var b = cur.bubble;
+    b.querySelector(".yna4-tut-title").textContent = step.title || "";
+    b.querySelector(".yna4-tut-text").innerHTML = step.text || "";
+    var note = b.querySelector(".yna4-tut-note");
+    var missing = !!step.t && !els.length;
+    note.textContent = missing ? step.missing || NO_TARGET_NOTE : "";
+    note.style.display = missing ? "" : "none";
+    b.querySelector(".yna4-tut-count").textContent = cur.i + 1 + " / " + cur.steps.length;
+    b.querySelector(".yna4-tut-prev").disabled = cur.i === 0;
+    var last = cur.i === cur.steps.length - 1;
+    b.querySelector(".yna4-tut-next").textContent = last ? "완료" : "다음 ▶";
+    b.querySelector(".yna4-tut-skip").style.visibility = last ? "hidden" : "visible";
+    place();
+    try {
+      b.querySelector(".yna4-tut-next").focus({ preventScroll: true });
+    } catch (e) {}
+  }
+
+  function place() {
+    var vw = window.innerWidth, vh = window.innerHeight, M = 12, GAP = 14, PAD = 6;
+    var b = cur.bubble, spot = cur.spot, els = cur.els || [];
+    var w = Math.min(420, vw - 2 * M);
+    b.style.width = w + "px";
+    if (!els.length) {
+      spot.style.display = "none";
+      cur.root.classList.add("is-dim");
+      var h0 = b.offsetHeight;
+      b.style.left = Math.round((vw - w) / 2) + "px";
+      b.style.top = Math.round(Math.max(M, (vh - h0) / 2)) + "px";
+      return;
+    }
+    cur.root.classList.remove("is-dim");
+    var r = unionRect(els);
+    var s = {
+      left: Math.max(2, r.left - PAD),
+      top: Math.max(2, r.top - PAD),
+      right: Math.min(vw - 2, r.right + PAD),
+      bottom: Math.min(vh - 2, r.bottom + PAD),
+    };
+    spot.style.display = "";
+    spot.style.left = s.left + "px";
+    spot.style.top = s.top + "px";
+    spot.style.width = Math.max(0, s.right - s.left) + "px";
+    spot.style.height = Math.max(0, s.bottom - s.top) + "px";
+    var h = b.offsetHeight;
+    var clampX = function (x) {
+      return Math.max(M, Math.min(vw - w - M, x));
+    };
+    var clampY = function (y) {
+      return Math.max(M, Math.min(vh - h - M, y));
+    };
+    var x, y;
+    if (s.bottom + GAP + h <= vh - M) {
+      y = s.bottom + GAP;
+      x = clampX(s.left);
+    } else if (s.top - GAP - h >= M) {
+      y = s.top - GAP - h;
+      x = clampX(s.left);
+    } else if (s.right + GAP + w <= vw - M) {
+      x = s.right + GAP;
+      y = clampY(s.top);
+    } else if (s.left - GAP - w >= M) {
+      x = s.left - GAP - w;
+      y = clampY(s.top);
+    } else {
+      /* 대상이 화면 대부분을 덮음 → 오른쪽 아래 구석 */
+      x = vw - w - M - 8;
+      y = vh - h - M - 8;
+    }
+    b.style.left = Math.round(x) + "px";
+    b.style.top = Math.round(y) + "px";
+  }
+
+  function start(steps) {
+    close();
+    closeMenu();
+    steps = (steps || []).filter(function (s) {
+      try {
+        return !s.when || s.when();
+      } catch (e) {
+        return false;
+      }
+    });
+    if (!steps.length) return;
+    injectCss();
+    var root = document.createElement("div");
+    root.className = "yna4-tut-root";
+    root.setAttribute("role", "dialog");
+    root.setAttribute("aria-label", "튜토리얼");
+    var spot = document.createElement("div");
+    spot.className = "yna4-tut-spot";
+    var b = document.createElement("div");
+    b.className = "yna4-tut-bubble";
+    b.innerHTML =
+      '<img class="yna4-tut-frog" alt="" src="' + FROG_SRC + '">' +
+      '<div class="yna4-tut-main"><div class="yna4-tut-title"></div><div class="yna4-tut-text"></div>' +
+      '<div class="yna4-tut-note"></div>' +
+      '<div class="yna4-tut-foot"><span class="yna4-tut-count"></span>' +
+      '<button type="button" class="yna4-tut-skip">건너뛰기</button>' +
+      '<button type="button" class="yna4-tut-prev">이전</button>' +
+      '<button type="button" class="yna4-tut-next">다음 ▶</button></div></div>';
+    root.appendChild(spot);
+    root.appendChild(b);
+    /* 강조 영역 밖 클릭은 막기만 함 (실수로 조회 버튼 누르지 않게) */
+    root.addEventListener("mousedown", function (ev) {
+      if (!b.contains(ev.target)) ev.preventDefault();
+    });
+    b.querySelector(".yna4-tut-skip").addEventListener("click", close);
+    b.querySelector(".yna4-tut-prev").addEventListener("click", function () {
+      go(cur.i - 1);
+    });
+    b.querySelector(".yna4-tut-next").addEventListener("click", function () {
+      go(cur.i + 1);
+    });
+    document.body.appendChild(root);
+    cur = { steps: steps, i: 0, root: root, spot: spot, bubble: b, els: [], slaTab0: activeSlaTab() };
+    window.addEventListener("keydown", onKey, true);
+    window.addEventListener("resize", onResize, true);
+    render();
+  }
+
+  function startTour(id) {
+    var t = TOURS[id];
+    if (!t) return;
+    closeMenu();
+    gotoPage(t.page, function () {
+      var steps = t.steps;
+      if (id === "p1") steps = pageCardsTour("1");
+      if (id === "p2") steps = pageCardsTour("2");
+      start(steps);
+    });
+  }
+
+  function startCard(id) {
+    start(cardTourSteps(id));
+  }
+
+  /* ───────── 상단 버튼 · 메뉴 ───────── */
+  var menuEl = null;
+  function closeMenu() {
+    if (menuEl) {
+      try {
+        menuEl.remove();
+      } catch (e) {}
+      menuEl = null;
+      document.removeEventListener("mousedown", onDocDown, true);
+    }
+  }
+  function onDocDown(ev) {
+    if (!menuEl) return;
+    var btn = document.getElementById("yna4TutorialBtn");
+    if (menuEl.contains(ev.target) || (btn && btn.contains(ev.target))) return;
+    closeMenu();
+  }
+  function navVisible(page) {
+    if (!page) return true;
+    var b = navBtn(page);
+    return !!(b && isVis(b));
+  }
+  function openMenu(anchor) {
+    if (menuEl) return closeMenu();
+    injectCss();
+    menuEl = document.createElement("div");
+    menuEl.className = "yna4-tut-menu";
+    var h = document.createElement("div");
+    h.className = "yna4-tut-menu-h";
+    h.textContent = "어떤 화면을 안내할까요?";
+    menuEl.appendChild(h);
+    MENU.forEach(function (id) {
+      var t = TOURS[id];
+      if (!navVisible(t.page)) return;
+      var it = document.createElement("button");
+      it.type = "button";
+      it.textContent = t.name;
+      it.setAttribute("data-tour", id);
+      it.addEventListener("click", function () {
+        startTour(id);
+      });
+      menuEl.appendChild(it);
+    });
+    document.body.appendChild(menuEl);
+    var r = anchor.getBoundingClientRect();
+    var mw = menuEl.offsetWidth;
+    menuEl.style.top = Math.round(r.bottom + 6) + "px";
+    menuEl.style.left = Math.round(Math.max(8, Math.min(window.innerWidth - mw - 8, r.right - mw))) + "px";
+    document.addEventListener("mousedown", onDocDown, true);
+  }
+
+  function ensureTopButton() {
+    if (document.getElementById("yna4TutorialBtn")) return;
+    var sop = document.getElementById("btnOpenSop");
+    var host = sop ? sop.parentNode : document.querySelector("#banner .login-group");
+    if (!host) return;
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.id = "yna4TutorialBtn";
+    btn.title = "튜토리얼 (화면 사용법 안내)";
+    btn.innerHTML = '<img alt="" src="' + FROG_SRC + '"><span>튜토리얼</span>';
+    btn.addEventListener("click", function () {
+      openMenu(btn);
+    });
+    if (sop && sop.nextSibling) host.insertBefore(btn, sop.nextSibling);
+    else host.appendChild(btn);
+  }
+
+  function ensureCardButtons() {
+    qa(".yna4-pane-card[data-pane]").forEach(function (c) {
+      var id = c.getAttribute("data-pane");
+      if (!CARD_TOURS[id]) return;
+      var hdr = c.querySelector(".yna4-pane-card-hdr");
+      if (!hdr || hdr.querySelector(".yna4-tut-card-btn")) return;
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "yna4-tut-card-btn";
+      b.title = CARD_TOURS[id].name + " 튜토리얼";
+      b.setAttribute("aria-label", CARD_TOURS[id].name + " 튜토리얼");
+      b.innerHTML = '<img alt="" src="' + FROG_SRC + '">';
+      b.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+        startCard(id);
+      });
+      hdr.appendChild(b);
+    });
+  }
+
+  function boot() {
+    injectCss();
+    ensureTopButton();
+    ensureCardButtons();
+  }
+
+  window.__YAN4_TUTORIAL__ = {
+    start: startTour,
+    startCard: startCard,
+    close: close,
+    tours: TOURS,
+    cards: CARD_TOURS,
+    current: function () {
+      return cur ? { i: cur.i, n: cur.steps.length, title: cur.steps[cur.i].title, hit: (cur.els || []).length } : null;
+    },
+  };
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+  /* 셸이 카드를 늦게 그리거나 다시 그릴 때(잠금 해제 등) 버튼을 다시 붙임 */
+  setInterval(function () {
+    try {
+      ensureTopButton();
+      ensureCardButtons();
+    } catch (e) {}
+  }, 1500);
+})();
