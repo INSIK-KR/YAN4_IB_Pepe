@@ -571,7 +571,7 @@
       "</div>" +
       "<div id='" +
       ROOT_ID +
-      "-unload-sla-pane'>" +
+      "-unload-sla-pane' class='yna4-unload-pane'>" +
       "<div class='yna4-pane-sla-kpi' id='" +
       ROOT_ID +
       "-unload-sla-kpi'></div>" +
@@ -595,7 +595,7 @@
       "</div>" +
       "<div id='" +
       ROOT_ID +
-      "-unload-plan-pane' style='display:none'></div>" +
+      "-unload-plan-pane' class='yna4-unload-pane yna4-unload-plan-pane' style='display:none'></div>" +
       "</div>";
     document.body.appendChild(overlay);      "</div>";
     document.body.appendChild(overlay);
@@ -3139,22 +3139,17 @@
   }
 
   function unloadPlanSummary(plan) {
-    var done = 0;
-    var before = 0;
-    plan.groups.forEach(function (g) {
-      if (g.unloaded) done++;
-      else before++;
-    });
     var temps = Object.keys(plan.tempTotal)
-      .sort()
+      .sort(function (a, b) {
+        return unloadPlanTempRank(a) - unloadPlanTempRank(b) || (a < b ? -1 : 1);
+      })
       .map(function (t) {
         return t + " " + unloadFmtNum(plan.tempTotal[t]);
       })
       .join(" / ");
     return (
       "예상 업체 " + plan.groups.length + " · " + unloadFmtNum(plan.units) + " unit · SKU " +
-      unloadFmtNum(plan.skuCount) + " · 하차 " + done + " · 하차 전 " + before +
-      (temps ? " · " + temps : "")
+      unloadFmtNum(plan.skuCount) + (temps ? " · " + temps : "")
     );
   }
 
@@ -3242,7 +3237,7 @@
         "<span><i class='yp-dot " + unloadPlanTempCls(sec.temp) + "'></i>" + esc(sec.temp) + " <b>" +
         unloadFmtNum(sec.units) + "</b> (" + Math.round((sec.units / total) * 100) + "%)</span>";
     });
-    html += "</div><p class='yna4-pane-sla-hint'>PO Management 입고예정일 기준 · 예상 unit = 업체확정 발주수량(취소 제외) · 업체명 · 예약시간은 쉽먼트 · 연한 막대 = 이미 하차 · 온도 제목을 누르면 접고 펼침</p>";
+    html += "</div><p class='yna4-pane-sla-hint'>PO Management 입고예정일 기준 · 예상 unit = 업체확정 발주수량(취소 제외) · 업체명 · 예약시간은 쉽먼트 · 온도 제목을 누르면 접고 펼침</p>";
 
     /* 온도 구역 → 업체 막대 */
     secs.forEach(function (sec) {
@@ -3255,21 +3250,20 @@
         "<span class='yp-caret'>" + (closed ? "▸" : "▾") + "</span>" +
         "<i class='yp-dot " + cls + "'></i><strong>" + esc(sec.temp) + "</strong>" +
         "<span class='yp-sec-meta'>업체 " + sec.rows.length + " · <b>" + unloadFmtNum(sec.units) + "</b> unit · SKU " +
-        unloadFmtNum(sec.skuCount) + (sec.before ? " · 하차 전 " + sec.before : "") + "</span></div>";
+        unloadFmtNum(sec.skuCount) + "</span></div>";
       if (!closed) {
         html += "<div class='yp-rows'>";
         sec.rows.forEach(function (r) {
           var w = Math.max(1.5, (r.units / max) * 100);
           var tip = r.g.name + " · " + sec.temp + " · " + unloadFmtNum(r.units) + " unit · SKU " + r.sku +
-            " · " + r.g.status + " · " + unloadPlanTimes(r.g);
+            " · 예약 " + unloadPlanTimes(r.g);
           html +=
-            "<div class='yp-row" + (r.g.unloaded ? " is-done" : "") + "' title='" + esc(tip) + "'>" +
+            "<div class='yp-row' title='" + esc(tip) + "'>" +
             "<span class='yp-name'>" + esc(r.g.name) + "</span>" +
             "<span class='yp-track'><span class='yp-fill " + cls + "' style='width:" + w.toFixed(1) + "%'></span></span>" +
             "<span class='yp-val'>" + unloadFmtNum(r.units) + "</span>" +
             "<span class='yp-sku'>SKU " + r.sku + "</span>" +
             "<span class='yp-time'>" + esc(unloadPlanTimes(r.g)) + "</span>" +
-            "<span class='yp-st'>" + esc(r.g.status) + "</span>" +
             "</div>";
         });
         html += "</div>";
@@ -3283,13 +3277,13 @@
   function unloadPlanCopyTeams() {
     var j = unloadShipJoin;
     if (!j || !j.plan || !j.plan.groups.length) return;
-    var cols = ["온도대", "업체명", "예약시간", "상태", "SKU", "예상 unit"];
+    var cols = ["온도대", "업체명", "예약시간", "SKU", "예상 unit"];
     var rows = [];
     unloadPlanSections(j.plan).forEach(function (sec) {
       sec.rows.forEach(function (r) {
-        rows.push([sec.temp, r.g.name, unloadPlanTimes(r.g), r.g.status, unloadFmtNum(r.sku), unloadFmtNum(r.units)]);
+        rows.push([sec.temp, r.g.name, unloadPlanTimes(r.g), unloadFmtNum(r.sku), unloadFmtNum(r.units)]);
       });
-      rows.push([sec.temp + " 합계", "업체 " + sec.rows.length, "", "", unloadFmtNum(sec.skuCount), unloadFmtNum(sec.units)]);
+      rows.push([sec.temp + " 합계", "업체 " + sec.rows.length, "", unloadFmtNum(sec.skuCount), unloadFmtNum(sec.units)]);
     });
     var now = new Date();
     var title =
@@ -3312,7 +3306,7 @@
       rows.map(function (r) {
         var sum = / 합계$/.test(r[0]);
         return "<tr" + (sum ? " style='background:#f8fafc;font-weight:bold'" : "") + ">" + r.map(function (c, ci) {
-          return "<td" + (ci >= 4 ? " style='text-align:right'" : "") + ">" + esc(c) + "</td>";
+          return "<td" + (ci >= 3 ? " style='text-align:right'" : "") + ">" + esc(c) + "</td>";
         }).join("") + "</tr>";
       }).join("") +
       "</tbody></table>";
@@ -17390,6 +17384,8 @@
         ".yna4-sla-modal .yna4-unload-tab.is-on{background:#fff;color:#0f4c8a;border-color:#93c5fd;}",
         ".yna4-sla-modal .yna4-unload-plan-bar{display:flex;align-items:center;gap:8px;justify-content:space-between;margin:2px 0 6px;}",
         ".yna4-sla-modal .yna4-unload-plan-sum{font-weight:800;color:#0f172a;}",
+        ".yna4-sla-modal .yna4-unload-pane{flex:1;min-height:0;display:flex;flex-direction:column;}",
+        ".yna4-sla-modal .yna4-unload-plan-pane{display:block;overflow:auto;padding:0 6px 10px 0;}",
         ".yna4-sla-modal .yp-share{display:flex;gap:2px;height:14px;margin:4px 0 6px;}",
         ".yna4-sla-modal .yp-seg{display:block;height:100%;min-width:3px;}",
         ".yna4-sla-modal .yp-seg:first-child{border-radius:4px 0 0 4px;}",
@@ -17410,7 +17406,7 @@
         ".yna4-sla-modal .yp-sec-meta{margin-left:10px;color:#475569;font-size:12px;}",
         ".yna4-sla-modal .yp-sec-meta b{color:#0f172a;}",
         ".yna4-sla-modal .yp-rows{padding:4px 10px 8px;}",
-        ".yna4-sla-modal .yp-row{display:grid;grid-template-columns:minmax(120px,220px) 1fr 64px 64px 110px 92px;align-items:center;gap:8px;padding:3px 0;font-size:12px;color:#0f172a;}",
+        ".yna4-sla-modal .yp-row{display:grid;grid-template-columns:minmax(120px,240px) 1fr 70px 70px 120px;align-items:center;gap:8px;padding:3px 0;font-size:12px;color:#0f172a;}",
         ".yna4-sla-modal .yp-row:hover{background:#f8fafc;}",
         ".yna4-sla-modal .yp-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}",
         ".yna4-sla-modal .yp-track{display:block;height:12px;}",
