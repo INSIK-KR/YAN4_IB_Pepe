@@ -2464,7 +2464,40 @@
   var UNLOAD_PO_REFERER = UNLOAD_PO_ORIGIN + "/po/sku/list";
   var UNLOAD_PO_PAGE_CAP = 120;
 
+  /** SLA 페이지와 같은 경로: 앱 세션 fetch(Origin·Referer 를 실제로 붙임) → 없으면 GM */
   function unloadPoPost(body) {
+    if (
+      typeof chrome !== "undefined" &&
+      chrome.runtime &&
+      typeof chrome.runtime.sendMessage === "function"
+    ) {
+      return new Promise(function (resolve, reject) {
+        chrome.runtime.sendMessage(
+          {
+            type: "yan4PoManagementFetch",
+            url: UNLOAD_PO_DOWNLOAD_URL,
+            method: "POST",
+            referer: UNLOAD_PO_REFERER,
+            origin: UNLOAD_PO_ORIGIN,
+            accept: "application/json, text/javascript, */*; q=0.01",
+            body: body,
+            contentType: "application/x-www-form-urlencoded; charset=UTF-8",
+          },
+          function (res) {
+            if (chrome.runtime.lastError || !res) {
+              unloadPoPostGm(body).then(resolve, reject);
+              return;
+            }
+            if (res.ok && res.status >= 200 && res.status < 400) resolve(String(res.body || ""));
+            else reject(new Error(res.error || "HTTP " + (res.status || "?")));
+          }
+        );
+      });
+    }
+    return unloadPoPostGm(body);
+  }
+
+  function unloadPoPostGm(body) {
     return new Promise(function (resolve, reject) {
       if (typeof GM_xmlhttpRequest !== "function") {
         reject(new Error("GM_xmlhttpRequest 필요"));
@@ -2620,12 +2653,20 @@
     }
     var byPo = Object.create(null);
     var rows = 0;
+    var diag = { raw: 0, cancel: 0, zero: 0, pages: page };
     unloadCsvRecords(chunks.join("")).forEach(function (c) {
       var po = String(c[iPo] || "").replace(/\D/g, "");
       if (!po || po === String(head[iPo] || "")) return;
-      if (iSt >= 0 && String(c[iSt] || "").trim() === "취소") return;
+      diag.raw++;
+      if (iSt >= 0 && String(c[iSt] || "").trim() === "취소") {
+        diag.cancel++;
+        return;
+      }
       var confirmed = unloadPoNum(c[iConf]) || 0;
-      if (confirmed <= 0) return;
+      if (confirmed <= 0) {
+        diag.zero++;
+        return;
+      }
       (byPo[po] = byPo[po] || []).push({
         sku: String(c[iSku] || "").replace(/\D/g, ""),
         confirmed: confirmed,
@@ -2636,7 +2677,10 @@
       });
       rows++;
     });
-    return { byPo: byPo, rows: rows };
+    if (!diag.raw) {
+      console.warn("[YAN4 Direct SLA PO Management] 0줄", { header: header, dataLen: chunks.join("").length, body: unloadPoBody(1, "", ymd) });
+    }
+    return { byPo: byPo, rows: rows, diag: diag };
   }
 
   /** 외부 SKU ID 로 재고 RCRT 남은 수량. 모르면 null */
@@ -2751,6 +2795,7 @@
     try {
       po = await unloadPoFetchDay(ymd);
       stat.poRows = po.rows;
+      stat.poDiag = po.diag;
     } catch (ePoMgmt) {
       var pm = String((ePoMgmt && ePoMgmt.message) || ePoMgmt);
       if (/^HTTP (401|403)\b/.test(pm)) pm = "로그인 필요";
@@ -2906,7 +2951,11 @@
       (j.pack ? " · 트럭 " + (st.trucks || 0) : "") +
       (j.poError
         ? " · PO 수량 못 읽음: " + j.poError
-        : " · PO " + (st.poRows || 0) + "줄 · PO 수량 IBC " + (st.qtyIbc || 0) +
+        : " · PO " + (st.poRows || 0) + "줄" +
+          (st.poDiag && !st.poRows
+            ? " (응답 " + st.poDiag.raw + "줄 · 취소 " + st.poDiag.cancel + " · 수량0 " + st.poDiag.zero + " · " + j.ymd + " " + unloadShipCenterCode() + ")"
+            : "") +
+          " · PO 수량 IBC " + (st.qtyIbc || 0) +
           (st.poMissing ? " · PO에 없는 IBC " + st.poMissing : "") +
           (st.blankSku ? " · 진열 빈칸 SKU " + st.blankSku : "") +
           (st.rcrtFailed ? " (RCRT 실패 " + st.rcrtFailed + ")" : "")) +
