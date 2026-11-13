@@ -37,6 +37,7 @@ const rootFiles = [
   "yan4-location-consolidation-page.js",
   "yan4-damage-verify-page.js",
   "yan4-avail-history-page.js",
+  "yan4-tutorial.js",
 ];
 
 const vendorFiles = [
@@ -52,6 +53,7 @@ const mediaFiles = [
   "SR.wav",
   "farm-fresh-seal.png",
   "gomgom-logo.png",
+  "tutorial-frog.png",
 ];
 
 fs.mkdirSync(outVendor, { recursive: true });
