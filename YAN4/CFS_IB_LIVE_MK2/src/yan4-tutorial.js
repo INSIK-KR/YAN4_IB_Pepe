@@ -562,10 +562,10 @@
     unload: {
       name: "Direct SLA (RPA)",
       steps: [
-        { t: cardWhole("unload"), title: "Direct SLA", text: "직납 하차 내역을 모아 하차 SLA 결과를 만듭니다. (WMS 로그인)" },
+        { t: cardWhole("unload"), title: "Direct SLA", text: "직납 하차 내역을 모아 하차 SLA 결과를 만듭니다. (WMS · 쉽먼트 로그인)" },
         { t: all(inCard("unload", "button", "오늘"), inCard("unload", "button", "어제")), title: "오늘 · 어제", text: "조회할 날을 고릅니다." },
         { t: inCard("unload", "button", "작업 시작"), title: "작업 시작 · 중지", text: "하차 목록을 모읍니다. 멈추려면 「작업 중지」." },
-        { t: inCard("unload", "button", "통합 결과"), title: "통합 결과", text: "모은 결과를 SLA 표로 엽니다.<br>오류가 나면 진단 칸에서 「칸 안 전체 선택」 후 내용을 전달합니다." },
+        { t: inCard("unload", "button", "통합 결과"), title: "통합 결과", text: "모은 결과를 SLA 표로 엽니다. 쉽먼트 입차예약을 붙여 예약시간 · 쉽먼트 업체명을 보여 주고, 아직 하차 전인 예약 업체는 회색 줄로 맨 아래에 붙입니다. (쉽먼트 로그인)<br>오류가 나면 진단 칸에서 「칸 안 전체 선택」 후 내용을 전달합니다." },
       ],
     },
     avail: {
