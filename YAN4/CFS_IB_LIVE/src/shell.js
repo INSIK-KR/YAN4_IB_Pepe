@@ -565,7 +565,7 @@
       "<div class='yna4-pane-sla-kpi' id='" +
       ROOT_ID +
       "-unload-sla-kpi'></div>" +
-      "<p class='yna4-pane-sla-hint'>주황: 3시간 이내 · 노랑: 2시간 이내 · 빨강: 1시간 이내 · 검정줄: 데드라인 지남 · 초록: 여유 · 회색: 하차 전 예약 업체 · 긴급도 1초마다 갱신</p>" +
+      "<p class='yna4-pane-sla-hint'>주황: 3시간 이내 · 노랑: 2시간 이내 · 빨강: 1시간 이내 · 검정줄: 데드라인 지남 · 초록: 여유 · 회색: 하차 전 예약 업체 · 입고 · 진열완료 · 진열오류 · 남은 진열은 발주서(PO) 기준, 연한 숫자는 발주서 확인 전 WMS 수량 · 긴급도 1초마다 갱신</p>" +
       "<p class='yna4-pane-sla-hint yna4-unload-ship-line' id='" +
       ROOT_ID +
       "-unload-sla-ship'></p>" +
@@ -1903,15 +1903,10 @@
         errQty = isNaN(eQty) ? 0 : eQty;
       }
       var remainQty = recv - disp - errQty;
-      allRows.push({
-        ibc: map.idxIbc >= 0 ? c[map.idxIbc] || "" : "",
-        vendor: map.idxVendor >= 0 ? c[map.idxVendor] || "" : "",
-      });
-      if (remainQty <= 0) continue;
       var worker = map.idxWorker >= 0 ? c[map.idxWorker] || "" : "";
       if (worker) workerNames[worker] = 1;
       var ibc = map.idxIbc >= 0 ? c[map.idxIbc] || "" : "";
-      out.push({
+      var rowObj = {
         ibc: ibc,
         ibcUrl: unloadAbsInboundHref(
           unloadSlaSavedIbcLinks[String(ibc || "").trim()] || ""
@@ -1924,15 +1919,12 @@
         disp: disp,
         errQty: errQty,
         remainQty: remainQty,
-      });
+      };
+      allRows.push(rowObj);
+      if (remainQty > 0) out.push(rowObj);
     }
     out.sort(function (a, b) {
       return a.deadline - b.deadline;
-    });
-    allRows.forEach(function (x) {
-      x.ibcUrl = unloadAbsInboundHref(
-        unloadSlaSavedIbcLinks[String(x.ibc || "").trim()] || ""
-      );
     });
     return {
       pending: out,
@@ -2021,10 +2013,14 @@
             "' title='클릭 시 Gap Trace(API) 실행'>추적</button>"
           : "<span style='color:#94a3b8'>-</span>";
         var remainQtyHtml =
-          "<span class='yna4-gap-remain-qty'>" +
+          "<span class='yna4-gap-remain-qty" + (x.qtySrc === "po" ? "" : " qty-wms") + "'>" +
           unloadSlaEscapeHtml(String(x.remainQty)) +
           "</span>";
         var ship = unloadShipInfoForRow(x);
+        var qtyTd =
+          x.qtySrc === "po"
+            ? "<td class='mono'>"
+            : "<td class='mono qty-wms' title='발주서 수량을 아직 못 읽어 WMS 하차 목록 수량으로 표시'>";
         return (
           "<tr class='yna4-sla-tr " +
           urgency.cls +
@@ -2050,13 +2046,13 @@
           "<td class='mono'>" +
           unloadSlaFmtDT(x.deadline) +
           "</td>" +
-          "<td class='mono'>" +
+          qtyTd +
           unloadSlaEscapeHtml(String(x.recv)) +
           "</td>" +
-          "<td class='mono'>" +
+          qtyTd +
           unloadSlaEscapeHtml(String(x.disp)) +
           "</td>" +
-          "<td class='mono'>" +
+          qtyTd +
           unloadSlaEscapeHtml(String(x.errQty)) +
           "</td>" +
           "<td class='mono'>" +
@@ -2127,10 +2123,11 @@
     var sel = document.getElementById(ROOT_ID + "-unload-sla-worker");
     if (!sel) return;
     var v = sel.value;
+    var base = unloadSlaCardRows();
     var filtered =
       v === ""
-        ? unloadSlaAllRows.slice()
-        : unloadSlaAllRows.filter(function (r) {
+        ? base
+        : base.filter(function (r) {
             return String(r.worker || "").trim() === v;
           });
     unloadSlaLastRows = filtered;
@@ -2402,9 +2399,10 @@
   async function unloadShipIbcPoIds(row, stat) {
     var ibc = String(row.ibc || "").trim();
     if (unloadShipPoByIbc[ibc]) return unloadShipPoByIbc[ibc];
+    var none = { ids: [], urls: [] };
     if (!row.ibcUrl) {
       stat.noLink++;
-      return [];
+      return none;
     }
     try {
       var html = await unloadShipGet(
@@ -2412,25 +2410,59 @@
         unloadInboundOrigin() + "/",
         "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
       );
-      var ids = unloadShipPoNumbersFromDetailHtml(html, row.ibcUrl);
-      if (!ids.length) {
+      var info = {
+        ids: unloadShipPoNumbersFromDetailHtml(html, row.ibcUrl),
+        urls: unloadGapParsePoUrlsFromDetailHtml(html, row.ibcUrl),
+      };
+      if (!info.ids.length) {
         stat.noPo++;
-        return [];
+        return none;
       }
-      unloadShipPoByIbc[ibc] = ids;
-      return ids;
+      unloadShipPoByIbc[ibc] = info;
+      return info;
     } catch (eIbc) {
       stat.failed++;
       console.warn("[YAN4 Direct SLA IBC 상세]", ibc, eIbc);
-      return [];
+      return none;
     }
   }
 
-  /**
-   * 1) 쉽먼트 입차예약 2) 예약 트럭 상세 → 발주번호별 예약 업체
-   * 3) IBC 상세 → 발주번호 → 예약 업체. 진열 끝난 IBC 도 봐야 「하차 전」이 맞다.
-   */
-  async function unloadShipCollect(ymd, allRows) {
+  /** 진열이 끝난 발주서 수량은 더 바뀌지 않아 앱을 끌 때까지 기억 */
+  var unloadPoQtyDone = Object.create(null);
+
+  /** 발주서 SKU 줄의 입고·진열완료·진열오류 합 */
+  async function unloadPoQtyFetch(poUrl, referer) {
+    var key = unloadGapPurchaseOrderIdFromUrl(poUrl) || poUrl;
+    if (unloadPoQtyDone[key]) return unloadPoQtyDone[key];
+    var html = await unloadShipGet(
+      poUrl,
+      referer || unloadInboundOrigin() + "/",
+      "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+    );
+    var skus = unloadGapParseSkuRowsFromPoHtml(html, poUrl);
+    if (!skus.length) throw new Error("발주서 수량 표 없음");
+    var q = { recv: 0, disp: 0, err: 0 };
+    skus.forEach(function (x) {
+      q.recv += Number(x.recv) || 0;
+      q.disp += Number(x.disp) || 0;
+      q.err += Number(x.err) || 0;
+    });
+    if (q.recv > 0 && q.recv - q.disp - q.err <= 0) unloadPoQtyDone[key] = q;
+    return q;
+  }
+
+  async function unloadRunParallel(items, fn) {
+    var next = 0;
+    async function worker() {
+      while (next < items.length) await fn(items[next++]);
+    }
+    var ws = [];
+    for (var i = 0; i < Math.min(UNLOAD_SHIP_DETAIL_PARALLEL, items.length); i++) ws.push(worker());
+    await Promise.all(ws);
+  }
+
+  /** 쉽먼트 입차예약 + 예약 트럭 상세 → 발주번호별 예약 업체 */
+  async function unloadShipLoadBookings(ymd, stat) {
     unloadShipSetLine("쉽먼트 입차예약 불러오는 중…");
     var q = new URLSearchParams({
       centerCode: unloadShipCenterCode(),
@@ -2442,7 +2474,6 @@
         UNLOAD_SHIP_SCHEDULE_REFERER
       )
     );
-    var stat = { ibc: 0, byPo: 0, noPo: 0, noLink: 0, failed: 0, trucks: 0 };
     var keyByPo = Object.create(null);
     var i, j, text, obj, pos;
     for (i = 0; i < pack.trucks.length; i++) {
@@ -2464,6 +2495,28 @@
         console.warn("[YAN4 Direct SLA 트럭 상세]", pack.trucks[i].seq, eTruck);
       }
     }
+    return { pack: pack, keyByPo: keyByPo };
+  }
+
+  /**
+   * 1) 쉽먼트 입차예약 → 발주번호별 예약 업체 (실패해도 수량은 계속)
+   * 2) IBC 상세 → 발주번호 → 예약 업체. 진열 끝난 IBC 도 봐야 「하차 전」이 맞다.
+   * 3) 발주서 → 입고·진열완료·진열오류. WMS 하차 목록 수량은 두 번 찍은 하차·발주 누락분 때문에 안 쓴다.
+   *    같은 발주가 여러 IBC 에 걸리면 가장 먼저 하차한 IBC 에만 센다.
+   */
+  async function unloadShipCollect(ymd, allRows) {
+    var stat = {
+      ibc: 0, byPo: 0, noPo: 0, noLink: 0, failed: 0, trucks: 0,
+      po: 0, poOk: 0, poFailed: 0, qtyIbc: 0,
+    };
+    var book = null;
+    var shipError = "";
+    try {
+      book = await unloadShipLoadBookings(ymd, stat);
+    } catch (eShip) {
+      console.warn("[YAN4 Direct SLA 쉽먼트]", eShip);
+      shipError = unloadShipLoginText(eShip);
+    }
     var byIbc = Object.create(null);
     var matched = Object.create(null);
     var seen = Object.create(null);
@@ -2475,36 +2528,93 @@
       rows.push(r);
     });
     stat.ibc = rows.length;
-    var next = 0;
+    var infoByIbc = Object.create(null);
     var done = 0;
-    async function worker() {
-      while (next < rows.length) {
-        var r = rows[next++];
-        var ids = await unloadShipIbcPoIds(r, stat);
-        done++;
-        unloadShipSetLine("IBC 발주번호 확인 " + done + "/" + rows.length);
-        var key = "";
-        for (var k = 0; k < ids.length && !key; k++) key = keyByPo[ids[k]] || "";
-        if (key) {
-          byIbc[String(r.ibc).trim()] = key;
-          matched[key] = true;
-          stat.byPo++;
-        } else if (ids.length) {
-          console.warn("[YAN4 Direct SLA] 쉽먼트에 없는 발주번호", r.ibc, ids);
-        }
+    await unloadRunParallel(rows, async function (r) {
+      var info = await unloadShipIbcPoIds(r, stat);
+      var ibc = String(r.ibc).trim();
+      infoByIbc[ibc] = info;
+      done++;
+      unloadShipSetLine("IBC 발주번호 확인 " + done + "/" + rows.length);
+      if (!book) return;
+      var key = "";
+      for (var k = 0; k < info.ids.length && !key; k++) key = book.keyByPo[info.ids[k]] || "";
+      if (key) {
+        byIbc[ibc] = key;
+        matched[key] = true;
+        stat.byPo++;
+      } else if (info.ids.length) {
+        console.warn("[YAN4 Direct SLA] 쉽먼트에 없는 발주번호", r.ibc, info.ids);
       }
-    }
-    var workers = [];
-    for (i = 0; i < Math.min(UNLOAD_SHIP_DETAIL_PARALLEL, rows.length); i++) {
-      workers.push(worker());
-    }
-    await Promise.all(workers);
-    return { ymd: ymd, pack: pack, byIbc: byIbc, matched: matched, stat: stat };
+    });
+
+    /* 발주 → 가장 먼저 하차한 IBC */
+    var byUnload = rows.slice().sort(function (a, b) {
+      return (a.unload ? a.unload.getTime() : 0) - (b.unload ? b.unload.getTime() : 0);
+    });
+    var poOwner = Object.create(null);
+    var poList = [];
+    byUnload.forEach(function (r) {
+      var ibc = String(r.ibc).trim();
+      (infoByIbc[ibc] ? infoByIbc[ibc].urls : []).forEach(function (u) {
+        var pk = unloadGapPurchaseOrderIdFromUrl(u) || u;
+        if (poOwner[pk]) return;
+        poOwner[pk] = ibc;
+        poList.push({ key: pk, url: u, referer: r.ibcUrl });
+      });
+    });
+    stat.po = poList.length;
+    var poQty = Object.create(null);
+    var poDone = 0;
+    await unloadRunParallel(poList, async function (p) {
+      try {
+        poQty[p.key] = await unloadPoQtyFetch(p.url, p.referer);
+        stat.poOk++;
+      } catch (ePo) {
+        stat.poFailed++;
+        console.warn("[YAN4 Direct SLA 발주서]", p.key, ePo);
+      }
+      poDone++;
+      unloadShipSetLine("발주서 수량 확인 " + poDone + "/" + poList.length);
+    });
+
+    /* IBC 별 PO 수량 — 발주서 하나라도 못 읽으면 그 IBC 는 WMS 수량 그대로 */
+    var qty = Object.create(null);
+    rows.forEach(function (r) {
+      var ibc = String(r.ibc).trim();
+      var info = infoByIbc[ibc];
+      if (!info || !info.urls.length) return;
+      var q = { recv: 0, disp: 0, err: 0 };
+      var ok = true;
+      info.urls.forEach(function (u) {
+        var pk = unloadGapPurchaseOrderIdFromUrl(u) || u;
+        if (poOwner[pk] !== ibc) return;
+        if (!poQty[pk]) {
+          ok = false;
+          return;
+        }
+        q.recv += poQty[pk].recv;
+        q.disp += poQty[pk].disp;
+        q.err += poQty[pk].err;
+      });
+      if (!ok) return;
+      qty[ibc] = q;
+      stat.qtyIbc++;
+    });
+    return {
+      ymd: ymd,
+      pack: book ? book.pack : null,
+      shipError: shipError,
+      byIbc: byIbc,
+      matched: matched,
+      qty: qty,
+      stat: stat,
+    };
   }
 
   function unloadShipInfoForRow(x) {
     var j = unloadShipJoin;
-    if (!j || !j.pack) return { name: "", times: j && j.error ? "" : "-" };
+    if (!j || !j.pack) return { name: "", times: j && (j.error || j.shipError) ? "" : "-" };
     var key = j.byIbc[String(x.ibc || "").trim()];
     var v = key ? j.pack.vendors[key] : null;
     return { name: v && v.name ? v.name : "", times: unloadShipTimesText(v) };
@@ -2549,17 +2659,53 @@
     var j = unloadShipJoin;
     if (!j) return "";
     if (j.error) return j.error + " — 예약시간 · 하차 전 업체 없이 표시합니다.";
-    var linked = Object.keys(j.matched).length;
     var st = j.stat || {};
-    return (
-      "쉽먼트 입차예약 연결 (" + j.ymd + ") · 예약 업체 " + j.pack.order.length +
-      " · 하차 확인 " + linked + " · 하차 전 " + unloadShipBeforeRows().length +
-      "  [IBC " + (st.ibc || 0) + " · 발주번호 연결 " + (st.byPo || 0) +
+    var qtyText =
+      "  [IBC " + (st.ibc || 0) +
+      (j.pack ? " · 발주번호 연결 " + (st.byPo || 0) : "") +
       (st.noPo ? " · 발주번호 못 읽음 " + st.noPo : "") +
       (st.noLink ? " · 상세 링크 없음 " + st.noLink : "") +
       (st.failed ? " · 상세 실패 " + st.failed : "") +
-      " · 트럭 " + (st.trucks || 0) + "]"
+      (j.pack ? " · 트럭 " + (st.trucks || 0) : "") +
+      " · 발주서 " + (st.poOk || 0) + "/" + (st.po || 0) +
+      (st.poFailed ? " (실패 " + st.poFailed + ")" : "") +
+      " · PO 수량 IBC " + (st.qtyIbc || 0) + "]";
+    if (!j.pack) {
+      return (j.shipError || "쉽먼트 조회 실패") +
+        " — 예약시간 · 하차 전 업체 없이 표시합니다." + qtyText;
+    }
+    var linked = Object.keys(j.matched).length;
+    return (
+      "쉽먼트 입차예약 연결 (" + j.ymd + ") · 예약 업체 " + j.pack.order.length +
+      " · 하차 확인 " + linked + " · 하차 전 " + unloadShipBeforeRows().length + qtyText
     );
+  }
+
+  /**
+   * 카드에 보일 미진열 줄. 발주서 수량을 읽은 IBC 는 PO 수량으로 다시 판단하고,
+   * 못 읽은 IBC 만 WMS 하차 목록 수량을 그대로 쓴다. (SLA 페이지 다리용 unloadSlaAllRows 는 그대로)
+   */
+  function unloadSlaCardRows() {
+    var j = unloadShipJoin;
+    if (!j || !j.qty) return unloadSlaAllRows.slice();
+    var out = [];
+    unloadSlaAllParsed.forEach(function (x) {
+      var q = j.qty[String(x.ibc || "").trim()];
+      if (q) {
+        var rem = q.recv - q.disp - q.err;
+        if (rem > 0) {
+          out.push(Object.assign({}, x, {
+            recv: q.recv, disp: q.disp, errQty: q.err, remainQty: rem, qtySrc: "po",
+          }));
+        }
+      } else if (x.remainQty > 0) {
+        out.push(Object.assign({}, x, { qtySrc: "wms" }));
+      }
+    });
+    out.sort(function (a, b) {
+      return a.deadline - b.deadline;
+    });
+    return out;
   }
 
   /** 통합 결과를 열 때 한 번 — 같은 수집 결과·날짜면 다시 조회하지 않음 */
@@ -16604,6 +16750,7 @@
         ".yna4-sla-modal .yna4-pane-sla-table tr.row-ok td{background:#f0fdf4;}",
         ".yna4-sla-modal .yna4-pane-sla-table tr.row-before td{background:#f8fafc;color:#94a3b8;}",
         ".yna4-sla-modal .yna4-unload-ship-line{color:#0f4c8a;font-weight:700;}",
+        ".yna4-sla-modal .yna4-pane-sla-table .qty-wms{color:#94a3b8 !important;}",
         ".yna4-sla-modal .yna4-unload-ship-line:empty{display:none;}",
         ".yna4-gap-api-modal{position:fixed;inset:0;z-index:2147483647;}",
         ".yna4-gap-api-backdrop{position:absolute;inset:0;background:rgba(15,23,42,.55);}",
