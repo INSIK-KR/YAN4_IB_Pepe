@@ -196,6 +196,49 @@
     true
   );
 
+  /* ───────── SLA · ATS 도우미 (예시 데이터 / 실제 결과 둘 다) ───────── */
+  function slaP() {
+    return pageEl("sla");
+  }
+  function slaDrillHost() {
+    return q(".yna4-sla-pivot-drill-host", slaP());
+  }
+  function slaDrillKey() {
+    var d = slaDrillHost();
+    if (!d) return "";
+    var r = d.getAttribute("data-open-row") || "";
+    return r ? r + "|" + (d.getAttribute("data-open-col") || "") : "";
+  }
+  function slaDrillReady() {
+    var d = slaDrillHost();
+    return !!(d && slaDrillKey() && d.querySelector("tbody tr"));
+  }
+  var SLA_CELL = ".yna4-sla-pivot-num--hit:not(.yna4-sla-pivot-total):not(.yna4-sla-pivot-col--moving):not(.yna4-sla-pivot-col--adhoc)";
+  /** 먼저 볼 칸: MISS(지난 날) → SLA 경고 → 아무 이관 칸 */
+  function slaFirstCell() {
+    var p = slaP();
+    if (!p) return null;
+    var picks = [
+      ".yna4-sla-pivot-tr:not(.yna4-sla-pivot-tr--direct):not(.yna4-sla-pivot-tr--grand) .yna4-sla-pivot-num--overdue-day:not(.yna4-sla-pivot-total)",
+      ".yna4-sla-pivot-tr:not(.yna4-sla-pivot-tr--direct):not(.yna4-sla-pivot-tr--grand) .yna4-sla-pivot-num--sla-alert:not(.yna4-sla-pivot-total)",
+      ".yna4-sla-pivot-tr:not(.yna4-sla-pivot-tr--direct):not(.yna4-sla-pivot-tr--grand) " + SLA_CELL,
+    ];
+    for (var i = 0; i < picks.length; i++) {
+      var el = q(picks[i], p);
+      if (el) return el;
+    }
+    return null;
+  }
+  function slaDirectCell() {
+    return q(".yna4-sla-pivot-tr--direct " + SLA_CELL, slaP());
+  }
+  function drillOpenedBy(prefixRe) {
+    return function (k0) {
+      var k = slaDrillKey();
+      return !!(k && k !== k0 && (!prefixRe || prefixRe.test(k)) && slaDrillReady());
+    };
+  }
+
   tour(
     "sla",
     "SLA",
@@ -204,35 +247,29 @@
       {
         title: "SLA 화면",
         text:
-          "입고 진열 마감(SLA)을 조회하는 화면입니다.<br>순서: <b>로그인 → 센터 확인 → 「SLA 전체」 → 결과 보기</b>",
+          "입고 진열 마감(SLA)을 보는 화면입니다.<br>순서: <b>로그인 → 센터 확인 → 「SLA 전체」 → 결과 보기</b><br>결과 화면은 직접 눌러 보며 익힙니다.",
       },
       {
         t: inPage("sla", ".yna4-sla-btn--primary"),
         title: "「SLA 전체」",
-        text:
-          "진척 · 이관 · 직납을 한 번에 조회합니다.<br>끝나면 오른쪽에 요약과 조회 시각이 나옵니다.",
+        text: "진척 · 이관 · 직납을 한 번에 조회합니다. 끝나면 아래 줄에 요약과 조회 시각이 나옵니다.",
       },
       {
-        t: inPage("sla", ".yna4-sla-lookback"),
-        title: "기간",
-        text: "이관 조회 기간(7 · 15 · 30일)입니다. 직납 · 진척은 오늘 운영일만 봅니다.",
-      },
-      {
-        t: inPage("sla", ".yna4-sla-toolbar-check"),
-        title: "직납완료",
+        t: all(inPage("sla", ".yna4-sla-lookback"), inPage("sla", ".yna4-sla-toolbar-check")),
+        title: "기간 · 직납완료",
         text:
-          "체크하면 직납 · 진척 조회를 건너뛰고 이관 SLA만 봅니다.<br>직납까지 보려면 체크를 풉니다.",
+          "<b>기간</b>: 이관 조회 기간(7 · 15 · 30일). 직납 · 진척은 오늘 운영일만 봅니다.<br><b>직납완료</b>: 체크하면 직납 · 진척을 건너뛰고 이관만 봅니다. 직납까지 보려면 체크를 풉니다.",
       },
       {
         t: all(inPage("sla", ".yna4-sla-btn--auto"), inPage("sla", "button", "캡처")),
         title: "30min Auto · 캡처",
         text:
-          "<b>캡처</b>: 진척율 · SLA · 이동중을 이미지 한 장으로 복사합니다. 팀즈에 붙여넣으면 됩니다.<br><b>30min Auto</b>: 지금 조회 + 캡처하고 30분마다 반복합니다.",
+          "<b>캡처</b>: 진척율 · SLA · 이동중을 이미지 한 장으로 복사합니다 → 팀즈에 붙여넣기.<br><b>30min Auto</b>: 지금 조회 + 캡처하고 30분마다 반복합니다.",
       },
       {
         when: hasSlaTabs,
         t: function () {
-          return qa(".yna4-sla-tab", pageEl("sla")).filter(isVis);
+          return qa(".yna4-sla-tab", slaP()).filter(isVis);
         },
         title: "화면 탭",
         text: "<b>개요</b> · <b>피벗 표</b> · <b>이동중</b>을 탭으로 오갑니다. 이어서 탭마다 짚어 봅니다.",
@@ -249,53 +286,122 @@
         t: inPage("sla", ".yna4-sla-progress-host"),
         title: "A · 진척율",
         text:
-          "금일(07:00 ~ 익일 06:59) 하차 · 입고 진행입니다.<br><b>하차 진척율</b> = 도착 대비 하차<br><b>매입 진척율</b> = 하차 대비 입고<br><b>Shrink</b> = 직납 · 이관 Shrink 품목",
+          "금일(07:00 ~ 익일 06:59) 하차 · 입고 진행입니다.<br><b>하차 진척율</b> = 도착 대비 하차 · <b>매입 진척율</b> = 하차 대비 입고<br><b>Shrink</b> = 직납 · 이관 Shrink 품목<br>오른쪽은 업체별 입고예약 · 하차시간입니다.",
       },
       {
         tab: "피벗 표",
         t: function () {
-          /* 조회 전(빈 안내 문구만 있을 때)은 짚지 않음 */
-          var h = q(".yna4-sla-pivot-host", pageEl("sla"));
-          return h && h.querySelector("table") ? h : null;
+          var h = q(".yna4-sla-pivot-host", slaP());
+          return h && h.querySelector("table") ? h.querySelector("table") : null;
         },
-        title: "B · 피벗 SLA 칸",
+        title: "B · 피벗 표 읽는 법",
         text:
-          "숫자는 그 시각까지 남은 UNIT입니다.<br><b>MISS</b>(SLA 1시간+ 초과) 칸부터, 그다음 가장 이른 시각 칸을 봅니다.<br>원하는 칸을 <b>더블클릭</b>하면 아래에 드릴이 열립니다.",
+          "<b>행</b> = 직납(DIR) · 이관 온도대(Ambient · Chilled · Frozen · RocketMart)<br><b>열</b> = SLA 날짜 · 시각. 숫자는 그 시각까지 진열해야 할 남은 UNIT입니다.<br><b>MISS</b> 열은 이미 SLA가 지난 칸, <b>이동중</b>은 아직 센터에 안 온 UNIT입니다.",
       },
       {
         tab: "피벗 표",
-        t: inPage("sla", ".yna4-sla-pivot-drill-host"),
-        title: "C · 드릴 · 팀즈 공유",
+        t: slaFirstCell,
+        act: "이 칸을 더블클릭해 보세요",
+        snap: slaDrillKey,
+        done: drillOpenedBy(null),
+        title: "급한 칸부터 — 더블클릭",
         text:
-          "차량 · CT · 토트 · 상품 · 유닛으로 실물을 찾습니다. 상태는 진열대기 · 진열중.<br><b>주황 행</b> = 고기 / 계란(축산)<br>「팀즈」를 누르면 표가 복사됩니다.",
+          "<b>MISS</b>(빨간 칸)부터, 그다음 가장 이른 시각 칸을 봅니다.<br>칸을 <b>더블클릭</b>하면 그 칸에 들어 있는 실물 목록(드릴)이 아래에 열립니다.",
       },
       {
         tab: "피벗 표",
-        t: inPage("sla", ".yna4-sla-pivot-tr--direct"),
-        title: "D · 직납 드릴",
+        t: function () {
+          var d = slaDrillHost();
+          return d && slaDrillKey() ? d : null;
+        },
+        title: "C · 드릴 목록",
         text:
-          "직납 칸을 누르면 RCRT에 남은 유닛을 실시간으로 봅니다(없으면 「-」).<br>진열 후 다시 누르면 진열된 만큼 숫자가 줄고, 바뀐 칸은 <b>연한 노랑</b>입니다.<br>「로그인 필요」가 나오면 WMS 재로그인 후 다시 누릅니다.",
+          "차량 · 상차시간 · CT · 토트 · 상품 · 유닛 · <b>상태</b>(진열대기 · 진열중)로 실물을 찾습니다.<br><b>주황 행</b> = 고기 / 계란(축산)<br>같은 칸을 다시 더블클릭하면 닫힙니다.",
+      },
+      {
+        tab: "피벗 표",
+        t: function () {
+          return q(".yna4-sla-pivot-drill-teams-btn", slaDrillHost());
+        },
+        title: "팀즈 공유",
+        text: "「팀즈」를 누르면 지금 드릴 표가 복사됩니다. 팀즈 채팅에 그대로 붙여넣으면 됩니다.",
+      },
+      {
+        tab: "피벗 표",
+        t: function () {
+          return qa(".yna4-sla-pivot-drill-filter-btn, .yna4-sla-pivot-drill-sort-btn", slaDrillHost()).filter(isVis).slice(0, 3);
+        },
+        title: "정렬 · 필터",
+        text: "열 머리의 ▾ · ▲▼ 버튼으로 차량 · 토트 · 상태별로 걸러 보거나 정렬합니다.",
+      },
+      {
+        tab: "피벗 표",
+        t: slaDirectCell,
+        act: "직납 칸을 더블클릭해 보세요",
+        snap: slaDrillKey,
+        done: drillOpenedBy(/^DIRECT/),
+        title: "D · 직납 칸",
+        text: "주황 배경의 <b>DIR</b> 행은 직납입니다. 직납 칸도 더블클릭하면 품목 목록이 열립니다.",
+      },
+      {
+        tab: "피벗 표",
+        t: function () {
+          var d = slaDrillHost();
+          return d && /^DIRECT/.test(slaDrillKey()) ? d : null;
+        },
+        title: "직납 드릴 — RCRT 실시간",
+        text:
+          "업체 · SKU · 상품 · <b>RCRT</b>(지금 남은 수량, 없으면 「-」) · 하차일시 · SLA(+12h)입니다.<br>진열한 뒤 다시 누르면 진열된 만큼 숫자가 줄고, 바뀐 칸은 <b>연한 노랑</b>이 됩니다.<br>「로그인 필요」가 나오면 WMS 재로그인 후 다시 누릅니다.",
+        demoNote: "예시 데이터에서는 실시간 RCRT 조회를 하지 않아 「RCRT 조회…」로 남습니다.",
       },
       {
         tab: "이동중",
         t: function () {
-          return (
-            q(".yna4-sla-moving-host", pageEl("sla")) ||
-            q(".yna4-sla-pivot-col--moving", pageEl("sla"))
-          );
+          return q(".yna4-sla-moving-host table", slaP()) ? q(".yna4-sla-moving-host", slaP()) : null;
         },
-        title: "E · 이동중",
+        title: "E · 이동중 차량",
         text:
-          "아직 센터에 안 온 UNIT입니다. 칸을 누르면 차량별 목록이 나옵니다.<br>FROM FC · 온도대 · 차량 · 상차시간 · CT · 유닛 · 기한 · 남은시간 — 기한이 지나면 「만료」.",
+          "아직 센터에 안 온 차량 목록입니다.<br>FROM FC · 온도대 · 차량 · 상차시간 · <b>기한</b> · <b>남은시간</b> · CT · 유닛. 기한이 지나면 「만료」.<br>피벗의 <b>이동중</b> 칸을 더블클릭하면 그 온도대 이동중 토트 목록도 볼 수 있습니다.",
       },
       {
         title: "현장 요약",
         text:
-          "① MISS 칸부터, 그다음 가장 이른 시각 칸<br>② 칸을 눌러 상품 · 토트 · RCRT 위치 확인<br>③ 진열 후 다시 눌러 숫자가 줄었는지 확인",
+          "① MISS 칸부터, 그다음 가장 이른 시각 칸<br>② 칸을 더블클릭해 상품 · 토트 · RCRT 위치 확인 → 「팀즈」로 공유<br>③ 진열 후 다시 눌러 숫자가 줄었는지 확인",
       },
     ],
     true
   );
+
+  /* ───────── ATS ───────── */
+  function atsP() {
+    return pageEl("ats");
+  }
+  function atsViewTabBtn(label) {
+    return qa(".yna4-ats-view-tab", atsP()).filter(function (b) {
+      return isVis(b) && txt(b).indexOf(label) >= 0;
+    })[0] || null;
+  }
+  function atsViewTabOn(label) {
+    var b = atsViewTabBtn(label);
+    return !!(b && b.classList.contains("is-on"));
+  }
+  /** 행이 있는 첫 구간 (⑬ 재고 없음은 뒤로) */
+  function atsFirstPanelWithRows() {
+    var panels = qa(".yna4-ats-dashboard-panel", atsP()).filter(isVis);
+    var fallback = null;
+    for (var i = 0; i < panels.length; i++) {
+      var rows = qa("tbody tr", panels[i]).filter(function (tr) {
+        return tr.children.length > 3;
+      });
+      if (!rows.length) continue;
+      if (/재고 없음/.test(txt(panels[i].querySelector("h3")))) {
+        if (!fallback) fallback = panels[i];
+        continue;
+      }
+      return panels[i];
+    }
+    return fallback;
+  }
 
   tour(
     "ats",
@@ -305,17 +411,17 @@
       {
         title: "ATS 화면",
         text:
-          "보충(ATS) 목록을 만들고 팀즈 · 보충지로 나눠 주는 화면입니다.<br>순서: <b>「시간대 조회」 → 시간대 선택 → 「조회실행」</b>",
+          "보충(ATS) 목록을 만들고 팀즈 · 보충지로 나눠 주는 화면입니다.<br>순서: <b>「시간대 조회」 → 시간대 선택 → 「조회실행」</b><br>결과 화면은 직접 눌러 보며 익힙니다.",
       },
       {
         t: inPage("ats", ".yna4-ats-btn--cutline"),
         title: "1 · 「시간대 조회」",
-        text: "보충 시간대와 잔여 건수를 불러옵니다.<br>안 되면 WMS 로그인 후 다시 누릅니다.",
+        text: "보충 시간대와 잔여 건수를 불러옵니다. 안 되면 WMS 로그인 후 다시 누릅니다.",
       },
       {
         t: inPage("ats", ".yna4-ats-toolbar-row--cutline"),
         title: "2 · 보충 시간대 선택",
-        text: "처리할 시간대만 체크합니다. 「전체」 · 「해제」로 한 번에 켜고 끕니다.",
+        text: "처리할 시간대만 체크합니다(칩마다 남은 unit). 「전체」 · 「해제」로 한 번에 켜고 끕니다.",
       },
       {
         t: inPage("ats", ".yna4-ats-deadline-offset"),
@@ -323,46 +429,49 @@
         text: "보충마감 = 출고마감 − 입력한 분(기본 50분). 다음 조회실행부터 적용됩니다.",
       },
       {
-        t: inPage("ats", ".yna4-ats-btn--primary"),
-        title: "3 · 「조회실행」",
+        t: all(inPage("ats", ".yna4-ats-btn--primary"), inPage("ats", ".yna4-ats-btn--auto"), inPage("ats", ".yna4-ats-auto-interval")),
+        title: "3 · 「조회실행」 · AUTO",
         text:
-          "로케이션 재고까지 확인해 목록을 만듭니다.<br>끝나면 버퍼충족 · 대체없음 건수가 문구로 나옵니다.",
-      },
-      {
-        t: all(inPage("ats", ".yna4-ats-btn--auto"), inPage("ats", ".yna4-ats-auto-interval")),
-        title: "AUTO",
-        text: "켜면 고른 간격(10 · 20 · 30분)마다 조회실행합니다. 다시 누르면 꺼집니다.",
+          "<b>조회실행</b>: 로케이션 재고까지 확인해 목록을 만듭니다. 끝나면 버퍼충족 · 대체없음 건수가 문구로 나옵니다.<br><b>AUTO</b>: 고른 간격(10 · 20 · 30분)마다 조회실행. 다시 누르면 꺼집니다.",
       },
       {
         t: function () {
-          return qa(".yna4-ats-sort-mode-btn", pageEl("ats")).filter(isVis);
+          return atsFirstPanelWithRows();
         },
-        title: "나열 순서",
+        title: "구간별 목록",
         text:
-          "<b>기본</b>: 유통기한 → 보충마감 → 차량 → 로케이션<br><b>수량</b>: 보충수량 많은 순",
-      },
-      {
-        t: inPage("ats", ".yna4-ats-btn--urgent"),
-        title: "직납+18시이전",
-        text:
-          "급한 건만 골라 봅니다(직납 전부 + 상차 18시 이전).<br>누를 때마다 꺼짐 → 음영표시 → 해당행만 으로 바뀝니다.",
+          "①~⑬ 구간마다 <b>보충</b>할 수량 / 남은 <b>재고</b>, 실물 위치(<b>로케이션 · CT</b>), 상차 · 하차시간, <b>보충기한</b>이 나옵니다.<br><b>초록</b> = 보충 끝 · <b>주황</b> = 일부 진열(「추가보충필요」면 남은 것 보충) · <b>음영</b> = 직납 / 18시 이전, 먼저 처리<br>⑬은 진열할 재고가 없는 건입니다.",
       },
       {
         t: function () {
-          return qa(".yna4-ats-zone-mode-btn", pageEl("ats")).filter(function (b) {
+          var p = atsFirstPanelWithRows();
+          return p ? qa(".yna4-ats-ct-filter-btn", p).filter(isVis) : null;
+        },
+        title: "CT · 차량번호 정렬 · 필터",
+        text: "열 머리의 ▾ 버튼으로 CT · 차량번호를 정렬하거나 골라 봅니다.",
+      },
+      {
+        t: function () {
+          return qa(".yna4-ats-sort-mode-btn", atsP()).filter(isVis).concat([q(".yna4-ats-btn--urgent", atsP())]).filter(Boolean);
+        },
+        title: "나열 순서 · 급한 건",
+        text:
+          "<b>기본</b>: 유통기한 → 보충마감 → 차량 → 로케이션 · <b>수량</b>: 보충수량 많은 순<br><b>직납+18시이전</b>: 누를 때마다 꺼짐 → 음영표시 → 해당행만. 급한 건만 골라 봅니다.",
+      },
+      {
+        t: inPage("ats", ".yna4-ats-deadline-chips"),
+        title: "보충마감 칩",
+        text: "마감 시각별 건수입니다. 칩을 눌러 켜고 끄면 그 마감만 목록과 보충지에 남습니다.",
+      },
+      {
+        t: function () {
+          return qa(".yna4-ats-zone-mode-btn", atsP()).filter(function (b) {
             return isVis(b) && !b.classList.contains("yna4-ats-sort-mode-btn");
-          });
+          }).concat(qa(".yna4-ats-zone-btn", atsP()).filter(isVis));
         },
-        title: "팀즈 모드 · PDF 모드",
+        title: "팀즈 모드 · PDF 모드 · 구간 버튼",
         text:
-          "<b>팀즈</b>: 구간 버튼을 누르면 그 구간 표가 복사됩니다 → 팀즈에 붙여넣기.<br><b>PDF</b>: 구간 버튼으로 보충지에 넣을 구간을 켜고 끕니다.",
-      },
-      {
-        t: function () {
-          return qa(".yna4-ats-zone-btn", pageEl("ats")).filter(isVis);
-        },
-        title: "구간 버튼",
-        text: "EGG · 냉장 · 상온 · 냉동 · RM · 버퍼존 등 온도대 · 작업 구간별 버튼입니다.",
+          "<b>팀즈</b> 모드: 구간 버튼(EGG · 냉장 · 상온 · 냉동 · RM · 버퍼존)을 누르면 그 구간 표가 복사됩니다 → 팀즈에 붙여넣기.<br><b>PDF</b> 모드: 구간 버튼으로 보충지에 넣을 구간을 켜고 끕니다.",
       },
       {
         t: "#btnAtsPrintMergePdf",
@@ -370,25 +479,47 @@
         text: "PDF 모드에서 켠 구간 · 보충마감만 담아 보충지를 뽑습니다. 초록(완료) 행은 빠집니다.",
       },
       {
-        t: inPage("ats", ".yna4-ats-deadline-chips"),
-        title: "보충마감 칩",
-        text: "조회 후 나타납니다. 마감별로 범위를 좁힐 때 씁니다.",
+        t: function () {
+          return atsViewTabBtn("CT");
+        },
+        act: "「CT 현황판」을 눌러 보세요",
+        done: function () {
+          return atsViewTabOn("CT");
+        },
+        title: "CT 현황판",
+        text: "같은 결과를 <b>CT(차량)</b> 기준으로 묶어 봅니다. 어느 CT부터 꺼낼지 정할 때 씁니다.",
       },
       {
-        t: inPage("ats", ".yna4-ats-view-tabs"),
-        title: "대시보드 · CT 현황판",
-        text: "구간별 목록(대시보드)과 CT 기준 현황판을 오갑니다.",
+        t: function () {
+          return q(".yna4-ats-ov-table tbody tr:not(.yna4-ats-ov-detail)", atsP());
+        },
+        act: "이 줄을 눌러 펼쳐 보세요",
+        snap: function () {
+          return qa(".yna4-ats-ov-detail", atsP()).length;
+        },
+        done: function (n0) {
+          return qa(".yna4-ats-ov-detail", atsP()).length > n0;
+        },
+        title: "CT 줄 펼치기",
+        text: "줄마다 CT · 온도대 · 품목 수 · 보충 unit · 보충기한 · 남은 시간이 나옵니다.",
       },
       {
-        t: inPage("ats", ".yna4-ats-dashboard-panel"),
-        title: "구간별 목록 보기",
-        text:
-          "①~⑬ 구간마다 <b>보충</b>할 수량 / 남은 <b>재고</b>, 실물 위치(<b>로케이션 · CT</b>)가 나옵니다.<br><b>초록</b> = 보충 끝 · <b>주황</b> = 일부 진열(「추가보충필요」면 남은 것 보충) · <b>음영</b> = 직납 / 18시 이전, 먼저 처리",
+        t: function () {
+          return q(".yna4-ats-ov-detail", atsP());
+        },
+        title: "CT 안의 상품",
+        text: "그 CT에서 보충할 상품 · 보충 수량 · 재고 · 로케이션 · 보충기한입니다. 다시 누르면 접힙니다.",
       },
       {
-        t: inPage("ats", ".yna4-ats-ct-filter-btn"),
-        title: "CT · 차량번호 정렬 · 필터",
-        text: "열 머리의 이 버튼으로 CT · 차량번호를 정렬하거나 골라 봅니다.",
+        t: function () {
+          return atsViewTabBtn("대시보드");
+        },
+        act: "「대시보드」를 눌러 돌아가 보세요",
+        done: function () {
+          return atsViewTabOn("대시보드");
+        },
+        title: "대시보드로",
+        text: "구간별 목록 화면으로 돌아갑니다.",
       },
       {
         title: "현장 요약",
@@ -617,6 +748,13 @@
       ".yna4-tut-card-btn img{width:22px;height:22px;display:block;}",
       ".yna4-tut-root{position:fixed;inset:0;z-index:" + Z + ";font-family:inherit;}",
       ".yna4-tut-root.is-dim{background:rgba(15,23,42,.6);}",
+      ".yna4-tut-root.is-act{pointer-events:none;}",
+      ".yna4-tut-blk{position:fixed;left:0;top:0;width:0;height:0;pointer-events:auto;}",
+      ".yna4-tut-root.is-act .yna4-tut-bubble{pointer-events:auto;}",
+      ".yna4-tut-root.is-act .yna4-tut-spot{border-color:#22c55e;animation:yna4TutPulse 1.2s ease-in-out infinite;}",
+      "@keyframes yna4TutPulse{0%,100%{outline:0 solid rgba(34,197,94,.6);}50%{outline:6px solid rgba(34,197,94,.35);}}",
+      ".yna4-tut-badge{position:fixed;top:42px;left:50%;transform:translateX(-50%);background:#fef3c7;border:2px solid #f59e0b;color:#78350f;font-weight:800;font-size:12px;padding:5px 14px;border-radius:999px;pointer-events:none;white-space:nowrap;box-shadow:0 6px 16px rgba(0,0,0,.25);}",
+      ".yna4-tut-note--act{color:#15803d !important;font-weight:800;font-size:13px !important;}",
       ".yna4-tut-spot{position:fixed;border:3px solid #fbbf24;border-radius:8px;box-shadow:0 0 0 9999px rgba(15,23,42,.6);pointer-events:none;transition:all .2s ease;}",
       ".yna4-tut-bubble{position:fixed;display:flex;gap:12px;align-items:flex-start;background:#fff;border-radius:14px;border:2px solid #1d4ed8;box-shadow:0 16px 40px rgba(15,23,42,.35);padding:12px 14px 10px 10px;box-sizing:border-box;color:#0f172a;}",
       ".yna4-tut-frog{width:76px;height:76px;flex:0 0 auto;border-radius:50%;background:#e0f2fe;border:2px solid #bfdbfe;}",
@@ -664,11 +802,137 @@
     return { left: L, top: T, right: R, bottom: B };
   }
 
+  /* ───────── 예시 모드 (조회 결과가 없을 때 가명 처리한 실제 결과로 화면을 그림) ───────── */
+  var SAMPLE_SRC = "./vendor/yan4-tutorial-sample.js";
+  var samplePromise = null;
+  function loadSample() {
+    if (window.__YAN4_TUTORIAL_SAMPLE__) return Promise.resolve(window.__YAN4_TUTORIAL_SAMPLE__);
+    if (samplePromise) return samplePromise;
+    samplePromise = new Promise(function (resolve, reject) {
+      var s = document.createElement("script");
+      s.src = SAMPLE_SRC;
+      s.onload = function () {
+        if (window.__YAN4_TUTORIAL_SAMPLE__) resolve(window.__YAN4_TUTORIAL_SAMPLE__);
+        else reject(new Error("예시 데이터 없음"));
+      };
+      s.onerror = function () {
+        samplePromise = null;
+        reject(new Error("예시 데이터 파일을 못 읽음"));
+      };
+      document.head.appendChild(s);
+    });
+    return samplePromise;
+  }
+
+  /** serializeGraph 결과를 원래 객체로 (Date · Map · Set · 공유 참조 복원) */
+  function decodeGraph(root) {
+    var byId = {};
+    function dec(v) {
+      if (v === null || typeof v !== "object") return v;
+      if (Array.isArray(v)) return v.map(dec);
+      if (Object.prototype.hasOwnProperty.call(v, "__ref")) return byId[v.__ref];
+      if (Object.prototype.hasOwnProperty.call(v, "__date")) return v.__date ? new Date(v.__date) : new Date(NaN);
+      if (Object.prototype.hasOwnProperty.call(v, "__num")) return Number(v.__num);
+      if (Object.prototype.hasOwnProperty.call(v, "__skip")) return null;
+      var out;
+      if (v.__map) {
+        out = new Map();
+        if (v.__id) byId[v.__id] = out;
+        v.__map.forEach(function (kv) {
+          out.set(dec(kv[0]), dec(kv[1]));
+        });
+        return out;
+      }
+      if (v.__set) {
+        out = new Set();
+        if (v.__id) byId[v.__id] = out;
+        v.__set.forEach(function (x) {
+          out.add(dec(x));
+        });
+        return out;
+      }
+      if (v.__arr) {
+        out = [];
+        if (v.__id) byId[v.__id] = out;
+        v.__arr.forEach(function (x) {
+          out.push(dec(x));
+        });
+        return out;
+      }
+      out = {};
+      if (v.__id) byId[v.__id] = out;
+      Object.keys(v).forEach(function (k) {
+        if (k === "__id") return;
+        out[k] = dec(v[k]);
+      });
+      return out;
+    }
+    return dec(root);
+  }
+
+  function demoApi(kind) {
+    return kind === "sla" ? window.__YAN4_SLA_TUTORIAL__ : kind === "ats" ? window.__YAN4_ATS_TUTORIAL__ : null;
+  }
+  function fmtSampleTime(d) {
+    if (!(d instanceof Date) || isNaN(d.getTime())) return "";
+    var p2 = function (n) {
+      return (n < 10 ? "0" : "") + n;
+    };
+    return d.getMonth() + 1 + "/" + d.getDate() + " " + p2(d.getHours()) + ":" + p2(d.getMinutes());
+  }
+
+  /** 실제 결과가 있으면 그대로(false), 없으면 예시 데이터로 그림(라벨 문자열) */
+  function ensureDemo(kind, cb) {
+    var api = demoApi(kind);
+    if (!api || !api.replay) return cb(null);
+    try {
+      if (api.hasResult && api.hasResult()) return cb(null);
+      if (api.isBusy && api.isBusy()) return cb(null);
+    } catch (e) {}
+    loadSample().then(
+      function (sample) {
+        var data;
+        try {
+          data = decodeGraph(sample[kind]);
+        } catch (eD) {
+          return cb(null);
+        }
+        if (!data) return cb(null);
+        var when = fmtSampleTime(data.capturedAt);
+        var label = "예시 데이터" + (when ? " (" + when + " 기준)" : "");
+        window.__YAN4_TUTORIAL_DEMO__ = true;
+        var ok = false;
+        try {
+          ok = api.replay(data, label);
+        } catch (eR) {
+          if (typeof console !== "undefined" && console.warn) console.warn("[YAN4 tutorial] replay", eR);
+        }
+        if (!ok) {
+          window.__YAN4_TUTORIAL_DEMO__ = false;
+          return cb(null);
+        }
+        cb(label);
+      },
+      function () {
+        cb(null);
+      }
+    );
+  }
+  function endDemo(kind) {
+    var api = demoApi(kind);
+    try {
+      if (api && api.restore) api.restore();
+    } catch (e) {}
+    window.__YAN4_TUTORIAL_DEMO__ = false;
+  }
+
   function close() {
     if (!cur) return;
     try {
       cur.root.remove();
     } catch (e) {}
+    if (cur.actTimer) clearInterval(cur.actTimer);
+    if (cur.demo) endDemo(cur.demo);
     if (cur.slaTab0) selectSlaTab(cur.slaTab0);
     window.removeEventListener("keydown", onKey, true);
     window.removeEventListener("resize", onResize, true);
@@ -710,7 +974,8 @@
     cur.els = els;
     if (els.length) {
       var r0 = unionRect(els);
-      if (r0.top < 40 || r0.bottom > window.innerHeight - 10) {
+      /* 직접 해 보기 칸은 항상 가운데로 (고정 머리글 밑에 숨으면 클릭이 머리글에 맞음) */
+      if (step.act || r0.top < 40 || r0.bottom > window.innerHeight - 10) {
         try {
           els[0].scrollIntoView({ block: "center", inline: "nearest" });
         } catch (e) {}
@@ -721,8 +986,45 @@
     b.querySelector(".yna4-tut-text").innerHTML = step.text || "";
     var note = b.querySelector(".yna4-tut-note");
     var missing = !!step.t && !els.length;
-    note.textContent = missing ? step.missing || NO_TARGET_NOTE : "";
-    note.style.display = missing ? "" : "none";
+    var acting = !!(step.act && els.length);
+    note.className = "yna4-tut-note" + (acting ? " yna4-tut-note--act" : "");
+    note.textContent = missing
+      ? step.missing || NO_TARGET_NOTE
+      : acting
+        ? "👉 " + step.act
+        : cur.demo && step.demoNote
+          ? step.demoNote
+          : "";
+    note.style.display = note.textContent ? "" : "none";
+    var snap0 = null;
+    if (acting && typeof step.snap === "function") {
+      try {
+        snap0 = step.snap();
+      } catch (eSnap) {}
+    }
+    /* 직접 해 보기: 강조 칸만 눌리게 하고, 끝나면 다음 단계로 */
+    if (cur.actTimer) {
+      clearInterval(cur.actTimer);
+      cur.actTimer = null;
+    }
+    cur.root.classList.toggle("is-act", acting);
+    if (acting && typeof step.done === "function") {
+      var meAct = cur, iAct = cur.i;
+      cur.actTimer = setInterval(function () {
+        if (cur !== meAct || cur.i !== iAct) return;
+        var ok = false;
+        try {
+          ok = !!step.done(snap0);
+        } catch (eDone) {}
+        if (!ok) return;
+        clearInterval(cur.actTimer);
+        cur.actTimer = null;
+        note.textContent = "✓ 잘했습니다!";
+        setTimeout(function () {
+          if (cur === meAct && cur.i === iAct) go(iAct + 1);
+        }, 900);
+      }, 250);
+    }
     b.querySelector(".yna4-tut-count").textContent = cur.i + 1 + " / " + cur.steps.length;
     b.querySelector(".yna4-tut-prev").disabled = cur.i === 0;
     var last = cur.i === cur.steps.length - 1;
@@ -760,6 +1062,20 @@
     spot.style.top = s.top + "px";
     spot.style.width = Math.max(0, s.right - s.left) + "px";
     spot.style.height = Math.max(0, s.bottom - s.top) + "px";
+    /* 직접 해 보기 단계: 강조 칸 밖 네 면만 막음 */
+    var bl = cur.blockers;
+    var rects = [
+      [0, 0, vw, s.top],
+      [0, s.bottom, vw, vh - s.bottom],
+      [0, s.top, s.left, s.bottom - s.top],
+      [s.right, s.top, vw - s.right, s.bottom - s.top],
+    ];
+    for (var bi = 0; bi < 4; bi++) {
+      bl[bi].style.left = rects[bi][0] + "px";
+      bl[bi].style.top = rects[bi][1] + "px";
+      bl[bi].style.width = Math.max(0, rects[bi][2]) + "px";
+      bl[bi].style.height = Math.max(0, rects[bi][3]) + "px";
+    }
     var h = b.offsetHeight;
     var clampX = function (x) {
       return Math.max(M, Math.min(vw - w - M, x));
@@ -789,7 +1105,8 @@
     b.style.top = Math.round(y) + "px";
   }
 
-  function start(steps) {
+  function start(steps, opts) {
+    opts = opts || {};
     close();
     closeMenu();
     steps = (steps || []).filter(function (s) {
@@ -818,6 +1135,19 @@
       '<button type="button" class="yna4-tut-prev">이전</button>' +
       '<button type="button" class="yna4-tut-next">다음 ▶</button></div></div>';
     root.appendChild(spot);
+    var blockers = [];
+    for (var bk = 0; bk < 4; bk++) {
+      var blk = document.createElement("div");
+      blk.className = "yna4-tut-blk";
+      root.appendChild(blk);
+      blockers.push(blk);
+    }
+    if (opts.demoLabel) {
+      var badge = document.createElement("div");
+      badge.className = "yna4-tut-badge";
+      badge.textContent = "🐸 " + opts.demoLabel + " — 튜토리얼이 끝나면 원래 화면으로 돌아갑니다";
+      root.appendChild(badge);
+    }
     root.appendChild(b);
     /* 강조 영역 밖 클릭은 막기만 함 (실수로 조회 버튼 누르지 않게) */
     root.addEventListener("mousedown", function (ev) {
@@ -831,7 +1161,17 @@
       go(cur.i + 1);
     });
     document.body.appendChild(root);
-    cur = { steps: steps, i: 0, root: root, spot: spot, bubble: b, els: [], slaTab0: activeSlaTab() };
+    cur = {
+      steps: steps,
+      i: 0,
+      root: root,
+      spot: spot,
+      bubble: b,
+      blockers: blockers,
+      els: [],
+      slaTab0: opts.slaTab0 != null ? opts.slaTab0 : activeSlaTab(),
+      demo: opts.demo || null,
+    };
     window.addEventListener("keydown", onKey, true);
     window.addEventListener("resize", onResize, true);
     render();
@@ -845,7 +1185,11 @@
       var steps = t.steps;
       if (id === "p1") steps = pageCardsTour("1");
       if (id === "p2") steps = pageCardsTour("2");
-      start(steps);
+      if (id !== "sla" && id !== "ats") return start(steps);
+      var tab0 = activeSlaTab();
+      ensureDemo(id, function (demoLabel) {
+        start(steps, { demo: demoLabel ? id : null, demoLabel: demoLabel, slaTab0: tab0 });
+      });
     });
   }
 

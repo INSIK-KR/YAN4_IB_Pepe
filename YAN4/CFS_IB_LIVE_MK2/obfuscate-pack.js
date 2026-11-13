@@ -20,6 +20,8 @@ const SKIP_BASENAMES = new Set([
   "JsBarcode.all.min.js",
   "qrcode.min.js",
   "html2canvas.min.js",
+  /* 튜토리얼 예시 데이터 — 데이터라 난독화 불필요(3MB+) */
+  "yan4-tutorial-sample.js",
 ]);
 
 const COPY_ROOT_FILES = ["main.js", "preload.js", "preload-sop.js", "package.json"];
