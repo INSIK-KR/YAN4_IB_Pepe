@@ -575,7 +575,7 @@
       "<div class='yna4-pane-sla-kpi' id='" +
       ROOT_ID +
       "-unload-sla-kpi'></div>" +
-      "<p class='yna4-pane-sla-hint'>주황: 3시간 이내 · 노랑: 2시간 이내 · 빨강: 1시간 이내 · 검정줄: 데드라인 지남 · 초록: 여유 · 회색: 하차 전 예약 업체 · 입고(업체확정) · 진열완료 · 남은 진열은 PO Management 기준(진열완료 빈칸은 재고 RCRT로 계산), 연한 숫자는 PO에서 못 찾은 하차의 WMS 수량 · 긴급도 1초마다 갱신</p>" +
+      "<p class='yna4-pane-sla-hint'>주황: 3시간 이내 · 노랑: 2시간 이내 · 빨강: 1시간 이내 · 검정줄: 데드라인 지남 · 초록: 여유 · 회색: 하차 전 예약 업체 · 입고(업체확정) · 진열완료 · 남은 진열은 PO Management 스큐상태 입고 · 입고완료 줄 기준(진열완료 빈칸은 재고 RCRT에 남은 수량 = 남은 진열), 연한 숫자는 PO에서 못 찾은 하차의 WMS 수량 · 긴급도 1초마다 갱신</p>" +
       "<div class='yna4-pane-row yna4-pane-sla-filter' id='" +
       ROOT_ID +
       "-unload-sla-worker-bar' style='display:none'>" +
@@ -2675,6 +2675,7 @@
         vendorId: iVid >= 0 ? String(c[iVid] || "").trim() : "",
         vendorName: iVname >= 0 ? String(c[iVname] || "").trim() : "",
         temp: iTemp >= 0 ? String(c[iTemp] || "").trim() : "",
+        status: iSt >= 0 ? String(c[iSt] || "").trim() : "",
       });
       rows++;
     });
@@ -2682,6 +2683,11 @@
       console.warn("[YAN4 Direct SLA PO Management] 0줄", { header: header, dataLen: chunks.join("").length, body: unloadPoBody(1, "", ymd) });
     }
     return { byPo: byPo, rows: rows, diag: diag };
+  }
+
+  /** SLA 표 수량은 스큐상태 「입고」·「입고완료」 줄만 (발주 상태는 아직 안 들어온 물량) */
+  function unloadPoStowable(x) {
+    return x.status === "입고" || x.status === "입고완료";
   }
 
   /** 외부 SKU ID 로 재고 RCRT 남은 수량. 모르면 null */
@@ -2834,6 +2840,7 @@
       Object.keys(ownedByIbc).forEach(function (ibc) {
         ownedByIbc[ibc].forEach(function (id) {
           po.byPo[id].forEach(function (x) {
+            if (!unloadPoStowable(x)) return;
             if (x.displayed != null || !x.sku || blankSeen[x.sku]) return;
             blankSeen[x.sku] = true;
             blankSkus.push(x.sku);
@@ -2863,6 +2870,7 @@
         var q = { recv: 0, disp: 0 };
         ownedByIbc[ibc].forEach(function (id) {
           po.byPo[id].forEach(function (x) {
+            if (!unloadPoStowable(x)) return;
             q.recv += x.confirmed;
             if (x.displayed != null) {
               x.dispCalc = Math.min(x.displayed, x.confirmed);
