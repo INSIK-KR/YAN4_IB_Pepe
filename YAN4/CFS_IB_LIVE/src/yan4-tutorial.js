@@ -1035,12 +1035,100 @@
       URL.revokeObjectURL(a.href);
       a.remove();
     }, 4000);
-    alert(
-      "[예시 데이터 추출] Downloads 폴더에 저장했습니다.\n" + name + "\n\n" +
-        "SLA: " + (sla ? "있음" : "없음 (「SLA 전체」 먼저)") + "\n" +
-        "ATS: " + (hasAts ? ats.rows.length + "행" : "없음 (「조회실행」 먼저)") + "\n" +
-        "크기: " + Math.round(json.length / 1024).toLocaleString() + " KB"
+    var info =
+      "SLA: " + (sla ? "있음" : "없음 (「SLA 전체」 먼저)") +
+      " · ATS: " + (hasAts ? ats.rows.length + "행" : "없음 (「조회실행」 먼저)") +
+      " · 원본 " + Math.round(json.length / 1024).toLocaleString() + " KB";
+    gzipBase64(json).then(
+      function (b64) {
+        showChunkDialog(name, info, b64);
+      },
+      function (eZ) {
+        alert("[예시 데이터 추출] Downloads에 " + name + " 저장. (압축 실패: " + (eZ && eZ.message ? eZ.message : eZ) + ")\n" + info);
+      }
     );
+  }
+
+  /** 문자열 → gzip → base64 (메일·드라이브 막혔을 때 구글 문서로 옮기려고) */
+  function gzipBase64(text) {
+    var cs = new CompressionStream("gzip");
+    var stream = new Blob([text]).stream().pipeThrough(cs);
+    return new Response(stream).arrayBuffer().then(function (buf) {
+      var u8 = new Uint8Array(buf);
+      var bin = "";
+      for (var i = 0; i < u8.length; i += 0x8000) {
+        bin += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+      }
+      return btoa(bin);
+    });
+  }
+
+  var CHUNK_CHARS = 100000;
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).catch(function () {
+        return copyTextFallback(text);
+      });
+    }
+    return Promise.resolve(copyTextFallback(text));
+  }
+  function copyTextFallback(text) {
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.cssText = "position:fixed;left:-9999px;top:0;";
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand("copy");
+    } catch (e) {}
+    ta.remove();
+  }
+
+  function showChunkDialog(fileName, info, b64) {
+    var n = Math.max(1, Math.ceil(b64.length / CHUNK_CHARS));
+    var old = document.getElementById("yna4-tut-export");
+    if (old) old.remove();
+    var root = document.createElement("div");
+    root.id = "yna4-tut-export";
+    root.style.cssText =
+      "position:fixed;inset:0;z-index:" + Z + ";background:rgba(15,23,42,.6);display:flex;align-items:center;justify-content:center;font-family:inherit;";
+    var box = document.createElement("div");
+    box.style.cssText =
+      "background:#fff;border-radius:12px;padding:16px 18px;width:min(560px,calc(100vw - 32px));max-height:calc(100vh - 40px);overflow:auto;box-shadow:0 16px 40px rgba(0,0,0,.35);color:#0f172a;";
+    box.innerHTML =
+      '<div style="font-size:15px;font-weight:800;color:#1e3a8a;margin-bottom:6px">예시 데이터 추출</div>' +
+      '<div style="font-size:12px;color:#475569;line-height:1.6">' + info +
+      "<br>Downloads에 <b>" + fileName + "</b> 저장함" +
+      "<br>압축 " + b64.length.toLocaleString() + "자 → <b>" + n + "조각</b> (조각당 최대 " + CHUNK_CHARS.toLocaleString() + "자)" +
+      '<br><br>조각 버튼을 누르면 클립보드에 복사됩니다. 구글 문서 하나에 조각 하나씩 붙여넣으세요.</div>' +
+      '<div class="yna4-tut-chunks" style="display:flex;flex-wrap:wrap;gap:6px;margin:12px 0"></div>' +
+      '<div style="text-align:right"><button type="button" class="yna4-tut-export-close" style="border:1px solid #cbd5e1;background:#fff;border-radius:7px;padding:6px 14px;font-weight:700;cursor:pointer">닫기</button></div>';
+    var list = box.querySelector(".yna4-tut-chunks");
+    for (var i = 0; i < n; i++) {
+      (function (i) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.setAttribute("data-chunk", String(i + 1));
+        b.textContent = "조각 " + (i + 1) + "/" + n + " 복사";
+        b.style.cssText =
+          "border:1px solid #1d4ed8;background:#eff6ff;color:#1d4ed8;border-radius:7px;padding:7px 12px;font-weight:800;cursor:pointer;font-size:12px;";
+        b.addEventListener("click", function () {
+          var part = b64.substr(i * CHUNK_CHARS, CHUNK_CHARS);
+          copyText("YAN4TUT " + (i + 1) + "/" + n + "\n" + part).then(function () {
+            b.textContent = "✓ 조각 " + (i + 1) + "/" + n + " 복사됨";
+            b.style.background = "#dcfce7";
+            b.style.borderColor = "#16a34a";
+            b.style.color = "#166534";
+          });
+        });
+        list.appendChild(b);
+      })(i);
+    }
+    box.querySelector(".yna4-tut-export-close").addEventListener("click", function () {
+      root.remove();
+    });
+    root.appendChild(box);
+    document.body.appendChild(root);
   }
 
   window.addEventListener(
