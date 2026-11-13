@@ -532,6 +532,7 @@
   /** 쉽먼트 입차예약 연결 결과 { key, ymd, pack, byIbc, matched, error } */
   var unloadShipJoin = null;
   var unloadShipBusy = false;
+  var unloadShipPending = null;
   var UNLOAD_SLA_DEADLINE_HOURS = 12;
   var UNLOAD_SLA_MS_1H = 60 * 60 * 1000;
   var UNLOAD_SLA_MS_2H = 2 * UNLOAD_SLA_MS_1H;
@@ -575,7 +576,7 @@
       "<div class='yna4-pane-sla-kpi' id='" +
       ROOT_ID +
       "-unload-sla-kpi'></div>" +
-      "<p class='yna4-pane-sla-hint'>주황: 3시간 이내 · 노랑: 2시간 이내 · 빨강: 1시간 이내 · 검정줄: 데드라인 지남 · 초록: 여유 · 회색: 하차 전 예약 업체 · 입고(업체확정) · 진열완료 · 남은 진열은 PO Management 스큐상태 입고 · 입고완료 줄 기준(진열완료 빈칸은 재고 RCRT에 남은 수량 = 남은 진열), 연한 숫자는 PO에서 못 찾은 하차의 WMS 수량 · 긴급도 1초마다 갱신</p>" +
+      "<p class='yna4-pane-sla-hint'>주황: 3시간 이내 · 노랑: 2시간 이내 · 빨강: 1시간 이내 · 검정줄: 데드라인 지남 · 초록: 여유 · 회색: 하차 전 예약 업체 · 입고(업체확정) · 진열완료 · 남은 진열은 PO Management 스큐상태 입고 · 입고완료 줄 기준(진열완료 빈칸 · 0은 재고 RCRT에 남은 수량 = 남은 진열), 연한 숫자는 PO에서 못 찾은 하차의 WMS 수량 · 긴급도 1초마다 갱신</p>" +
       "<div class='yna4-pane-row yna4-pane-sla-filter' id='" +
       ROOT_ID +
       "-unload-sla-worker-bar' style='display:none'>" +
@@ -2841,7 +2842,7 @@
         ownedByIbc[ibc].forEach(function (id) {
           po.byPo[id].forEach(function (x) {
             if (!unloadPoStowable(x)) return;
-            if (x.displayed != null || !x.sku || blankSeen[x.sku]) return;
+            if (x.displayed > 0 || !x.sku || blankSeen[x.sku]) return; // 빈칸 · 0 → 재고 RCRT
             blankSeen[x.sku] = true;
             blankSkus.push(x.sku);
           });
@@ -2872,7 +2873,7 @@
           po.byPo[id].forEach(function (x) {
             if (!unloadPoStowable(x)) return;
             q.recv += x.confirmed;
-            if (x.displayed != null) {
+            if (x.displayed > 0) {
               x.dispCalc = Math.min(x.displayed, x.confirmed);
               q.disp += x.dispCalc;
               return;
@@ -2966,7 +2967,7 @@
             : "") +
           " · PO 수량 IBC " + (st.qtyIbc || 0) +
           (st.poMissing ? " · PO에서 발주번호를 못 찾은 IBC " + st.poMissing : "") +
-          (st.blankSku ? " · 진열 빈칸 SKU " + st.blankSku : "") +
+          (st.blankSku ? " · 진열 빈칸·0 SKU " + st.blankSku : "") +
           (st.rcrtFailed ? " (RCRT 실패 " + st.rcrtFailed + ")" : "")) +
       "]";
     if (!j.pack) {
@@ -3009,11 +3010,7 @@
 
   /** 쉽먼트 · PO Management 까지 다 조회한 뒤에만 결과 창을 연다 */
   function unloadSlaOpenWhenReady(ymd) {
-    if (unloadShipBusy) {
-      setUnloadStatus("통합 결과 조회 중입니다 — 끝나면 열립니다");
-      return Promise.resolve(null);
-    }
-    setUnloadStatus("통합 결과 조회 중…");
+    setUnloadStatus(unloadShipBusy ? "통합 결과 조회 중입니다 — 끝나면 열립니다" : "통합 결과 조회 중…");
     return unloadShipEnsure(ymd).then(function (j) {
       if (!j) return null;
       if (j.error) {
@@ -3352,10 +3349,10 @@
       unloadShipSetLine(unloadShipSummaryText());
       return Promise.resolve(unloadShipJoin);
     }
-    if (unloadShipBusy) return Promise.resolve(null);
+    if (unloadShipBusy) return unloadShipPending || Promise.resolve(null);
     unloadShipBusy = true;
     unloadShipJoin = null;
-    return unloadShipCollect(ymd, unloadSlaAllParsed.slice())
+    unloadShipPending = unloadShipCollect(ymd, unloadSlaAllParsed.slice())
       .then(function (j) {
         j.key = key;
         unloadShipJoin = j;
@@ -3366,10 +3363,25 @@
       })
       .then(function () {
         unloadShipBusy = false;
+        unloadShipPending = null;
         unloadShipSetLine(unloadShipSummaryText());
         unloadSlaApplyWorkerFilter();
         return unloadShipJoin;
       });
+    return unloadShipPending;
+  }
+
+  /** 작업 시작(하차 수집)이 끝나면 쉽먼트 · PO · RCRT 까지 미리 조회 — 「통합 결과」는 바로 열린다 */
+  function unloadSlaPrefetch(ymd) {
+    return unloadShipEnsure(ymd).then(function (j) {
+      if (!j) return j;
+      if (j.error) {
+        setUnloadStatus("하차 수집 완료 · " + j.error + " — 로그인 후 「통합 결과」를 누르면 다시 조회합니다");
+      } else {
+        setUnloadStatus("하차 수집 · 쉽먼트 · PO 조회 완료 — 「통합 결과」로 바로 열립니다");
+      }
+      return j;
+    });
   }
 
   function unloadSlaRunAnalysisFromText(tsvText, htmlText) {
@@ -4570,6 +4582,7 @@
   async function unloadCopyAllPages(optYmd, optDayMode, optFlags) {
     if (unloadCopyRunning) return;
     var quiet = !!(optFlags && optFlags.quiet);
+    var prefetchYmd = "";
 
     if (typeof GM_xmlhttpRequest !== "function") {
       if (!quiet) {
@@ -4720,6 +4733,7 @@
       }
       setUnloadStatus("완료 " + lastPage + "p · 수집됨");
       setProgressByStatusId(ROOT_ID + "-unload-status", 100);
+      if (!quiet) prefetchYmd = ymd;
       unloadDiagnosticsFullText = "";
       try {
         var wOk = document.getElementById(ROOT_ID + "-unload-diag-wrap");
@@ -4743,6 +4757,11 @@
       unloadCopyRunning = false;
       unloadCopyStopRequested = false;
       if (typeof shellUnloadRefreshHint === "function") shellUnloadRefreshHint();
+    }
+    if (prefetchYmd) {
+      unloadSlaPrefetch(prefetchYmd).catch(function (ePre) {
+        console.warn("[YAN4 Direct SLA 미리 조회]", ePre);
+      });
     }
   }
 
