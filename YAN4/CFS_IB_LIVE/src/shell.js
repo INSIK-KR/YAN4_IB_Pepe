@@ -614,7 +614,7 @@
         unloadPlanCopyTeams();
         return;
       }
-      var planRow = t && t.closest ? t.closest("tr[data-plan-key]") : null;
+      var planRow = t && t.closest ? t.closest("[data-plan-key]") : null;
       if (planRow) {
         var pk = planRow.getAttribute("data-plan-key");
         unloadPlanOpen[pk] = !unloadPlanOpen[pk];
@@ -3063,7 +3063,12 @@
     Object.keys(po.byPo).forEach(function (poNo) {
       var list = po.byPo[poNo];
       if (!list.length) return;
-      var key = (book && book.keyByPo[poNo]) || "po:" + (list[0].vendorId || list[0].vendorName || poNo);
+      // 트럭에 실린 발주번호 → 그 예약 업체. 없으면 같은 업체 ID 의 쉽먼트 예약 업체 (같은 업체가 두 줄로 갈리지 않게)
+      var vid = String(list[0].vendorId || "").trim();
+      var key =
+        (book && book.keyByPo[poNo]) ||
+        (book && vid && book.pack.vendors["id:" + vid] ? "id:" + vid : "") ||
+        "po:" + (vid || list[0].vendorName || poNo);
       var v = book && book.pack.vendors[key] ? book.pack.vendors[key] : null;
       var g = byKey[key];
       if (!g) {
@@ -3112,7 +3117,7 @@
         ? "도착 · 하차 전"
         : g.v
         ? "하차 전"
-        : "예약 없음";
+        : "쉽먼트 예약 없음";
       g.rank = g.unloaded ? 3 : g.v && g.v.ARRIVED.length ? 0 : g.v ? 1 : 2;
       g.firstTime = g.v ? g.v.ARRIVED[0] || g.v.BOOKED[0] || "99:99" : "99:99";
     });
@@ -3157,58 +3162,134 @@
     return g.v ? unloadShipTimesText(g.v) : "-";
   }
 
+  /** 온도 구역 순서 · 색 (구역 제목에 온도 이름이 붙어 색만으로 구분하지 않는다) */
+  var UNLOAD_PLAN_TEMPS = [
+    { re: /냉동/, cls: "t-frozen" },
+    { re: /\+\s*1\s*℃?$|\+1℃/, cls: "t-chill1" },
+    { re: /\+\s*10/, cls: "t-chill10" },
+    { re: /상온/, cls: "t-ambient" },
+  ];
+
+  function unloadPlanTempRank(tk) {
+    for (var i = 0; i < UNLOAD_PLAN_TEMPS.length; i++) if (UNLOAD_PLAN_TEMPS[i].re.test(tk)) return i;
+    return UNLOAD_PLAN_TEMPS.length;
+  }
+
+  function unloadPlanTempCls(tk) {
+    var r = unloadPlanTempRank(tk);
+    return r < UNLOAD_PLAN_TEMPS.length ? UNLOAD_PLAN_TEMPS[r].cls : "t-other";
+  }
+
+  /** 온도 → [{ g, units, sku }] (예상 unit 많은 순) */
+  function unloadPlanSections(plan) {
+    var byTemp = Object.create(null);
+    plan.groups.forEach(function (g) {
+      g.tempOrder.forEach(function (tk) {
+        var t = g.temps[tk];
+        var sec = byTemp[tk];
+        if (!sec) sec = byTemp[tk] = { temp: tk, rows: [], units: 0, sku: Object.create(null) };
+        sec.rows.push({ g: g, units: t.units, sku: Object.keys(t.sku).length });
+        sec.units += t.units;
+        Object.keys(t.sku).forEach(function (k) {
+          sec.sku[k] = 1;
+        });
+      });
+    });
+    var secs = Object.keys(byTemp).map(function (k) {
+      var sec = byTemp[k];
+      sec.skuCount = Object.keys(sec.sku).length;
+      sec.before = sec.rows.filter(function (r) {
+        return !r.g.unloaded;
+      }).length;
+      sec.rows.sort(function (a, b) {
+        return b.units - a.units || a.g.name.localeCompare(b.g.name, "ko");
+      });
+      return sec;
+    });
+    secs.sort(function (a, b) {
+      return unloadPlanTempRank(a.temp) - unloadPlanTempRank(b.temp) || (a.temp < b.temp ? -1 : 1);
+    });
+    return secs;
+  }
+
   function unloadPlanRender() {
     var host = document.getElementById(ROOT_ID + "-unload-plan-pane");
     if (!host) return;
     var j = unloadShipJoin;
     if (!j || !j.plan) {
-      host.innerHTML = "<p class='yna4-pane-sla-hint'>통합 결과 조회 후 업체 · 온도별 당일 예상 물량이 표시됩니다.</p>";
+      host.innerHTML = "<p class='yna4-pane-sla-hint'>통합 결과 조회 후 온도 · 업체별 당일 입고 예상 물량이 표시됩니다.</p>";
       return;
     }
     var plan = j.plan;
     var esc = unloadSlaEscapeHtml;
+    var secs = unloadPlanSections(plan);
+    var total = plan.units || 1;
     var html =
       "<div class='yna4-unload-plan-bar'><span class='yna4-unload-plan-sum'>" +
       esc(unloadPlanSummary(plan)) +
-      "</span><button type='button' class='yna4-pane-btn' data-role='plan-copy'>팀즈 복사</button></div>" +
-      "<p class='yna4-pane-sla-hint'>PO Management 입고예정일 기준 · 예상 unit = 업체확정 발주수량(취소 제외) · 업체명 · 예약시간은 쉽먼트 · 줄을 누르면 온도별로 펼침</p>" +
-      "<div class='yna4-pane-sla-table-wrap'><table class='yna4-pane-sla-table yna4-unload-plan-table'><thead><tr>" +
-      "<th></th><th>업체명</th><th>예약시간</th><th>상태</th><th>온도대</th><th>SKU</th><th>예상 unit</th>" +
-      "</tr></thead><tbody>";
-    plan.groups.forEach(function (g) {
-      var open = !!unloadPlanOpen[g.key];
+      "</span><button type='button' class='yna4-pane-btn' data-role='plan-copy'>팀즈 복사</button></div>";
+    /* 온도 비중 막대 */
+    html += "<div class='yp-share' role='img' aria-label='온도별 예상 unit 비중'>";
+    secs.forEach(function (sec) {
+      var pct = (sec.units / total) * 100;
       html +=
-        "<tr class='plan-group" + (g.unloaded ? " is-done" : "") + "' data-plan-key='" + esc(g.key) + "'>" +
-        "<td>" + (open ? "▾" : "▸") + "</td>" +
-        "<td>" + esc(g.name) + "</td>" +
-        "<td class='mono'>" + esc(unloadPlanTimes(g)) + "</td>" +
-        "<td>" + esc(g.status) + "</td>" +
-        "<td>" + esc(g.tempOrder.join(" · ")) + "</td>" +
-        "<td class='mono'>" + unloadFmtNum(g.skuCount) + "</td>" +
-        "<td class='mono' style='font-weight:800'>" + unloadFmtNum(g.units) + "</td>" +
-        "</tr>";
-      if (!open) return;
-      g.tempOrder.forEach(function (tk) {
-        var t = g.temps[tk];
-        html +=
-          "<tr class='plan-sub'><td></td><td>└ " + esc(tk) + "</td><td></td><td></td><td></td>" +
-          "<td class='mono'>" + unloadFmtNum(Object.keys(t.sku).length) + "</td>" +
-          "<td class='mono'>" + unloadFmtNum(t.units) + "</td></tr>";
-      });
+        "<span class='yp-seg " + unloadPlanTempCls(sec.temp) + "' style='flex:" + sec.units +
+        " 1 0' title='" + esc(sec.temp + " · " + unloadFmtNum(sec.units) + " unit (" + pct.toFixed(1) + "%)") + "'></span>";
     });
-    host.innerHTML = html + "</tbody></table></div>";
+    html += "</div><div class='yp-legend'>";
+    secs.forEach(function (sec) {
+      html +=
+        "<span><i class='yp-dot " + unloadPlanTempCls(sec.temp) + "'></i>" + esc(sec.temp) + " <b>" +
+        unloadFmtNum(sec.units) + "</b> (" + Math.round((sec.units / total) * 100) + "%)</span>";
+    });
+    html += "</div><p class='yna4-pane-sla-hint'>PO Management 입고예정일 기준 · 예상 unit = 업체확정 발주수량(취소 제외) · 업체명 · 예약시간은 쉽먼트 · 연한 막대 = 이미 하차 · 온도 제목을 누르면 접고 펼침</p>";
+
+    /* 온도 구역 → 업체 막대 */
+    secs.forEach(function (sec) {
+      var closed = !!unloadPlanOpen[sec.temp];
+      var max = sec.rows.length ? sec.rows[0].units || 1 : 1;
+      var cls = unloadPlanTempCls(sec.temp);
+      html +=
+        "<section class='yp-sec'>" +
+        "<div class='yp-sec-head' data-plan-key='" + esc(sec.temp) + "'>" +
+        "<span class='yp-caret'>" + (closed ? "▸" : "▾") + "</span>" +
+        "<i class='yp-dot " + cls + "'></i><strong>" + esc(sec.temp) + "</strong>" +
+        "<span class='yp-sec-meta'>업체 " + sec.rows.length + " · <b>" + unloadFmtNum(sec.units) + "</b> unit · SKU " +
+        unloadFmtNum(sec.skuCount) + (sec.before ? " · 하차 전 " + sec.before : "") + "</span></div>";
+      if (!closed) {
+        html += "<div class='yp-rows'>";
+        sec.rows.forEach(function (r) {
+          var w = Math.max(1.5, (r.units / max) * 100);
+          var tip = r.g.name + " · " + sec.temp + " · " + unloadFmtNum(r.units) + " unit · SKU " + r.sku +
+            " · " + r.g.status + " · " + unloadPlanTimes(r.g);
+          html +=
+            "<div class='yp-row" + (r.g.unloaded ? " is-done" : "") + "' title='" + esc(tip) + "'>" +
+            "<span class='yp-name'>" + esc(r.g.name) + "</span>" +
+            "<span class='yp-track'><span class='yp-fill " + cls + "' style='width:" + w.toFixed(1) + "%'></span></span>" +
+            "<span class='yp-val'>" + unloadFmtNum(r.units) + "</span>" +
+            "<span class='yp-sku'>SKU " + r.sku + "</span>" +
+            "<span class='yp-time'>" + esc(unloadPlanTimes(r.g)) + "</span>" +
+            "<span class='yp-st'>" + esc(r.g.status) + "</span>" +
+            "</div>";
+        });
+        html += "</div>";
+      }
+      html += "</section>";
+    });
+    host.innerHTML = html;
   }
 
-  /** 당일 예상 요약 → 팀즈 표 (펼침 상세 제외) */
+  /** 당일 예상 → 팀즈 표 (온도 → 업체, 예상 unit 많은 순) */
   function unloadPlanCopyTeams() {
     var j = unloadShipJoin;
     if (!j || !j.plan || !j.plan.groups.length) return;
-    var cols = ["업체명", "예약시간", "상태", "온도대", "SKU", "예상 unit"];
-    var rows = j.plan.groups.map(function (g) {
-      return [
-        g.name, unloadPlanTimes(g), g.status, g.tempOrder.join(" · "),
-        unloadFmtNum(g.skuCount), unloadFmtNum(g.units),
-      ];
+    var cols = ["온도대", "업체명", "예약시간", "상태", "SKU", "예상 unit"];
+    var rows = [];
+    unloadPlanSections(j.plan).forEach(function (sec) {
+      sec.rows.forEach(function (r) {
+        rows.push([sec.temp, r.g.name, unloadPlanTimes(r.g), r.g.status, unloadFmtNum(r.sku), unloadFmtNum(r.units)]);
+      });
+      rows.push([sec.temp + " 합계", "업체 " + sec.rows.length, "", "", unloadFmtNum(sec.skuCount), unloadFmtNum(sec.units)]);
     });
     var now = new Date();
     var title =
@@ -3229,7 +3310,8 @@
       }).join("") +
       "</tr></thead><tbody>" +
       rows.map(function (r) {
-        return "<tr>" + r.map(function (c, ci) {
+        var sum = / 합계$/.test(r[0]);
+        return "<tr" + (sum ? " style='background:#f8fafc;font-weight:bold'" : "") + ">" + r.map(function (c, ci) {
           return "<td" + (ci >= 4 ? " style='text-align:right'" : "") + ">" + esc(c) + "</td>";
         }).join("") + "</tr>";
       }).join("") +
@@ -3246,7 +3328,7 @@
           }),
         ])
         .then(function () {
-          done("팀즈 복사 완료 · 업체 " + rows.length + "줄");
+          done("팀즈 복사 완료 · " + rows.length + "줄");
         })
         .catch(function () {
           if (typeof GM_setClipboard === "function") {
@@ -17308,10 +17390,37 @@
         ".yna4-sla-modal .yna4-unload-tab.is-on{background:#fff;color:#0f4c8a;border-color:#93c5fd;}",
         ".yna4-sla-modal .yna4-unload-plan-bar{display:flex;align-items:center;gap:8px;justify-content:space-between;margin:2px 0 6px;}",
         ".yna4-sla-modal .yna4-unload-plan-sum{font-weight:800;color:#0f172a;}",
-        ".yna4-sla-modal .yna4-unload-plan-table tr.plan-group{cursor:pointer;}",
-        ".yna4-sla-modal .yna4-unload-plan-table tr.plan-group:hover td{background:#eff6ff;}",
-        ".yna4-sla-modal .yna4-unload-plan-table tr.plan-group.is-done td{color:#64748b;}",
-        ".yna4-sla-modal .yna4-unload-plan-table tr.plan-sub td{background:#f8fafc;font-size:12px;}",
+        ".yna4-sla-modal .yp-share{display:flex;gap:2px;height:14px;margin:4px 0 6px;}",
+        ".yna4-sla-modal .yp-seg{display:block;height:100%;min-width:3px;}",
+        ".yna4-sla-modal .yp-seg:first-child{border-radius:4px 0 0 4px;}",
+        ".yna4-sla-modal .yp-seg:last-child{border-radius:0 4px 4px 0;}",
+        ".yna4-sla-modal .yp-seg:only-child{border-radius:4px;}",
+        ".yna4-sla-modal .yp-legend{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:12px;color:#334155;margin-bottom:4px;}",
+        ".yna4-sla-modal .yp-legend b{color:#0f172a;}",
+        ".yna4-sla-modal .yp-dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px;}",
+        ".yna4-sla-modal .t-frozen{background:#2a78d6;}",
+        ".yna4-sla-modal .t-chill1{background:#1baf7a;}",
+        ".yna4-sla-modal .t-chill10{background:#6250d6;}",
+        ".yna4-sla-modal .t-ambient{background:#eb6834;}",
+        ".yna4-sla-modal .t-other{background:#94a3b8;}",
+        ".yna4-sla-modal .yp-sec{border:1px solid #e2e8f0;border-radius:8px;margin:8px 0;background:#fff;}",
+        ".yna4-sla-modal .yp-sec-head{display:flex;align-items:center;gap:4px;padding:7px 10px;cursor:pointer;background:#f8fafc;border-radius:8px;font-size:13px;color:#0f172a;}",
+        ".yna4-sla-modal .yp-sec-head:hover{background:#eff6ff;}",
+        ".yna4-sla-modal .yp-caret{width:14px;color:#64748b;}",
+        ".yna4-sla-modal .yp-sec-meta{margin-left:10px;color:#475569;font-size:12px;}",
+        ".yna4-sla-modal .yp-sec-meta b{color:#0f172a;}",
+        ".yna4-sla-modal .yp-rows{padding:4px 10px 8px;}",
+        ".yna4-sla-modal .yp-row{display:grid;grid-template-columns:minmax(120px,220px) 1fr 64px 64px 110px 92px;align-items:center;gap:8px;padding:3px 0;font-size:12px;color:#0f172a;}",
+        ".yna4-sla-modal .yp-row:hover{background:#f8fafc;}",
+        ".yna4-sla-modal .yp-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}",
+        ".yna4-sla-modal .yp-track{display:block;height:12px;}",
+        ".yna4-sla-modal .yp-fill{display:block;height:100%;border-radius:0 4px 4px 0;}",
+        ".yna4-sla-modal .yp-row.is-done .yp-fill{opacity:.35;}",
+        ".yna4-sla-modal .yp-row.is-done .yp-name,.yna4-sla-modal .yp-row.is-done .yp-st{color:#64748b;}",
+        ".yna4-sla-modal .yp-val{text-align:right;font-weight:800;font-variant-numeric:tabular-nums;}",
+        ".yna4-sla-modal .yp-sku{text-align:right;color:#475569;font-variant-numeric:tabular-nums;}",
+        ".yna4-sla-modal .yp-time{color:#475569;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}",
+        ".yna4-sla-modal .yp-st{color:#334155;white-space:nowrap;}",
         ".yna4-gap-api-modal{position:fixed;inset:0;z-index:2147483647;}",
         ".yna4-gap-api-backdrop{position:absolute;inset:0;background:rgba(15,23,42,.55);}",
         ".yna4-gap-api-dialog{position:absolute;left:4vw;right:4vw;top:6vh;bottom:6vh;background:#fff;border-radius:10px;border:1px solid #cbd5e1;display:flex;flex-direction:column;overflow:hidden;}",
