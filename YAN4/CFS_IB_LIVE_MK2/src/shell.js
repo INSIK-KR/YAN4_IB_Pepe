@@ -2375,6 +2375,30 @@
   /** IBC 상세 동시 조회 수 — WMS 부하를 줄이려고 작게 */
   var UNLOAD_SHIP_DETAIL_PARALLEL = 3;
 
+  /**
+   * IBC 상세의 발주 줄 → 번호 목록. 링크 글자(발주번호, 예: 147110310)와
+   * 링크 주소의 purchaseOrderId(예: 114891714)가 서로 달라 둘 다 모아 쉽먼트와 맞춘다.
+   */
+  function unloadShipPoNumbersFromDetailHtml(html, detailUrl) {
+    var doc = new DOMParser().parseFromString(String(html || ""), "text/html");
+    var out = [];
+    function add(v) {
+      v = String(v == null ? "" : v).replace(/\D/g, "");
+      if (v && out.indexOf(v) < 0) out.push(v);
+    }
+    doc
+      .querySelectorAll('a[href*="purchaseOrder/item"], a[href*="purchaseorder/item"]')
+      .forEach(function (a) {
+        add(a.textContent);
+        add(
+          unloadGapPurchaseOrderIdFromUrl(
+            unloadGapAbsUrl(a.getAttribute("href") || "", detailUrl || unloadInboundOrigin() + "/")
+          )
+        );
+      });
+    return out;
+  }
+
   async function unloadShipIbcPoIds(row, stat) {
     var ibc = String(row.ibc || "").trim();
     if (unloadShipPoByIbc[ibc]) return unloadShipPoByIbc[ibc];
@@ -2388,9 +2412,7 @@
         unloadInboundOrigin() + "/",
         "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
       );
-      var ids = unloadGapParsePoUrlsFromDetailHtml(html, row.ibcUrl)
-        .map(unloadGapPurchaseOrderIdFromUrl)
-        .filter(Boolean);
+      var ids = unloadShipPoNumbersFromDetailHtml(html, row.ibcUrl);
       if (!ids.length) {
         stat.noPo++;
         return [];
