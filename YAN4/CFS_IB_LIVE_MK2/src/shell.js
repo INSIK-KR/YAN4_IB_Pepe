@@ -580,7 +580,7 @@
       "<div class='yna4-pane-sla-table-wrap'>" +
       "<table class='yna4-pane-sla-table'>" +
       "<thead><tr>" +
-      "<th>긴급도(남은시간)</th><th>하차번호</th><th>업체명</th><th>하차작업자</th><th>하차일시</th><th>예약시간</th><th>SLA (+12h)</th><th>입고</th><th>진열완료</th><th>진열오류</th><th>SKU 추적</th><th>남은 진열</th>" +
+      "<th>긴급도(남은시간)</th><th>하차번호</th><th>업체명</th><th>하차작업자</th><th>예약시간</th><th>하차일시</th><th>SLA (+12h)</th><th>입고</th><th>진열완료</th><th>진열오류</th><th>SKU 추적</th><th>남은 진열</th>" +
       "</tr></thead>" +
       "<tbody id='" +
       ROOT_ID +
@@ -2042,10 +2042,10 @@
           unloadSlaEscapeHtml(unloadSlaFormatWorkerLabel(x.worker)) +
           "</td>" +
           "<td class='mono'>" +
-          unloadSlaFmtDT(x.unload) +
+          unloadSlaEscapeHtml(ship.times) +
           "</td>" +
           "<td class='mono'>" +
-          unloadSlaEscapeHtml(ship.times) +
+          unloadSlaFmtDT(x.unload) +
           "</td>" +
           "<td class='mono'>" +
           unloadSlaFmtDT(x.deadline) +
@@ -2271,6 +2271,7 @@
         headers: {
           Accept: accept || "application/json, text/plain, */*",
           Referer: referer,
+          "X-Requested-With": "XMLHttpRequest",
         },
         timeout: 0,
         onload: function (r) {
@@ -2281,6 +2282,19 @@
           reject(new Error("네트워크 오류"));
         },
       });
+    });
+  }
+
+  /**
+   * 하차 목록 업체명이 실제 납품 업체가 아닌 경우(쿠팡 PB 씨피엘비 등).
+   * 이름으로 잇지 않고 IBC 발주번호 ↔ 트럭 상세 발주번호로만 잇는다.
+   */
+  var UNLOAD_SHIP_PO_ONLY_NAMES = ["씨피엘비", "cplb"];
+
+  function unloadShipPoOnlyName(name) {
+    var k = unloadShipNameKey(name);
+    return UNLOAD_SHIP_PO_ONLY_NAMES.some(function (x) {
+      return k.indexOf(x) >= 0;
     });
   }
 
@@ -2389,14 +2403,18 @@
     var matched = Object.create(null);
     var seen = Object.create(null);
     var rest = [];
+    var stat = { byName: 0, byPo: 0, noPo: 0, failed: 0, trucks: 0 };
     (allRows || []).forEach(function (r) {
       var ibc = String(r.ibc || "").trim();
       if (!ibc || seen[ibc]) return;
       seen[ibc] = true;
-      var key = pack.keyByName[unloadShipNameKey(r.vendor)];
+      var key = unloadShipPoOnlyName(r.vendor)
+        ? ""
+        : pack.keyByName[unloadShipNameKey(r.vendor)];
       if (key) {
         byIbc[ibc] = key;
         matched[key] = true;
+        stat.byName++;
       } else {
         rest.push(r);
       }
@@ -2423,9 +2441,10 @@
           pos = (obj && obj.body && obj.body.truckBookingPoInfoModelList) || [];
           for (j = 0; j < pos.length; j++) {
             if (pos[j] && pos[j].purchaseOrderSeq != null) {
-              keyByPo[String(pos[j].purchaseOrderSeq)] = trucks[i].key;
+              keyByPo[String(pos[j].purchaseOrderSeq).trim()] = trucks[i].key;
             }
           }
+          stat.trucks++;
         } catch (eTruck) {
           console.warn("[YAN4 Direct SLA 트럭 상세]", trucks[i].seq, eTruck);
         }
@@ -2441,21 +2460,28 @@
               "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
             );
             var poUrls = unloadGapParsePoUrlsFromDetailHtml(detailHtml, rest[i].ibcUrl);
-            for (j = 0; j < poUrls.length; j++) {
-              var key2 = keyByPo[unloadGapPurchaseOrderIdFromUrl(poUrls[j])];
+            var poIds = poUrls.map(unloadGapPurchaseOrderIdFromUrl).filter(Boolean);
+            if (!poIds.length) stat.noPo++;
+            for (j = 0; j < poIds.length; j++) {
+              var key2 = keyByPo[poIds[j]];
               if (key2) {
                 byIbc[String(rest[i].ibc).trim()] = key2;
                 matched[key2] = true;
+                stat.byPo++;
                 break;
               }
             }
+            if (poIds.length && !byIbc[String(rest[i].ibc).trim()]) {
+              console.warn("[YAN4 Direct SLA] 발주번호 연결 안 됨", rest[i].ibc, poIds);
+            }
           } catch (eIbc) {
+            stat.failed++;
             console.warn("[YAN4 Direct SLA IBC 상세]", rest[i].ibc, eIbc);
           }
         }
       }
     }
-    return { ymd: ymd, pack: pack, byIbc: byIbc, matched: matched };
+    return { ymd: ymd, pack: pack, byIbc: byIbc, matched: matched, stat: stat };
   }
 
   function unloadShipInfoForRow(x) {
@@ -2490,8 +2516,9 @@
           "<td>" + label + "</td>" +
           "<td class='mono'>-</td>" +
           "<td>" + unloadSlaEscapeHtml(v.name || "업체 ID " + v.id) + "</td>" +
-          "<td>-</td><td class='mono'>-</td>" +
+          "<td>-</td>" +
           "<td class='mono'>" + unloadSlaEscapeHtml(unloadShipTimesText(v)) + "</td>" +
+          "<td class='mono'>-</td>" +
           "<td class='mono'>-</td><td class='mono'>-</td><td class='mono'>-</td>" +
           "<td class='mono'>-</td><td class='mono'>-</td><td class='mono'>-</td>" +
           "</tr>"
@@ -2505,9 +2532,14 @@
     if (!j) return "";
     if (j.error) return j.error + " — 예약시간 · 하차 전 업체 없이 표시합니다.";
     var linked = Object.keys(j.matched).length;
+    var st = j.stat || {};
     return (
       "쉽먼트 입차예약 연결 (" + j.ymd + ") · 예약 업체 " + j.pack.order.length +
-      " · 하차 확인 " + linked + " · 하차 전 " + unloadShipBeforeRows().length
+      " · 하차 확인 " + linked + " · 하차 전 " + unloadShipBeforeRows().length +
+      "  [IBC 이름 " + (st.byName || 0) + " · 발주번호 " + (st.byPo || 0) +
+      (st.noPo ? " · 발주번호 못 읽음 " + st.noPo : "") +
+      (st.failed ? " · 상세 실패 " + st.failed : "") +
+      " · 트럭 " + (st.trucks || 0) + "]"
     );
   }
 
