@@ -941,6 +941,120 @@
     });
   }
 
+  /* ───────── 예시 데이터 추출 (숨김: Ctrl+Alt+Shift+T) ─────────
+   * 「SLA 전체」 · ATS 「조회실행」 결과를 JSON 한 파일로 Downloads에 저장.
+   * 튜토리얼 예시 데이터를 만들 원본 — 개발자가 가명 처리해서 씀. */
+  function serializeGraph(root) {
+    var seen = new Map();
+    var nid = 0;
+    function enc(v) {
+      if (v === null) return null;
+      var t = typeof v;
+      if (t === "function" || t === "symbol" || t === "undefined") return undefined;
+      if (t === "number") return isFinite(v) ? v : { __num: String(v) };
+      if (t !== "object") return v;
+      if (v instanceof Date) return { __date: isNaN(v.getTime()) ? null : v.toISOString() };
+      if (typeof Node !== "undefined" && v instanceof Node) return undefined;
+      if (typeof Window !== "undefined" && v instanceof Window) return undefined;
+      if (v instanceof ArrayBuffer || ArrayBuffer.isView(v)) return { __skip: "binary" };
+      if (seen.has(v)) return { __ref: seen.get(v) };
+      var id = ++nid;
+      seen.set(v, id);
+      if (v instanceof Map) {
+        var mo = [];
+        v.forEach(function (x, k) {
+          mo.push([enc(k), enc(x)]);
+        });
+        return { __id: id, __map: mo };
+      }
+      if (v instanceof Set) {
+        var so = [];
+        v.forEach(function (x) {
+          so.push(enc(x));
+        });
+        return { __id: id, __set: so };
+      }
+      if (Array.isArray(v)) {
+        return {
+          __id: id,
+          __arr: v.map(function (x) {
+            var e = enc(x);
+            return e === undefined ? null : e;
+          }),
+        };
+      }
+      var o = { __id: id };
+      Object.keys(v).forEach(function (k) {
+        var e = enc(v[k]);
+        if (e !== undefined) o[k] = e;
+      });
+      return o;
+    }
+    return enc(root);
+  }
+
+  function exportSampleData() {
+    var sla = null, ats = null;
+    try {
+      sla = window.__YAN4_SLA_TUTORIAL__ && window.__YAN4_SLA_TUTORIAL__.capture();
+    } catch (e) {}
+    try {
+      ats = window.__YAN4_ATS_TUTORIAL__ && window.__YAN4_ATS_TUTORIAL__.capture();
+    } catch (e) {}
+    var hasAts = !!(ats && ats.rows && ats.rows.length);
+    if (!sla && !hasAts) {
+      alert("[예시 데이터 추출]\n아직 결과가 없습니다.\n「SLA 전체」와 ATS 「조회실행」을 먼저 끝낸 뒤 다시 눌러 주세요.");
+      return;
+    }
+    var d = new Date();
+    var p2 = function (n) {
+      return (n < 10 ? "0" : "") + n;
+    };
+    var stamp = d.getFullYear() + p2(d.getMonth() + 1) + p2(d.getDate()) + "_" + p2(d.getHours()) + p2(d.getMinutes());
+    var json;
+    try {
+      json = JSON.stringify({
+        kind: "yan4-tutorial-sample-raw",
+        v: 1,
+        app: document.title,
+        exportedAt: d.toISOString(),
+        sla: serializeGraph(sla),
+        ats: serializeGraph(ats),
+      });
+    } catch (eJ) {
+      alert("[예시 데이터 추출] 실패: " + (eJ && eJ.message ? eJ.message : eJ));
+      return;
+    }
+    var name = "CFS_IB_LIVE_tutorial_raw_" + stamp + ".json";
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([json], { type: "application/json" }));
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () {
+      URL.revokeObjectURL(a.href);
+      a.remove();
+    }, 4000);
+    alert(
+      "[예시 데이터 추출] Downloads 폴더에 저장했습니다.\n" + name + "\n\n" +
+        "SLA: " + (sla ? "있음" : "없음 (「SLA 전체」 먼저)") + "\n" +
+        "ATS: " + (hasAts ? ats.rows.length + "행" : "없음 (「조회실행」 먼저)") + "\n" +
+        "크기: " + Math.round(json.length / 1024).toLocaleString() + " KB"
+    );
+  }
+
+  window.addEventListener(
+    "keydown",
+    function (ev) {
+      if (ev.ctrlKey && ev.altKey && ev.shiftKey && (ev.key === "T" || ev.key === "t" || ev.code === "KeyT")) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        exportSampleData();
+      }
+    },
+    true
+  );
+
   function boot() {
     injectCss();
     ensureTopButton();
@@ -951,6 +1065,8 @@
     start: startTour,
     startCard: startCard,
     close: close,
+    exportSample: exportSampleData,
+    serialize: serializeGraph,
     tours: TOURS,
     cards: CARD_TOURS,
     current: function () {

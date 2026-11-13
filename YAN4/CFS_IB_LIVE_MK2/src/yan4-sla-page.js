@@ -375,6 +375,12 @@
   var lastSlaPivotMetricsCtx = null;
   var lastSlaProgressCaptureCtx = null;
   var lastSlaTransferBundle = null;
+  /** 튜토리얼 예시 데이터 추출용 — 마지막 「SLA 전체」 결과 묶음 */
+  var lastSlaTutorialCapture = null;
+  window.__YAN4_SLA_TUTORIAL__ = window.__YAN4_SLA_TUTORIAL__ || {};
+  window.__YAN4_SLA_TUTORIAL__.capture = function () {
+    return lastSlaTutorialCapture;
+  };
   var lastSlaPipelineSkipDirect = false;
   var lastShrinkSkuMaps = null;
   /** 상품명 SR 규정으로 생성한 Shrink 대상 행 + cate5 조회용 SLA 인덱스 */
@@ -13645,6 +13651,18 @@
       var combined = buildCombinedPivotBundle(transferBundle, directBundle);
       applyPivotBundle(pivotHost, combined);
       applyMovingPanel(movingHost, transferBundle);
+      lastSlaTutorialCapture = {
+        capturedAt: new Date(),
+        skipDirect: skipDirect,
+        progressBundle: progressBundle,
+        directBundle: directBundle,
+        transferBundle: transferBundle,
+        combined: combined,
+        lastShrinkSkuMaps: lastShrinkSkuMaps,
+        lastShrinkSlaLookup: lastShrinkSlaLookup,
+        lastSlaProgressCaptureCtx: lastSlaProgressCaptureCtx,
+        status: statusEl ? statusEl.textContent : "",
+      };
       if (combined && combined.summary) {
         statusEl.textContent =
           (skipDirect && !combined.empty ? "직납완료 · " : "") +
