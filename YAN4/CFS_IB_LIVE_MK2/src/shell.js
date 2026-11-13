@@ -2554,14 +2554,15 @@
     p.set(
       "selected",
       JSON.stringify([
+        // 값은 PO 사이트 고정 순서로 오고 제목은 이 순서로 온다 — 사이트 순서와 똑같이 둘 것
         { id: "purchaseOrderSeq", name: "발주번호" },
         { id: "skuSeq", name: "SKU ID" },
-        { id: "purchaseOrderSkuStatus", name: "스큐상태" },
-        { id: "vendorConfirmedCount", name: "업체확정 발주수량" },
-        { id: "displaySumOfDisplayQty", name: "진열완료 수량" },
         { id: "vendorId", name: "업체 ID" },
         { id: "vendorName", name: "업체명" },
         { id: "temperature", name: "온도" },
+        { id: "purchaseOrderSkuStatus", name: "스큐상태" },
+        { id: "vendorConfirmedCount", name: "업체확정 발주수량" },
+        { id: "displaySumOfDisplayQty", name: "진열완료 수량" },
       ])
     );
     if (after) p.set("after", String(after));
