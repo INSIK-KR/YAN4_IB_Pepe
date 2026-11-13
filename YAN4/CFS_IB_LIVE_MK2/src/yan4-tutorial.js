@@ -506,27 +506,7 @@
         { t: inCard("p2bipyo", "button", "PDF 저장"), title: "PDF 저장", text: "Downloads 폴더에 PDF로 저장합니다." },
       ],
     },
-    p2dmg: {
-      name: "IB 오류처리",
-      lock: true,
-      steps: [
-        { t: cardWhole("p2dmg"), title: "IB 오류처리", text: "파손 · 오버 · 숏 등 신고 내용을 붙여넣으면 전산을 확인해 엑셀(TSV)로 정리합니다." },
-      ],
-    },
-    p2tote: {
-      name: "Tote-Move RCRT88 (RPA)",
-      lock: true,
-      steps: [
-        { t: cardWhole("p2tote"), title: "Tote-Move RCRT88", text: "기간 동안 RCRT88 토트 이동 · 진열 완료 내역을 모아 봅니다." },
-      ],
-    },
-    p2loc: {
-      name: "Location CONSOL",
-      lock: true,
-      steps: [
-        { t: cardWhole("p2loc"), title: "Location CONSOL", text: "로케이션 적재율을 모아(1CP · 1FP · 1AP · 1APR) 합칠 수 있는 로케이션을 대시보드로 보여 줍니다." },
-      ],
-    },
+    /* 테스트 중 카드(IB 오류처리 · Tote-Move RCRT88 · Location CONSOL)는 튜토리얼 없음 */
     barcode128: {
       name: "바코드 생성",
       steps: [
@@ -536,28 +516,10 @@
     },
   };
 
-  function lockSteps(id) {
-    return [
-      {
-        t: function () {
-          var c = card(id);
-          if (!c) return null;
-          var inp = q(".yna4-pane-lock-inp", c);
-          return inp ? [inp, byText(c, "button", "확인")].filter(Boolean) : null;
-        },
-        title: "잠긴 카드",
-        text: "관리자 비밀번호를 넣고 「확인」을 누르면 열립니다. 비밀번호는 관리자에게 묻습니다.",
-      },
-    ];
-  }
-
   function cardTourSteps(id) {
     var spec = CARD_TOURS[id];
     if (!spec) return null;
-    var steps = spec.steps.slice();
-    var c = card(id);
-    if (spec.lock && c && q(".yna4-pane-lock-inp", c)) steps = steps.concat(lockSteps(id));
-    return steps;
+    return spec.steps.slice();
   }
 
   function pageCardsTour(pageKey) {
