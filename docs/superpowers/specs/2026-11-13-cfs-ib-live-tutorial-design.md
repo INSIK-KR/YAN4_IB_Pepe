@@ -40,3 +40,10 @@
 ## 구현 메모 (빌더 몫)
 - 튜토리얼 코드는 `src/`에 새 파일로 두고 vendor로 복사되게 한다. `renderer/vendor` 직접 수정 금지.
 - MK2는 SLA 화면 구조가 다르므로 선택자를 MK2에 맞춘다.
+
+## SLA · ATS 예시 모드 (사용자 결정: A안)
+- 조회 결과가 화면에 없으면 예시 데이터로 실제 결과 화면을 그린다. 결과가 있으면 그 결과로 안내한다.
+- 예시 데이터: 회사 PC에서 실제 「SLA 전체」 · ATS 「조회실행」 결과를 숨은 단축키(Ctrl+Alt+Shift+T)로 추출 → 압축 조각을 구글 문서로 옮김(메일 · 드라이브 · PowerShell 막힘) → 가명 처리(상품명 · 업체명 · 작업자 ID). CT · 차량 4자리 · 토트 · SKU는 드릴 조인 키라 유지 — 내 판단.
+- 그리기는 앱의 실제 함수(renderProgressPanel · applyPivotBundle · applyMovingPanel, ATS renderAllDashboardPanels)를 그대로 씀. 끝나면 원래 화면으로 복원.
+- 예시 중에는 SLA · ATS 요청 함수가 바로 거절(WMS 요청 없음). 시간 제한은 넣지 않음.
+- 직접 해 보기 단계: 강조 칸만 눌리고 나머지는 막음, 성공하면 자동으로 다음 단계. SLA = MISS 칸 · 직납 칸 더블클릭, ATS = CT 현황판 → 줄 펼치기 → 대시보드.
