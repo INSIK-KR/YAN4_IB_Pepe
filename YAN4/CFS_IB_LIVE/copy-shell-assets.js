@@ -36,6 +36,7 @@ const rootFiles = [
   "yan4-damage-verify-page.js",
   "yan4-avail-history-page.js",
   "yan4-tutorial.js",
+  "yan4-tutorial-sample.js",
 ];
 
 const vendorFiles = [

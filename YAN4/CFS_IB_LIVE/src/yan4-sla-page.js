@@ -381,6 +381,80 @@
   window.__YAN4_SLA_TUTORIAL__.capture = function () {
     return lastSlaTutorialCapture;
   };
+  /** 튜토리얼 예시 모드 — 저장된 결과 묶음을 실제 화면 함수로 다시 그림 (WMS 요청 없음) */
+  function slaTutorialHosts() {
+    var host = document.querySelector('.yna4-shell-page-sla-inner[data-yna4-sla-ready="1"]');
+    if (!host) return null;
+    return {
+      statusEl: host.querySelector(".yna4-sla-status"),
+      pivotHost: host.querySelector(".yna4-sla-pivot-host"),
+      movingHost: host.querySelector(".yna4-sla-moving-host"),
+      progressHost: host.querySelector(".yna4-sla-progress-host"),
+    };
+  }
+  function slaTutorialPaint(cap, statusText) {
+    var h = slaTutorialHosts();
+    if (!h || !h.pivotHost || !cap) return false;
+    lastShrinkSkuMaps = cap.lastShrinkSkuMaps || null;
+    lastShrinkSlaLookup = cap.lastShrinkSlaLookup || null;
+    lastSlaProgressCaptureCtx = cap.lastSlaProgressCaptureCtx || null;
+    lastSlaTransferBundle = cap.transferBundle || null;
+    lastSlaPipelineSkipDirect = !!cap.skipDirect;
+    if (h.progressHost) {
+      h.progressHost.textContent = "";
+      h.progressHost.style.height = "";
+      h.progressHost.style.width = "";
+      if (cap.progressBundle) renderProgressPanel(h.progressHost, cap.progressBundle);
+    }
+    if (h.movingHost) h.movingHost.textContent = "";
+    applyPivotBundle(h.pivotHost, cap.combined);
+    if (h.movingHost) applyMovingPanel(h.movingHost, cap.transferBundle);
+    if (h.statusEl) h.statusEl.textContent = statusText || "";
+    return true;
+  }
+  window.__YAN4_SLA_TUTORIAL__.isBusy = function () {
+    return !!pipelineBusy;
+  };
+  window.__YAN4_SLA_TUTORIAL__.hasResult = function () {
+    var h = slaTutorialHosts();
+    return !!(h && h.pivotHost && h.pivotHost.querySelector("table"));
+  };
+  window.__YAN4_SLA_TUTORIAL__.replay = function (cap, label) {
+    if (pipelineBusy) return false;
+    return slaTutorialPaint(
+      cap,
+      (label || "예시 데이터") + (cap && cap.combined && cap.combined.summary ? " · " + cap.combined.summary : "")
+    );
+  };
+  /** 예시 모드 끝 — 실제 결과가 있었으면 그걸로, 없으면 처음 빈 화면으로 */
+  window.__YAN4_SLA_TUTORIAL__.restore = function () {
+    if (pipelineBusy) return;
+    if (lastSlaTutorialCapture) {
+      slaTutorialPaint(lastSlaTutorialCapture, lastSlaTutorialCapture.status || "");
+      return;
+    }
+    var h = slaTutorialHosts();
+    if (!h) return;
+    lastShrinkSkuMaps = null;
+    lastShrinkSlaLookup = null;
+    lastSlaProgressCaptureCtx = null;
+    lastSlaTransferBundle = null;
+    if (h.progressHost) {
+      h.progressHost.textContent = "";
+      h.progressHost.style.height = "";
+      h.progressHost.style.width = "";
+    }
+    if (h.movingHost) h.movingHost.textContent = "";
+    var drill = document.querySelector(".yna4-sla-pivot-drill-host");
+    if (drill) drill.textContent = "";
+    if (h.pivotHost) {
+      renderPivotPlaceholder(h.pivotHost, "SLA 전체 버튼으로 진척·이관·직납 피벗을 한 번에 조회하세요.");
+    }
+    if (typeof slaOverviewSet === "function") {
+      slaOverviewSet({ pivot: null, progress: null, moving: null, message: "" });
+    }
+    if (h.statusEl) h.statusEl.textContent = "준비";
+  };
   var lastSlaPipelineSkipDirect = false;
   var lastShrinkSkuMaps = null;
   /** 상품명 SR 규정으로 생성한 Shrink 대상 행 + cate5 조회용 SLA 인덱스 */
@@ -744,6 +818,10 @@
 
   function gmXhr(opt) {
     return new Promise(function (resolve, reject) {
+      if (window.__YAN4_TUTORIAL_DEMO__) {
+        reject(new Error("예시 데이터 — WMS 조회 안 함"));
+        return;
+      }
       if (typeof GM_xmlhttpRequest !== "function") {
         reject(new Error("GM_xmlhttpRequest 필요"));
         return;
@@ -1641,6 +1719,7 @@
         );
       });
     }
+    if (window.__YAN4_TUTORIAL_DEMO__) throw new Error("예시 데이터 — 조회 안 함");
     var res = await fetch(url, {
       method: "GET",
       credentials: "include",
@@ -7690,6 +7769,7 @@
         );
       });
     }
+    if (window.__YAN4_TUTORIAL_DEMO__) throw new Error("예시 데이터 — 조회 안 함");
     var res = await fetch(sharePointSlaUrl(), {
       method: "GET",
       credentials: "include",

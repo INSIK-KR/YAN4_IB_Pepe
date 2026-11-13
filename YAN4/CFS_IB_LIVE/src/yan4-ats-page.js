@@ -1300,6 +1300,10 @@
 
   function gmXhr(opt) {
     return new Promise(function (resolve, reject) {
+      if (window.__YAN4_TUTORIAL_DEMO__) {
+        reject(new Error("예시 데이터 — WMS 조회 안 함"));
+        return;
+      }
       if (typeof GM_xmlhttpRequest !== "function") {
         reject(new Error("GM_xmlhttpRequest 필요"));
         return;
@@ -6525,6 +6529,47 @@
     }
 
     var pipelineBusy = false;
+    /** 튜토리얼 예시 모드 — 저장된 조회 결과로 화면을 다시 그림 (WMS 요청 없음) */
+    var atsTutorialSaved = null;
+    window.__YAN4_ATS_TUTORIAL__.isBusy = function () {
+      return !!pipelineBusy;
+    };
+    window.__YAN4_ATS_TUTORIAL__.hasResult = function () {
+      return atsAllRows.length > 0;
+    };
+    window.__YAN4_ATS_TUTORIAL__.replay = function (cap, label) {
+      if (pipelineBusy || !cap) return false;
+      if (!atsTutorialSaved) {
+        var st0 = hostEl.querySelector(".yna4-ats-status");
+        atsTutorialSaved = {
+          rows: atsAllRows,
+          cutline: atsCutlineItems,
+          cutlineText: cutlineListHost.textContent,
+          status: st0 ? st0.textContent : "",
+        };
+      }
+      atsAllRows = (cap.rows || []).slice();
+      atsCutlineItems = (cap.cutlineItems || []).slice();
+      atsTutorialSaved.demoCutline = atsCutlineItems;
+      renderCutlineList(atsCutlineItems);
+      renderAllDashboardPanels(true);
+      setStatus((label || "예시 데이터") + " · " + atsAllRows.length + "행", "ok");
+      return true;
+    };
+    window.__YAN4_ATS_TUTORIAL__.restore = function () {
+      if (!atsTutorialSaved || pipelineBusy) return;
+      var sv = atsTutorialSaved;
+      atsTutorialSaved = null;
+      atsAllRows = sv.rows;
+      /* 예시 중에 실제 「시간대 조회」가 끝났으면 그 결과를 그대로 둠 */
+      if (atsCutlineItems === sv.demoCutline) {
+        atsCutlineItems = sv.cutline;
+        if (atsCutlineItems && atsCutlineItems.length) renderCutlineList(atsCutlineItems);
+        else cutlineListHost.textContent = sv.cutlineText || "";
+      }
+      renderAllDashboardPanels(true);
+      setStatus(sv.status || "");
+    };
 
     /**
      * @param {Array=} optRows 조회 대상 행. 생략 시 전체.
