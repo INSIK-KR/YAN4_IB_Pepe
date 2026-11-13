@@ -29,8 +29,8 @@
 ## 1~4 페이지 (사용자 결정: 카드마다 튜토리얼)
 - 1·2페이지: 카드 헤더마다 작은 튜토리얼 버튼(🐸)을 둔다. 누르면 그 카드 안 요소만 짚는 짧은 투어.
   - 1페이지: Direct Tracking · Direct SLA · 가용화내역조회 · Prepack&SR Daily Patrol · STOW Error Tracking · Gross HTP · Need help Tracking
-  - 2페이지: 입고내역 RWA · STOW SCAN TRACKING · RCRT QR 출력 · 수박비표 출력 · IB 오류처리 · Tote-Move RCRT88 · Location CONSOL · 바코드 생성 (빈 칸 「—」은 제외)
-  - 비밀번호 잠긴 카드는 잠겨 있으면 "관리자 비밀번호로 엽니다"까지만 안내 (비밀번호는 문구에 넣지 않음)
+  - 2페이지: 입고내역 RWA · STOW SCAN TRACKING · RCRT QR 출력 · 수박비표 출력 · 바코드 생성 (빈 칸 「—」은 제외)
+  - 테스트 중 카드(IB 오류처리 · Tote-Move RCRT88 · Location CONSOL)는 튜토리얼을 두지 않는다 (사용자 결정, 개구리 버튼도 없음)
 - 3·4페이지(전체 1면 화면)는 상단 「튜토리얼」 메뉴에 페이지 투어로 둔다.
 - 상단 메뉴: 기본 / SLA / ATS / 3페이지 / 4페이지. 1·2페이지 항목은 "카드의 🐸 버튼을 누르세요" 안내 투어.
 
