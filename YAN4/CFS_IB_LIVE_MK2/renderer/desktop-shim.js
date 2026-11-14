@@ -171,6 +171,9 @@
                 statusText: res.status >= 200 && res.status < 400 ? "OK" : "ERR",
                 responseText: String(res.body || ""),
                 finalUrl: details.url,
+                // 로그인 풀림 → main 이 자동 재로그인한 결과("ok"/"failed"), 재전송 안 한 요청 표시
+                yan4Relogin: res.yan4Relogin,
+                yan4NotResent: !!res.yan4NotResent,
               });
             }
           } else if (details.onerror) {
