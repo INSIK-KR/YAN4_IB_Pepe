@@ -262,6 +262,180 @@ async function shipmentsSessionWorks(center) {
   }
 }
 
+/** 로그인 창이 "로그인 끝"으로 볼 수 있는 상태인지 (PO·MOS·쉽먼트는 로그인 페이지도 같은 도메인이라 쿠키까지 확인) */
+async function loginLooksComplete(key, url, center) {
+  if (!looksLoggedIn(key, url)) return false;
+  await refreshSessionStatus();
+  if (key === "po" && !(lastSessionDetail && lastSessionDetail.po > 0)) return false;
+  if (key === "mos" && !(lastSessionDetail && lastSessionDetail.mos > 0)) return false;
+  if (key === "shipments") {
+    if (!(lastSessionDetail && lastSessionDetail.shipments > 0)) return false;
+    if (!(await shipmentsSessionWorks(center))) return false;
+  }
+  return true;
+}
+
+/* ── 로그인 풀림(401·로그인 화면) 자동 재로그인 ──
+ * 1. 보이지 않는 창으로 로그인 페이지를 열어 SSO 쿠키로 조용히 다시 로그인
+ * 2. 안 되면(비밀번호 입력 등) 로그인 창을 띄우고, 로그인이 끝나면 하던 요청을 이어감
+ * 같은 사이트의 동시 401은 재로그인 한 번으로 묶는다. */
+const RELOGIN_SILENT_IDLE_MS = 5000; // 로그인 화면에서 이만큼 멈춰 있으면 조용한 재로그인 포기
+const RELOGIN_SILENT_MAX_MS = 30000;
+const RELOGIN_FRESH_MS = 30000; // 방금 재로그인했으면 다시 하지 않고 재시도만
+const RELOGIN_SILENT_COOLDOWN_MS = 2 * 60 * 1000; // 웹과 서로 튕기면 조용한 재로그인 대신 창
+const RELOGIN_DECLINED_MS = 5 * 60 * 1000; // 로그인 창을 그냥 닫으면 잠시 다시 띄우지 않음
+/** 다시 보내면 두 번 처리되는 요청 — 재로그인만 하고 자동 재전송은 하지 않음 */
+const NO_AUTO_RESEND_RE = [/^https:\/\/mos\.coupang\.net\/worker\/call\//i];
+const reloginState = Object.create(null);
+const loginWaiters = Object.create(null);
+
+function reloginStateFor(key) {
+  if (!reloginState[key]) {
+    reloginState[key] = { inflight: null, lastOkAt: 0, lastSilentAt: 0, declinedAt: 0, uselessUntil: 0 };
+  }
+  return reloginState[key];
+}
+
+function loginKindForUrl(url) {
+  let h;
+  try {
+    h = new URL(String(url || "")).hostname.toLowerCase();
+  } catch (e) {
+    return "";
+  }
+  if (h === "po-management.coupang.net") return "po";
+  if (h === "mos.coupang.net") return "mos";
+  if (h === "shipments.coupang.net") return "shipments";
+  if (h === "coupang.com" || h.endsWith(".coupang.com")) return "coupang";
+  return "";
+}
+
+/** 요청이 로그인 페이지로 돌려보내졌는지 (리다이렉트된 최종 주소 기준) */
+function isLoginPageUrl(url) {
+  let u;
+  try {
+    u = new URL(String(url || ""));
+  } catch (e) {
+    return false;
+  }
+  const h = u.hostname.toLowerCase();
+  if (/(^|\.)login\.microsoftonline\.com$|(^|\.)login\.live\.com$/.test(h)) return true;
+  if (/^(login|sso|auth|idp|signin)[.-]/.test(h)) return true;
+  return /\/(login|signin|sso|auth|idp)(\/|\?|$)/i.test(u.pathname + (u.search ? "?" : ""));
+}
+
+function waitLoginWindow(key) {
+  return new Promise(function (resolve) {
+    (loginWaiters[key] = loginWaiters[key] || []).push(resolve);
+  });
+}
+
+function silentRelogin(key) {
+  return new Promise(function (resolve) {
+    const target = LOGIN_TARGETS[key];
+    if (!target) {
+      resolve(false);
+      return;
+    }
+    let done = false;
+    let idleTimer = null;
+    let capTimer = null;
+    const win = new BrowserWindow({
+      show: false,
+      width: 1100,
+      height: 800,
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+        partition: PARTITION,
+      },
+    });
+    const finish = function (ok) {
+      if (done) return;
+      done = true;
+      clearTimeout(idleTimer);
+      clearTimeout(capTimer);
+      try {
+        if (!win.isDestroyed()) win.destroy();
+      } catch (e) {}
+      resolve(ok);
+    };
+    capTimer = setTimeout(function () {
+      finish(false);
+    }, RELOGIN_SILENT_MAX_MS);
+    const check = async function () {
+      if (done || win.isDestroyed()) return;
+      clearTimeout(idleTimer);
+      let url = "";
+      try {
+        url = win.webContents.getURL();
+      } catch (e) {}
+      let ok = false;
+      try {
+        ok = await loginLooksComplete(key, url, "");
+      } catch (e) {}
+      if (done) return;
+      if (ok) {
+        finish(true);
+        return;
+      }
+      // 다음 이동이 없으면 비밀번호·계정 선택을 기다리는 것 → 창을 띄워야 함
+      idleTimer = setTimeout(function () {
+        finish(false);
+      }, RELOGIN_SILENT_IDLE_MS);
+    };
+    try {
+      win.webContents.setUserAgent(CHROME_UA);
+      win.webContents.setAudioMuted(true);
+    } catch (eUa) {}
+    win.webContents.on("did-navigate", check);
+    win.webContents.on("did-navigate-in-page", check);
+    win.webContents.on("did-finish-load", check);
+    win.on("closed", function () {
+      finish(false);
+    });
+    win.loadURL(target.url).catch(function () {});
+  });
+}
+
+/** 같은 사이트 재로그인은 한 번만 — true면 다시 로그인된 상태 */
+function ensureRelogin(key) {
+  const st = reloginStateFor(key);
+  if (st.inflight) return st.inflight;
+  const now = Date.now();
+  if (now - st.lastOkAt < RELOGIN_FRESH_MS) return Promise.resolve(true);
+  if (now - st.declinedAt < RELOGIN_DECLINED_MS) return Promise.resolve(false);
+  // 다시 로그인해도 401·403이면 권한 문제 — 한동안 재로그인·창 띄우기 안 함
+  if (now < st.uselessUntil) return Promise.resolve(false);
+  st.inflight = (async function () {
+    let ok = false;
+    if (Date.now() - st.lastSilentAt >= RELOGIN_SILENT_COOLDOWN_MS) {
+      st.lastSilentAt = Date.now();
+      ok = await silentRelogin(key);
+    }
+    if (!ok) {
+      const opened = openLoginWindow(key);
+      if (opened && opened.ok) ok = await waitLoginWindow(key);
+      if (!ok) st.declinedAt = Date.now();
+    }
+    if (ok) {
+      st.lastOkAt = Date.now();
+      st.declinedAt = 0;
+    }
+    return ok;
+  })();
+  st.inflight.then(
+    function () {
+      st.inflight = null;
+    },
+    function () {
+      st.inflight = null;
+    }
+  );
+  return st.inflight;
+}
+
 function restoreMainAfterLoginClose() {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   try {
@@ -309,34 +483,22 @@ function openLoginWindow(kind, center) {
   const maybeDone = async function () {
     try {
       const url = win.webContents.getURL();
-      if (!looksLoggedIn(key, url)) return;
-      await refreshSessionStatus();
-      // Coupang·PO·MOS·쉽먼트: 로그인 완료 후 자동 닫기 (SharePoint는 MFA 등으로 수동)
-      if (
-        (key === "coupang" || key === "po" || key === "mos" || key === "shipments") &&
-        !closedOnce
-      ) {
-        // PO·MOS·쉽먼트는 로그인 페이지도 같은 도메인일 수 있어 쿠키 확인 후 닫기
-        if (key === "po" && !(lastSessionDetail && lastSessionDetail.po > 0)) {
-          return;
-        }
-        if (key === "mos" && !(lastSessionDetail && lastSessionDetail.mos > 0)) {
-          return;
-        }
-        if (
-          key === "shipments" &&
-          !(lastSessionDetail && lastSessionDetail.shipments > 0)
-        ) {
-          return;
-        }
-        if (key === "shipments" && !(await shipmentsSessionWorks(center))) {
-          return;
-        }
-        closedOnce = true;
-        setTimeout(function () {
-          if (win && !win.isDestroyed()) win.close();
-        }, key === "po" || key === "mos" || key === "shipments" ? 800 : 500);
+      // SharePoint는 MFA 등으로 수동 닫기 — 상태만 갱신
+      if (key === "sharepoint") {
+        if (looksLoggedIn(key, url)) await refreshSessionStatus();
+        return;
       }
+      // Coupang·PO·MOS·쉽먼트: 로그인 완료 후 자동 닫기
+      if (closedOnce) return;
+      if (!(await loginLooksComplete(key, url, center))) return;
+      if (closedOnce) return;
+      closedOnce = true;
+      const st = reloginStateFor(key);
+      st.lastOkAt = Date.now();
+      st.declinedAt = 0;
+      setTimeout(function () {
+        if (win && !win.isDestroyed()) win.close();
+      }, key === "coupang" ? 500 : 800);
     } catch (e) {}
   };
 
@@ -345,6 +507,11 @@ function openLoginWindow(kind, center) {
   win.webContents.on("did-finish-load", maybeDone);
   win.on("closed", function () {
     loginWindows[key] = null;
+    const waiters = loginWaiters[key] || [];
+    loginWaiters[key] = [];
+    waiters.forEach(function (resolve) {
+      resolve(closedOnce);
+    });
     void refreshSessionStatus();
     setTimeout(restoreMainAfterLoginClose, 0);
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -458,36 +625,76 @@ async function sessionFetch(message) {
     }
     opts.body = String(message.body);
   }
+  // JSON을 달라고 했는데 HTML 화면이 오면 로그인 화면으로 돌려보내진 것
+  const expectsJson =
+    /application\/json/i.test(headers.Accept || "") && !/text\/html/i.test(headers.Accept || "");
+  const binary = !!(
+    message &&
+    (message.responseType === "arraybuffer" ||
+      message.binary === true ||
+      message.asBinary === true)
+  );
   try {
-    const ses = getSes();
-    const res = await ses.fetch(url, opts);
-    const status = res.status;
-    if (
-      message &&
-      (message.responseType === "arraybuffer" ||
-        message.binary === true ||
-        message.asBinary === true)
-    ) {
-      const ab = await res.arrayBuffer();
-      return {
-        ok: status >= 200 && status < 400,
-        status: status,
-        base64: Buffer.from(ab).toString("base64"),
-        byteLength: ab.byteLength,
-        error:
-          status >= 200 && status < 400
-            ? undefined
-            : "HTTP " + status,
-      };
+    let out = await sessionFetchOnce(url, opts, binary, expectsJson);
+    const kind = out.loginExpired ? loginKindForUrl(url) : "";
+    if (!kind) return out.result;
+    const noResend = NO_AUTO_RESEND_RE.some(function (re) {
+      return re.test(url);
+    });
+    const relogged = await ensureRelogin(kind);
+    if (noResend || !relogged) {
+      out.result.yan4Relogin = relogged ? "ok" : "failed";
+      if (noResend) out.result.yan4NotResent = true;
+      return out.result;
     }
-    const text = await res.text();
-    return { ok: true, status: status, body: text };
+    out = await sessionFetchOnce(url, opts, binary, expectsJson);
+    if (out.loginExpired) {
+      reloginStateFor(kind).uselessUntil = Date.now() + RELOGIN_DECLINED_MS;
+    }
+    out.result.yan4Relogin = "ok";
+    return out.result;
   } catch (e) {
     return {
       ok: false,
       error: e && e.message ? e.message : String(e),
     };
   }
+}
+
+/** 요청 1번 — loginExpired: 401·403 또는 로그인 화면(HTML)으로 돌려보내짐 */
+async function sessionFetchOnce(url, opts, binary, expectsJson) {
+  const res = await getSes().fetch(url, opts);
+  let status = res.status;
+  // Electron fetch 는 리다이렉트 뒤 최종 주소를 비워 주는 경우가 있어 응답 모양으로도 본다
+  let toLogin = !!(res.redirected && res.url && isLoginPageUrl(res.url));
+  if (binary) {
+    if (toLogin) status = 401;
+    const ab = await res.arrayBuffer();
+    return {
+      loginExpired: status === 401 || status === 403,
+      result: {
+        ok: status >= 200 && status < 400,
+        status: status,
+        base64: Buffer.from(ab).toString("base64"),
+        byteLength: ab.byteLength,
+        error: status >= 200 && status < 400 ? undefined : "HTTP " + status,
+      },
+    };
+  }
+  const text = await res.text();
+  if (!toLogin && expectsJson && status >= 200 && status < 300) {
+    const ct = String(res.headers.get("content-type") || "");
+    const head = text.slice(0, 2000).toLowerCase();
+    if (/text\/html/i.test(ct) && (head.indexOf("<html") >= 0 || head.indexOf("<!doctype") >= 0)) {
+      toLogin = true;
+    }
+  }
+  // 로그인 화면으로 돌려보내진 응답은 401로 알려 화면 쪽 "로그인 필요" 처리와 맞춘다
+  if (toLogin) status = 401;
+  return {
+    loginExpired: status === 401 || status === 403,
+    result: { ok: true, status: status, body: text },
+  };
 }
 
 /** SharePoint SLA — EXE 직접 fetch 대신 Chrome으로 받고 Downloads에서 자동 수집 (안전) */
