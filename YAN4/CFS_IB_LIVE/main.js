@@ -266,6 +266,15 @@ async function shipmentsSessionWorks(center) {
 async function loginLooksComplete(key, url, center) {
   if (!looksLoggedIn(key, url)) return false;
   await refreshSessionStatus();
+  // 재로그인 중이면 실패했던 요청이 실제로 통과해야 로그인된 것 (WMS는 웹에 밀려나도 옛 쿠키로 첫 화면이 열림)
+  const probe = loginProbes[key];
+  if (probe) {
+    let passed = false;
+    try {
+      passed = await probe();
+    } catch (eProbe) {}
+    if (!passed) return false;
+  }
   if (key === "po" && !(lastSessionDetail && lastSessionDetail.po > 0)) return false;
   if (key === "mos" && !(lastSessionDetail && lastSessionDetail.mos > 0)) return false;
   if (key === "shipments") {
@@ -288,6 +297,8 @@ const RELOGIN_DECLINED_MS = 5 * 60 * 1000; // 로그인 창을 그냥 닫으면 
 const NO_AUTO_RESEND_RE = [/^https:\/\/mos\.coupang\.net\/worker\/call\//i];
 const reloginState = Object.create(null);
 const loginWaiters = Object.create(null);
+/** 재로그인 중인 사이트의 확인 함수 — 실패했던 요청을 다시 보내 통과하면 true */
+const loginProbes = Object.create(null);
 
 function reloginStateFor(key) {
   if (!reloginState[key]) {
@@ -399,8 +410,8 @@ function silentRelogin(key) {
   });
 }
 
-/** 같은 사이트 재로그인은 한 번만 — true면 다시 로그인된 상태 */
-function ensureRelogin(key) {
+/** 같은 사이트 재로그인은 한 번만 — true면 다시 로그인된 상태. probe 가 있으면 그게 통과해야 성공 */
+function ensureRelogin(key, probe) {
   const st = reloginStateFor(key);
   if (st.inflight) return st.inflight;
   const now = Date.now();
@@ -408,6 +419,7 @@ function ensureRelogin(key) {
   if (now - st.declinedAt < RELOGIN_DECLINED_MS) return Promise.resolve(false);
   // 다시 로그인해도 401·403이면 권한 문제 — 한동안 재로그인·창 띄우기 안 함
   if (now < st.uselessUntil) return Promise.resolve(false);
+  if (probe) loginProbes[key] = probe;
   st.inflight = (async function () {
     let ok = false;
     if (Date.now() - st.lastSilentAt >= RELOGIN_SILENT_COOLDOWN_MS) {
@@ -428,9 +440,11 @@ function ensureRelogin(key) {
   st.inflight.then(
     function () {
       st.inflight = null;
+      delete loginProbes[key];
     },
     function () {
       st.inflight = null;
+      delete loginProbes[key];
     }
   );
   return st.inflight;
@@ -641,13 +655,25 @@ async function sessionFetch(message) {
     const noResend = NO_AUTO_RESEND_RE.some(function (re) {
       return re.test(url);
     });
-    const relogged = await ensureRelogin(kind);
+    // WMS는 주소만으로 로그인 여부를 알 수 없어, 이 요청이 실제로 통과하는지로 확인한다(조회 요청만)
+    let probed = null;
+    const probe =
+      kind === "coupang" && !noResend
+        ? async function () {
+            const p = await sessionFetchOnce(url, opts, binary, expectsJson);
+            if (p.loginExpired) return false;
+            probed = p;
+            return true;
+          }
+        : null;
+    const relogged = await ensureRelogin(kind, probe);
     if (noResend || !relogged) {
       out.result.yan4Relogin = relogged ? "ok" : "failed";
       if (noResend) out.result.yan4NotResent = true;
       return out.result;
     }
-    out = await sessionFetchOnce(url, opts, binary, expectsJson);
+    // 확인하면서 이미 받은 응답이 있으면 다시 보내지 않고 그대로 쓴다
+    out = probed || (await sessionFetchOnce(url, opts, binary, expectsJson));
     if (out.loginExpired) {
       reloginStateFor(kind).uselessUntil = Date.now() + RELOGIN_DECLINED_MS;
     }
