@@ -349,10 +349,14 @@
       direct: [
         "91-RCRT1-",
       ],
-      /* 냉동콘솔 RCRT3·냉장콘솔 RCRT2 (YAN4 RCRT18 토트 재고이동). RCRT4 프리팩대기는 제외 */
+      /* 냉동콘솔 RCRT3·냉장콘솔 RCRT2 (YAN4 RCRT18 토트 재고이동) */
       tote: [
         "91-RCRT3-",
         "91-RCRT2-",
+      ],
+      /* 프리팩대기 RCRT4 (YAN4 RCRT88) */
+      prepack: [
+        "91-RCRT4-",
       ],
     },
     SIH1: {
@@ -613,6 +617,7 @@
       return ["GC-"]
         .concat(pack.direct)
         .concat(pack.tote || [])
+        .concat(pack.prepack || [])
         .concat(pack.frozen)
         .concat(pack.chilled)
         .concat(pack.ambient)
@@ -2308,6 +2313,7 @@
       pushAtsCtPrefixes(extra, pack.rocket, "로켓버퍼존 확인");
       pushAtsCtPrefixes(extra, pack.direct, "직납");
       pushAtsCtPrefixes(extra, pack.tote || [], "토트재고이동중 확인");
+      pushAtsCtPrefixes(extra, pack.prepack || [], "SR 및 프리팩존 확인");
     }
     extra.push({ prefix: atsMcrtPrefix(), label: "재고이동중 확인" });
     extra.sort(function (a, b) {
