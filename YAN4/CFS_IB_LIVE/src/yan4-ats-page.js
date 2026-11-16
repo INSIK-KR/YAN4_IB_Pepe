@@ -349,7 +349,11 @@
       direct: [
         "91-RCRT1-",
       ],
-      tote: [],
+      /* 냉동콘솔 RCRT3·냉장콘솔 RCRT2 (YAN4 RCRT18 토트 재고이동). RCRT4 프리팩대기는 제외 */
+      tote: [
+        "91-RCRT3-",
+        "91-RCRT2-",
+      ],
     },
     SIH1: {
       frozen: [],
