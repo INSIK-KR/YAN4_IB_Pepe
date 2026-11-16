@@ -138,7 +138,8 @@
     INC15: [],
     INC22: [],
     INC37: [],
-    PYT2: [],
+    /* 91-RCRT4 프리팩대기(YAN4 RCRT88), 91-RCRT3 냉동콘솔·91-RCRT2 냉장콘솔(YAN4 RCRT18) — 모두 에이징 */
+    PYT2: ["RCRT4", "RCRT3", "RCRT2"],
     GON1: [],
     CHW2: [],
     GYS1: [],
