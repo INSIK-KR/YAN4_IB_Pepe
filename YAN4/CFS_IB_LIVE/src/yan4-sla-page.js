@@ -120,6 +120,8 @@
   var GWJ1_AGING_LOC_PREFIXES = ["177-RCRT3-9-"];
   /** GWJ3은 140-RCRT3-5-1~999 만 */
   var GWJ3_AGING_LOC_PREFIXES = ["140-RCRT3-5-"];
+  /** DAE4는 121-RCRT9-10-(SR 상품)·121-RCRT9-55-(콘솔)만. 121-RCRT9-1- 등 직납과 겹치지 않게 로케이션 접두어로 */
+  var DAE4_AGING_LOC_PREFIXES = ["121-RCRT9-10-", "121-RCRT9-55-"];
   /**
    * 센터별 에이징 토큰. 빈 목록은 에이징 없는 센터.
    * 표에 없는 센터는 에이징 없음 (YAN4 값을 빌려 쓰지 않음). GWJ1·GWJ3 은 로케이션 접두어로 따로 판단.
@@ -135,7 +137,8 @@
     GMH1: ["RCRT55"],
     INC11: [],
     INC12: ["RCRT20", "RCRT30", "RCRT40"],
-    INC15: [],
+    /* 124-RCRT3 재고이동 */
+    INC15: ["RCRT3"],
     INC22: [],
     INC37: [],
     /* 91-RCRT4 프리팩대기(YAN4 RCRT88), 91-RCRT3 냉동콘솔·91-RCRT2 냉장콘솔(YAN4 RCRT18) — 모두 에이징 */
@@ -1387,7 +1390,9 @@
         ? GWJ1_AGING_LOC_PREFIXES
         : code === "GWJ3"
           ? GWJ3_AGING_LOC_PREFIXES
-          : null;
+          : code === "DAE4"
+            ? DAE4_AGING_LOC_PREFIXES
+            : null;
     var i, t, parts;
     if (locPrefixes) {
       for (i = 0; i < locPrefixes.length; i++) {
@@ -2377,9 +2382,17 @@
   /**
    * 센터별 직납 RCRT 로케이션 접두어 (직납 드릴 RCRT·SLA FULLNAME·inventory 조회 공통).
    * YAN4 는 사용자 지정, 나머지는 ATS 화면(yan4-ats-page.js) 직납 목록과 같음.
-   * 에이징(AGING_BARCODE_TOKENS_BY_CENTER, GWJ1 177-RCRT3-9-, GWJ3 140-RCRT3-5-)은 포함하지 않음. 목록 없는 센터는 없음.
+   * 에이징(AGING_BARCODE_TOKENS_BY_CENTER, GWJ1 177-RCRT3-9-, GWJ3 140-RCRT3-5-, DAE4 121-RCRT9-10-·55-)은 포함하지 않음. 목록 없는 센터는 없음.
    */
   var DIRECT_RCRT_PREFIXES_BY_CENTER = {
+    SEN2: [
+      "1016-RCRT77-1-",
+      "1016-RCRT77-2-",
+      "1016-RCRT77-3-",
+      "1016-RCRT77-10-",
+      "1016-RCRT77-20-",
+      "1016-RCRT77-30-",
+    ],
     YAN4: [
       "1007-RCRT2-",
       "1007-RCRT3-",
@@ -2553,6 +2566,7 @@
       "1015-RCRT9-5-",
       "1015-RCRT9-6-",
       "1015-RCRT9-8-",
+      "1015-RCRT9-9-",
     ],
     DAE4: [
       "121-RCRT9-7-",
