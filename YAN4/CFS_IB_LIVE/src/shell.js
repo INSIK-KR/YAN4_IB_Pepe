@@ -12496,10 +12496,7 @@
               if (r.status >= 200 && r.status < 400) {
                 resolve(String(r.responseText || ""));
               } else {
-                var eHttp = new Error("HTTP " + r.status);
-                eHttp.yan4Relogin = r.yan4Relogin;
-                eHttp.yan4NotResent = !!r.yan4NotResent;
-                reject(eHttp);
+                reject(new Error("HTTP " + r.status));
               }
             },
             onerror: function () {
@@ -12580,7 +12577,6 @@
       try {
         return await nhMosHttpRequest("POST", url, refererFull, "");
       } catch (eGm) {
-        if (/^HTTP (401|403)\b/.test(String((eGm && eGm.message) || ""))) throw eGm;
         return await nhMosHttpRequestViaBackground("POST", url, refererFull, "");
       }
     }
@@ -13076,29 +13072,14 @@
             nhPostMosWorkerCall(widCall)
               .then(function (txt) {
                 setStatus(nhStatusFromCallResponse(txt, widCall));
-                prev = "호출";
               })
               .catch(function (eC) {
-                var em = eC && eC.message ? eC.message : String(eC);
-                if (/^HTTP (401|403)\b/.test(em)) {
-                  // 로그인 풀림 — 호출은 전송되지 않음. 자동으로 다시 보내지 않고 사용자가 다시 누름
-                  if (eC.yan4Relogin === "ok") {
-                    setStatus(
-                      "로그인이 풀려 " +
-                        widCall +
-                        " 호출이 전송되지 않았습니다. 다시 로그인했으니 「다시 호출」을 눌러 주세요."
-                    );
-                    prev = "다시 호출";
-                  } else {
-                    setStatus(
-                      "로그인이 풀려 " +
-                        widCall +
-                        " 호출이 전송되지 않았습니다. 상단에서 MOS 로그인 후 다시 눌러 주세요."
-                    );
-                  }
-                  return;
-                }
-                setStatus("호출 오류 · " + widCall + " · " + em);
+                setStatus(
+                  "호출 오류 · " +
+                    widCall +
+                    " · " +
+                    (eC && eC.message ? eC.message : String(eC))
+                );
               })
               .then(function () {
                 callBtn.disabled = false;
