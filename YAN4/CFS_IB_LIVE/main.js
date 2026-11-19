@@ -1232,6 +1232,96 @@ function closeSplash() {
   splashWindow = null;
 }
 
+/** 화면 크기(확대) — 4K 모니터처럼 글씨가 작게 보일 때. Windows 배율과 별개로 이 앱만 */
+const UI_ZOOM_FILE = "ui-zoom.json";
+const UI_ZOOM_STEPS = [0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
+let uiZoom = null;
+let uiZoomToastSeq = 0;
+
+function uiZoomPath() {
+  return path.join(app.getPath("userData"), UI_ZOOM_FILE);
+}
+
+function loadUiZoom() {
+  if (uiZoom != null) return uiZoom;
+  uiZoom = 1;
+  try {
+    const z = Number(JSON.parse(fs.readFileSync(uiZoomPath(), "utf8")).zoom);
+    if (UI_ZOOM_STEPS.indexOf(z) >= 0) uiZoom = z;
+  } catch (e) {}
+  return uiZoom;
+}
+
+function saveUiZoom() {
+  try {
+    fs.writeFileSync(uiZoomPath(), JSON.stringify({ zoom: uiZoom }), "utf8");
+  } catch (e) {
+    console.warn("[shell-desktop] ui zoom save:", e && e.message ? e.message : e);
+  }
+}
+
+function showUiZoomToast(wc) {
+  const seq = ++uiZoomToastSeq;
+  const text = "화면 크기 " + Math.round(uiZoom * 100) + "%  (Ctrl + 0 : 100%)";
+  wc.executeJavaScript(
+    "(function(t,q){var d=document.getElementById('yan4-ui-zoom-toast');" +
+      "if(!d){d=document.createElement('div');d.id='yan4-ui-zoom-toast';" +
+      "d.style.cssText='position:fixed;left:50%;top:18px;transform:translateX(-50%);z-index:2147483647;" +
+      "background:rgba(15,23,42,.88);color:#fff;font:600 14px/1.4 system-ui,sans-serif;padding:8px 16px;" +
+      "border-radius:8px;pointer-events:none;transition:opacity .25s';document.body.appendChild(d);}" +
+      "d.textContent=t;d.style.opacity='1';d.dataset.seq=q;" +
+      "setTimeout(function(){if(d.dataset.seq==q)d.style.opacity='0';},1400);})(" +
+      JSON.stringify(text) +
+      "," +
+      seq +
+      ")"
+  ).catch(function () {});
+}
+
+function setUiZoom(wc, z) {
+  if (UI_ZOOM_STEPS.indexOf(z) < 0 || z === uiZoom) {
+    showUiZoomToast(wc);
+    return;
+  }
+  uiZoom = z;
+  wc.setZoomFactor(uiZoom);
+  saveUiZoom();
+  showUiZoomToast(wc);
+}
+
+function stepUiZoom(wc, dir) {
+  const i = UI_ZOOM_STEPS.indexOf(loadUiZoom());
+  const next = UI_ZOOM_STEPS[Math.max(0, Math.min(UI_ZOOM_STEPS.length - 1, i + dir))];
+  setUiZoom(wc, next);
+}
+
+function attachUiZoom(win) {
+  const wc = win.webContents;
+  loadUiZoom();
+  wc.on("did-finish-load", function () {
+    wc.setZoomFactor(uiZoom);
+  });
+  wc.on("before-input-event", function (ev, input) {
+    if (input.type !== "keyDown" || !(input.control || input.meta) || input.alt || input.shift && input.key !== "+") return;
+    const k = input.key;
+    const c = input.code;
+    if (k === "=" || k === "+" || c === "NumpadAdd") {
+      ev.preventDefault();
+      stepUiZoom(wc, 1);
+    } else if (k === "-" || c === "NumpadSubtract") {
+      ev.preventDefault();
+      stepUiZoom(wc, -1);
+    } else if (k === "0" || c === "Numpad0") {
+      ev.preventDefault();
+      setUiZoom(wc, 1);
+    }
+  });
+  // Ctrl + 마우스 휠
+  wc.on("zoom-changed", function (_ev, direction) {
+    stepUiZoom(wc, direction === "in" ? 1 : -1);
+  });
+}
+
 function createWindow() {
   nativeTheme.themeSource = "light";
   const iconPath = path.join(__dirname, "build", "icon.ico");
@@ -1256,6 +1346,7 @@ function createWindow() {
     },
   });
   guardAppWindow(mainWindow, { openLinks: true });
+  attachUiZoom(mainWindow);
   let splashHoldArmed = false;
   const revealMain = function () {
     if (!mainWindow || mainWindow.isDestroyed() || mainWindow.isVisible() || splashHoldArmed) return;
