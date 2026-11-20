@@ -615,8 +615,8 @@
     p2recv: {
       name: "입고내역 RWA (RPA)",
       steps: [
-        { t: cardWhole("p2recv"), title: "입고내역 RWA", text: "RCRT 토트별 입고내역을 엑셀로 뽑습니다." },
-        { t: inCard("p2recv", "select"), title: "토트바코드", text: "RCRT22 · RCRT44 · 둘 다(시트 분리) · 전체 중에서 고릅니다." },
+        { t: cardWhole("p2recv"), title: "입고내역 RWA", text: "상단에서 고른 센터의 RCRT 토트별 입고내역을 엑셀로 뽑습니다." },
+        { t: inCard("p2recv", "select"), title: "토트바코드", text: "상단에서 고른 센터의 RCRT가 나옵니다. YAN4는 RCRT22 · RCRT44 · 둘 다(시트 분리) · 전체이고, 센터를 바꾸면 그 센터 RCRT로 바뀝니다." },
         { t: inCard("p2recv", "input[id$=recv-date]"), title: "입고일시", text: "조회할 날짜입니다." },
         { t: all(inCard("p2recv", "input[placeholder='개인 AD ID']"), inCard("p2recv", "input[placeholder='AD PW']"), inCard("p2recv", "button", "계정 저장")), title: "Presto 계정", text: "생산성까지 보려면 개인 AD 계정을 넣고 「계정 저장」합니다. 서비스 계정(svc)은 안 됩니다." },
         { t: inCard("p2recv", "button", "작업 시작"), title: "작업 시작 · 중지", text: "토트 · 날짜를 고른 뒤 시작합니다." },
