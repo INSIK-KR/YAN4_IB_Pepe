@@ -13558,6 +13558,64 @@
   var recvExportRunning = false;
   var recvExportStop = false;
 
+  /**
+   * 센터별 토트바코드(RCRT) 선택지 — 센터 ID 기준. 쉼표로 여러 개면 시트를 나눠 저장.
+   * 기준: 구글 시트 「입고내역RWA」 탭. 여기에 없는 센터는 「전체」만 (생산성 생략)
+   */
+  var RECV_TOTE_OPTIONS_BY_CENTER = {
+    /* YAN4 */
+    "1007": [
+      ["1007-RCRT22", "1007-RCRT22"],
+      ["1007-RCRT44", "1007-RCRT44"],
+      ["1007-RCRT22,1007-RCRT44", "RCRT22 + RCRT44 (시트 분리)"],
+    ],
+    /* SEN2 */
+    "1016": [["1016-RCRT77-3", "1016-RCRT77-3"]],
+    /* YON5 */
+    "135": [
+      ["135-RCRT50-1", "135-RCRT50-1 (오전)"],
+      ["135-RCRT50-2", "135-RCRT50-2 (오후)"],
+      ["135-RCRT59-1", "135-RCRT59-1 (ATS)"],
+      ["135-RCRT50-1,135-RCRT50-2,135-RCRT59-1", "RCRT50-1 + 50-2 + 59-1 (시트 분리)"],
+    ],
+    /* GYS1 */
+    "1015": [
+      ["1015-RCRT1,1015-RCRT2,1015-RCRT3", "RCRT1~3 오전 (시트 분리)"],
+      ["1015-RCRT4,1015-RCRT5", "RCRT4~5 오후 (시트 분리)"],
+      ["1015-RCRT1,1015-RCRT2,1015-RCRT3,1015-RCRT4,1015-RCRT5", "RCRT1~5 (시트 분리)"],
+    ],
+  };
+
+  function recvToteOptionsFor(centerId) {
+    return RECV_TOTE_OPTIONS_BY_CENTER[String(centerId || "")] || [];
+  }
+
+  /** 「전체」 조회 때 생산성을 볼 RCRT — 그 센터 선택지에 나온 RCRT 모두 */
+  function recvCenterAllPrefixes(centerId) {
+    var seen = Object.create(null);
+    var out = [];
+    recvToteOptionsFor(centerId).forEach(function (o) {
+      recvTotePrefixes(o[0]).forEach(function (p) {
+        if (!seen[p]) {
+          seen[p] = true;
+          out.push(p);
+        }
+      });
+    });
+    return out;
+  }
+
+  /** 1007-RCRT22 → RCRT22 (생산성 구역 · 시트 이름) */
+  function recvAreaLabel(prefix) {
+    return String(prefix || "").replace(/^\d+-/, "").toUpperCase();
+  }
+
+  function recvCenterText(centerId) {
+    var api = window.__CFS_CENTER__;
+    var name = api && typeof api.name === "function" ? api.name(centerId) : centerId;
+    return name === centerId ? String(centerId) : name + " (" + centerId + ")";
+  }
+
   function recvTodayYmd() {
     var d = new Date();
     return (
@@ -14055,13 +14113,31 @@
       });
   }
 
-  function recvBuildProductivitySql(ymd, workers, centerId) {
+  function recvBuildProductivitySql(ymd, workers, centerId, prefixes) {
     var day = recvYmdToDayInt(ymd);
     var year = parseInt(String(ymd || "").slice(0, 4), 10) || new Date().getFullYear();
     var cid =
       String(centerId || cfsActiveCenterId("1007")).replace(/\D/g, "") || "1007";
-    var loc22 = String(cid).toLowerCase() + "-rcrt22%";
-    var loc44 = String(cid).toLowerCase() + "-rcrt44%";
+    var sqlStr = function (v) {
+      return "'" + String(v).replace(/'/g, "''") + "'";
+    };
+    /* 1007-RCRT22 → fullname 이 1007-rcrt22 이거나 1007-rcrt22- 로 시작 (RCRT1 이 RCRT10 에 걸리지 않게) */
+    var areaCases = (prefixes || []).map(function (p) {
+      var low = String(p).toLowerCase();
+      return (
+        "            WHEN LOWER(s.fullname) = " +
+        sqlStr(low) +
+        " OR LOWER(s.fullname) LIKE " +
+        sqlStr(low + "-%") +
+        " THEN " +
+        sqlStr(recvAreaLabel(p))
+      );
+    });
+    var areaList = (prefixes || [])
+      .map(function (p) {
+        return sqlStr(recvAreaLabel(p));
+      })
+      .join(", ");
     var ids = (workers || [])
       .map(function (w) {
         return "'" + String(w).replace(/'/g, "''") + "'";
@@ -14096,8 +14172,9 @@
       "        lg.createdat,",
       "        lg.adjustquantity,",
       "        CASE",
-      "            WHEN LOWER(s.fullname) LIKE '" + loc22 + "' THEN 'RCRT22'",
-      "            WHEN LOWER(s.fullname) LIKE '" + loc44 + "' THEN 'RCRT44'",
+    ]
+      .concat(areaCases)
+      .concat([
       "            ELSE 'OTHER'",
       "        END AS area",
       "    FROM logs lg",
@@ -14117,7 +14194,7 @@
       "        SUM(adjustquantity) AS units,",
       "        DATE_DIFF('second', MIN(createdat), MAX(createdat)) AS span_sec",
       "    FROM seq",
-      "    WHERE area IN ('RCRT22', 'RCRT44')",
+      "    WHERE area IN (" + areaList + ")",
       "    GROUP BY workerloginid, area, grp",
       ")",
       "SELECT",
@@ -14130,7 +14207,7 @@
       "FROM runs",
       "GROUP BY GROUPING SETS ((area, workerloginid), (area))",
       "ORDER BY area, GROUPING(workerloginid), workerloginid",
-    ].join("\n");
+    ]).join("\n");
   }
 
   function recvMapPrestoProductivityRows(result) {
@@ -14156,17 +14233,10 @@
 
   function recvFilterProdRowsForSheet(prodRows, sheetName) {
     var sn = String(sheetName || "").toUpperCase();
-    if (sn.indexOf("RCRT22") >= 0) {
-      return (prodRows || []).filter(function (r) {
-        return String(r.area || "").toUpperCase() === "RCRT22";
-      });
-    }
-    if (sn.indexOf("RCRT44") >= 0) {
-      return (prodRows || []).filter(function (r) {
-        return String(r.area || "").toUpperCase() === "RCRT44";
-      });
-    }
-    return prodRows || [];
+    var mine = (prodRows || []).filter(function (r) {
+      return String(r.area || "").toUpperCase() === sn;
+    });
+    return mine.length ? mine : sn === "입고내역" ? prodRows || [] : [];
   }
 
   /**
@@ -14260,9 +14330,15 @@
     ws["!ref"] = XLSX.utils.encode_range(range);
   }
 
-  async function recvFetchProductivityRows(ymd, workers, onProgress) {
+  async function recvFetchProductivityRows(ymd, workers, onProgress, toteFilter, centerId) {
     if (!workers || !workers.length) {
       return { rows: [], note: "진열작업자 없음 · 생산성 생략" };
+    }
+    var cid = centerId || cfsActiveCenterId("1007");
+    var areaPrefixes = recvTotePrefixes(toteFilter);
+    if (!areaPrefixes.length) areaPrefixes = recvCenterAllPrefixes(cid);
+    if (!areaPrefixes.length) {
+      return { rows: [], note: "이 센터는 RCRT 미지정 · 생산성 생략" };
     }
     if (
       !window.__YAN4_DESKTOP_SHELL__ ||
@@ -14272,11 +14348,7 @@
       return { rows: [], note: "데스크톱에서만 Presto 조회 가능" };
     }
     if (onProgress) onProgress("Presto 생산성 조회 중… (작업자 " + workers.length + "명)");
-    var sql = recvBuildProductivitySql(
-      ymd,
-      workers,
-      cfsActiveCenterId("1007")
-    );
+    var sql = recvBuildProductivitySql(ymd, workers, cid, areaPrefixes);
     var res = await window.yan4ShellDesktop.prestoQuery({ sql: sql });
     if (!res || !res.ok) {
       throw new Error((res && res.error) || "Presto 조회 실패");
@@ -14395,17 +14467,22 @@
     selTote.className = "yna4-pane-inp";
     selTote.style.flex = "1";
     selTote.style.minWidth = "0";
-    [
-      { v: "1007-RCRT22", t: "1007-RCRT22" },
-      { v: "1007-RCRT44", t: "1007-RCRT44" },
-      { v: "1007-RCRT22,1007-RCRT44", t: "RCRT22 + RCRT44 (시트 분리)" },
-      { v: "", t: "전체" },
-    ].forEach(function (o) {
-      var opt = document.createElement("option");
-      opt.value = o.v;
-      opt.textContent = o.t;
-      selTote.appendChild(opt);
-    });
+    /** 상단에서 고른 센터의 RCRT 선택지 — 센터를 바꾸면 다시 그림 */
+    var recvCenterId = "";
+    function fillRecvToteOptions() {
+      recvCenterId = cfsActiveCenterId("1007");
+      selTote.textContent = "";
+      recvToteOptionsFor(recvCenterId)
+        .concat([["", "전체"]])
+        .forEach(function (o) {
+          var opt = document.createElement("option");
+          opt.value = o[0];
+          opt.textContent = o[1];
+          selTote.appendChild(opt);
+        });
+      selTote.title = recvCenterText(recvCenterId) + " 기준 · 센터는 상단에서 바꿉니다";
+    }
+    fillRecvToteOptions();
     rowTote.appendChild(lblT);
     rowTote.appendChild(selTote);
 
@@ -14453,7 +14530,14 @@
     var status = document.createElement("div");
     status.id = ROOT_ID + "-recv-status";
     status.className = "yna4-pane-status";
-    status.textContent = "토트 · 날짜 선택 후 작업 시작 (생산성은 Presto 계정 저장 후)";
+    function recvIdleText() {
+      return (
+        recvCenterText(recvCenterId) +
+        " · 토트 · 날짜 선택 후 작업 시작 (생산성은 Presto 계정 저장 후)" +
+        (recvToteOptionsFor(recvCenterId).length ? "" : " · 이 센터는 RCRT 미지정이라 「전체」만")
+      );
+    }
+    status.textContent = recvIdleText();
 
     mod.appendChild(rowTote);
     mod.appendChild(rowDate);
@@ -14471,7 +14555,15 @@
       btnRun.disabled = on;
       btnStop.disabled = !on;
       btnSavePresto.disabled = on;
+      selTote.disabled = on;
     }
+
+    /* 상단 센터 전환 → 그 센터 RCRT 로 (조회 중엔 끝난 뒤 반영) */
+    window.addEventListener("cfs-center-changed", function () {
+      if (recvExportRunning) return;
+      fillRecvToteOptions();
+      setRecvStatus(recvIdleText());
+    });
 
     bindPrestoAccountInputs(
       prestoAcc,
@@ -14504,9 +14596,16 @@
         alert("입고일시를 선택하세요.");
         return;
       }
+      if (cfsActiveCenterId("1007") !== recvCenterId) {
+        fillRecvToteOptions();
+        alert(recvCenterText(recvCenterId) + " 기준으로 토트 목록을 바꿨습니다. 토트를 확인한 뒤 다시 눌러 주세요.");
+        setRecvStatus(recvIdleText());
+        return;
+      }
+      var runCenterId = recvCenterId;
       recvExportStop = false;
       setRecvRunning(true);
-      setRecvStatus("시작…");
+      setRecvStatus(recvCenterText(runCenterId) + " · 시작…");
       try {
         var listRows = await recvFetchAllListRows(toteFilter, ymd, setRecvStatus);
         if (!listRows.length) {
@@ -14539,7 +14638,9 @@
           var prodPack = await recvFetchProductivityRows(
             ymd,
             workers,
-            setRecvStatus
+            setRecvStatus,
+            toteFilter,
+            runCenterId
           );
           prodRows = (prodPack && prodPack.rows) || [];
           prodNote = (prodPack && prodPack.note) || "";
@@ -14573,6 +14674,7 @@
       } finally {
         setRecvRunning(false);
         recvExportStop = false;
+        if (cfsActiveCenterId("1007") !== recvCenterId) fillRecvToteOptions();
       }
     });
 
