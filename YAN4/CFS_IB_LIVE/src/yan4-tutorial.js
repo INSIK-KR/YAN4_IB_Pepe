@@ -1,6 +1,7 @@
 /** YAN4 IB Shell — 게임식 튜토리얼 (강조 + 개구리 말풍선 + 다음/이전/건너뛰기)
- *  - 상단 「튜토리얼」 버튼 → 기본 · SLA · ATS · 1~4페이지 투어
- *  - 1·2페이지 카드 머리말의 개구리 버튼 → 그 카드만 짚는 짧은 투어
+ *  - 상단 개구리 버튼 → 튜토리얼 켜기/끄기 (기억함)
+ *  - 켜면 앱 제목(기본) · SLA · ATS · 1~4 페이지 버튼과 1·2페이지 카드 머리말에 개구리가 뜸
+ *    → 누르면 그 화면 · 그 카드 투어
  *  - 자동으로 띄우지 않음 (버튼으로만 연다)
  */
 (function () {
@@ -188,9 +189,9 @@
       },
       {
         t: "#yna4TutorialBtn",
-        title: "튜토리얼 다시 보기",
+        title: "튜토리얼 켜기 · 끄기",
         text:
-          "이 버튼에서 SLA · ATS · 페이지별 안내를 언제든 다시 봅니다.<br>1·2페이지 카드는 카드 오른쪽 위 <b>개구리 버튼</b>을 누르면 그 카드만 안내합니다.",
+          "이 개구리 버튼으로 튜토리얼을 켜고 끕니다.<br>켜면 <b>SLA · ATS · 1~4</b> 버튼과 1·2페이지 카드 오른쪽 위에 개구리가 뜹니다. 개구리를 누르면 그 화면이나 카드를 안내합니다.",
       },
     ],
     true
@@ -750,13 +751,21 @@
     var s = document.createElement("style");
     s.id = "yna4-tut-css";
     s.textContent = [
-      "#banner .login-group button#yna4TutorialBtn,#yna4TutorialBtn{background:#4ade80;color:#0f172a;min-width:0;width:auto;height:auto;padding:4px 8px;border:0;font-size:12px;font-weight:800;line-height:1.2;letter-spacing:0;display:inline-flex;align-items:center;gap:4px;}",
-      "#banner .login-group button#yna4TutorialBtn:hover{background:#22c55e;}",
-      "#yna4TutorialBtn img{width:16px;height:16px;border-radius:50%;background:#fff;display:block;}",
-      ".yna4-tut-menu{position:fixed;z-index:" + Z + ";background:#fff;border:1px solid #cbd5e1;border-radius:10px;box-shadow:0 12px 32px rgba(15,23,42,.28);padding:6px;min-width:190px;font-family:inherit;}",
-      ".yna4-tut-menu-h{font-size:11px;color:#64748b;padding:4px 8px 6px;font-weight:700;}",
-      ".yna4-tut-menu button{display:block;width:100%;text-align:left;border:0;background:transparent;padding:7px 10px;font-size:13px;font-weight:700;color:#0f172a;border-radius:6px;cursor:pointer;font-family:inherit;}",
-      ".yna4-tut-menu button:hover{background:#eff6ff;color:#1d4ed8;}",
+      /* 상단 토글 — 개구리만. 꺼짐: 흐린 회색 테두리 · 켜짐: 초록 */
+      "#banner .login-group button#yna4TutorialBtn,#yna4TutorialBtn{background:#334155;min-width:0;width:28px;height:24px;padding:0;border:1px solid #475569;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;}",
+      "#yna4TutorialBtn img{width:18px;height:18px;border-radius:50%;background:#fff;display:block;opacity:.45;filter:grayscale(1);}",
+      "#banner .login-group button#yna4TutorialBtn:hover{border-color:#86efac;}",
+      "#banner .login-group button#yna4TutorialBtn.is-on,#yna4TutorialBtn.is-on{background:#4ade80;border-color:#22c55e;}",
+      "#yna4TutorialBtn.is-on img{opacity:1;filter:none;}",
+      /* 켜졌을 때 페이지 버튼 · 앱 제목에 붙는 개구리 */
+      "#banner .yna4-shell-page-nav button,#banner > strong{position:relative;overflow:visible;}",
+      ".yna4-tut-badge-frog{position:absolute;top:-5px;right:-9px;width:14px;height:14px;padding:0;border:1px solid #22c55e;border-radius:50%;background:#fff;cursor:pointer;display:none;align-items:center;justify-content:center;overflow:hidden;z-index:2;box-shadow:0 1px 3px rgba(0,0,0,.35);}",
+      ".yna4-tut-badge-frog img{width:12px;height:12px;display:block;}",
+      ".yna4-tut-badge-frog:hover{transform:scale(1.25);}",
+      "body.yna4-tut-on .yna4-tut-badge-frog{display:inline-flex;}",
+      /* 앱 제목은 글자를 가리지 않게 글자 뒤에 */
+      "#banner > strong .yna4-tut-badge-frog{position:relative;top:auto;right:auto;margin-left:5px;vertical-align:-3px;}",
+      "body:not(.yna4-tut-on) .yna4-tut-card-btn{display:none !important;}",
       ".yna4-tut-card-btn{margin-left:auto;flex:0 0 auto;width:24px;height:24px;padding:0;border:1px solid #93c5fd;border-radius:50%;background:#fff;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;overflow:hidden;}",
       ".yna4-tut-card-btn:hover{border-color:#16a34a;box-shadow:0 0 0 2px rgba(22,163,74,.25);}",
       ".yna4-tut-card-btn img{width:22px;height:22px;display:block;}",
@@ -1128,7 +1137,6 @@
   function start(steps, opts) {
     opts = opts || {};
     close();
-    closeMenu();
     steps = (steps || []).filter(function (s) {
       try {
         return !s.when || s.when();
@@ -1200,7 +1208,6 @@
   function startTour(id) {
     var t = TOURS[id];
     if (!t) return;
-    closeMenu();
     gotoPage(t.page, function () {
       var steps = t.steps;
       if (id === "p1") steps = pageCardsTour("1");
@@ -1217,55 +1224,31 @@
     start(cardTourSteps(id));
   }
 
-  /* ───────── 상단 버튼 · 메뉴 ───────── */
-  var menuEl = null;
-  function closeMenu() {
-    if (menuEl) {
-      try {
-        menuEl.remove();
-      } catch (e) {}
-      menuEl = null;
-      document.removeEventListener("mousedown", onDocDown, true);
+  /* ───────── 상단 토글 · 개구리 배지 ───────── */
+  var MODE_KEY = "yan4.tutorialOn";
+  function tutOn() {
+    try {
+      return localStorage.getItem(MODE_KEY) === "1";
+    } catch (e) {
+      return false;
     }
   }
-  function onDocDown(ev) {
-    if (!menuEl) return;
+  function applyMode(on) {
+    document.body.classList.toggle("yna4-tut-on", !!on);
     var btn = document.getElementById("yna4TutorialBtn");
-    if (menuEl.contains(ev.target) || (btn && btn.contains(ev.target))) return;
-    closeMenu();
+    if (btn) {
+      btn.classList.toggle("is-on", !!on);
+      btn.title = on
+        ? "튜토리얼 켜짐 — 개구리를 누르면 그 화면을 안내합니다 (누르면 끔)"
+        : "튜토리얼 꺼짐 (누르면 켬)";
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+    }
   }
-  function navVisible(page) {
-    if (!page) return true;
-    var b = navBtn(page);
-    return !!(b && isVis(b));
-  }
-  function openMenu(anchor) {
-    if (menuEl) return closeMenu();
-    injectCss();
-    menuEl = document.createElement("div");
-    menuEl.className = "yna4-tut-menu";
-    var h = document.createElement("div");
-    h.className = "yna4-tut-menu-h";
-    h.textContent = "어떤 화면을 안내할까요?";
-    menuEl.appendChild(h);
-    MENU.forEach(function (id) {
-      var t = TOURS[id];
-      if (!navVisible(t.page)) return;
-      var it = document.createElement("button");
-      it.type = "button";
-      it.textContent = t.name;
-      it.setAttribute("data-tour", id);
-      it.addEventListener("click", function () {
-        startTour(id);
-      });
-      menuEl.appendChild(it);
-    });
-    document.body.appendChild(menuEl);
-    var r = anchor.getBoundingClientRect();
-    var mw = menuEl.offsetWidth;
-    menuEl.style.top = Math.round(r.bottom + 6) + "px";
-    menuEl.style.left = Math.round(Math.max(8, Math.min(window.innerWidth - mw - 8, r.right - mw))) + "px";
-    document.addEventListener("mousedown", onDocDown, true);
+  function setMode(on) {
+    try {
+      localStorage.setItem(MODE_KEY, on ? "1" : "0");
+    } catch (e) {}
+    applyMode(on);
   }
 
   function ensureTopButton() {
@@ -1276,13 +1259,44 @@
     var btn = document.createElement("button");
     btn.type = "button";
     btn.id = "yna4TutorialBtn";
-    btn.title = "튜토리얼 (화면 사용법 안내)";
-    btn.innerHTML = '<img alt="" src="' + FROG_SRC + '"><span>튜토리얼</span>';
+    btn.setAttribute("aria-label", "튜토리얼 켜기/끄기");
+    btn.innerHTML = '<img alt="" src="' + FROG_SRC + '">';
     btn.addEventListener("click", function () {
-      openMenu(btn);
+      setMode(!tutOn());
     });
     if (sop && sop.nextSibling) host.insertBefore(btn, sop.nextSibling);
     else host.appendChild(btn);
+    applyMode(tutOn());
+  }
+
+  /** 페이지 버튼(SLA · ATS · 1~4) · 앱 제목(기본)에 개구리 — 켜졌을 때만 보임(CSS) */
+  var BADGE_TOURS = [
+    ["sla", "sla"],
+    ["ats", "ats"],
+    ["1", "p1"],
+    ["2", "p2"],
+    ["3", "p3"],
+    ["4", "p4"],
+  ];
+  function addBadge(host, tourId) {
+    if (!host || !TOURS[tourId] || host.querySelector(".yna4-tut-badge-frog")) return;
+    var b = document.createElement("span");
+    b.className = "yna4-tut-badge-frog";
+    b.setAttribute("role", "button");
+    b.title = TOURS[tourId].name + " 안내";
+    b.innerHTML = '<img alt="" src="' + FROG_SRC + '">';
+    b.addEventListener("click", function (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      startTour(tourId);
+    });
+    host.appendChild(b);
+  }
+  function ensureBadges() {
+    BADGE_TOURS.forEach(function (p) {
+      addBadge(navBtn(p[0]), p[1]);
+    });
+    addBadge(document.querySelector("#banner > strong"), "basic");
   }
 
   function ensureCardButtons() {
@@ -1511,11 +1525,15 @@
     injectCss();
     ensureTopButton();
     ensureCardButtons();
+    ensureBadges();
+    applyMode(tutOn());
   }
 
   window.__YAN4_TUTORIAL__ = {
     start: startTour,
     startCard: startCard,
+    setMode: setMode,
+    isOn: tutOn,
     close: close,
     exportSample: exportSampleData,
     serialize: serializeGraph,
@@ -1533,6 +1551,7 @@
     try {
       ensureTopButton();
       ensureCardButtons();
+      ensureBadges();
     } catch (e) {}
   }, 1500);
 })();
