@@ -4,6 +4,19 @@
 (function () {
   "use strict";
 
+  /** HTTP 401·403 → 「WMS 로그인 필요 — 상단 「WMS」 버튼으로 로그인하세요」 (desktop-shim.js) */
+  function yan4HttpErr(status, url, rest, fallback) {
+    var f = window.__YAN4_HTTP_ERR__;
+    if (typeof f === "function") return f(status, url, rest, fallback);
+    return fallback || "HTTP " + status + (rest || "");
+  }
+
+  /** 로그인 화면(HTML)이 온 경우 — HTTP 코드 없이 */
+  function yan4LoginText(url) {
+    var f = window.__YAN4_LOGIN_TEXT__;
+    return typeof f === "function" ? f(url) : "로그인 필요";
+  }
+
   var SLA_UI_REV = "280";
   var DIRECT_PENDING_NUM_COLOR = "#b45309";
   var PROGRESS_VENDOR_OFFSET_PX = 0;
@@ -841,7 +854,7 @@
           if (r.status >= 200 && r.status < 400) {
             resolve(String(r.responseText || ""));
           } else {
-            reject(new Error("HTTP " + r.status));
+            reject(new Error(yan4HttpErr(r.status, opt.url)));
           }
         },
         onerror: function () {
@@ -907,9 +920,12 @@
             }
             reject(
               new Error(
-                (res && res.error) ||
-                  "PO Management HTTP " +
-                    (res && res.status ? res.status : "?")
+                yan4HttpErr(
+                  res && res.status,
+                  PO_MGMT_ORIGIN,
+                  "",
+                  (res && res.error) || "PO Management HTTP " + (res && res.status ? res.status : "?")
+                )
               )
             );
           }
@@ -972,8 +988,12 @@
             }
             reject(
               new Error(
-                (res && res.error) ||
-                  (res && res.status ? "HTTP " + res.status : "inbound fetch 실패")
+                yan4HttpErr(
+                  res && res.status,
+                  url,
+                  "",
+                  (res && res.error) || (res && res.status ? "HTTP " + res.status : "inbound fetch 실패")
+                )
               )
             );
           }
@@ -1084,7 +1104,7 @@
               return;
             }
             if (res && res.ok) {
-              reject(new Error("HTTP " + res.status + " POST " + url));
+              reject(new Error(yan4HttpErr(res.status, url, " POST " + url)));
               return;
             }
             gmXhr({
@@ -1699,11 +1719,16 @@
             if (!res || res.ok === false || (status && status >= 400)) {
               reject(
                 new Error(
-                  TRANSFER_EXCEL_PATH +
-                    " HTTP " +
-                    (status || "?") +
-                    ((res && res.error) ? " (" + res.error + ")" : "") +
-                    " — EXE Coupang 로그인 후 다시 시도"
+                  yan4HttpErr(
+                    status,
+                    url,
+                    "",
+                    TRANSFER_EXCEL_PATH +
+                      " HTTP " +
+                      (status || "?") +
+                      ((res && res.error) ? " (" + res.error + ")" : "") +
+                      " — 상단 「WMS」 로그인 후 다시 시도"
+                  )
                 )
               );
               return;
@@ -1732,7 +1757,7 @@
       headers: { "X-Requested-With": "XMLHttpRequest" },
     });
     if (!res.ok) {
-      throw new Error(TRANSFER_EXCEL_PATH + " HTTP " + res.status);
+      throw new Error(yan4HttpErr(res.status, url, "", TRANSFER_EXCEL_PATH + " HTTP " + res.status));
     }
     var buf = await res.arrayBuffer();
     if (!buf || buf.byteLength < 400) {
@@ -7798,7 +7823,7 @@
       },
     });
     if (!res.ok) {
-      throw new Error("SharePoint HTTP " + res.status);
+      throw new Error(yan4HttpErr(res.status, SHAREPOINT_SLA_REFERER, "", "SharePoint HTTP " + res.status));
     }
     var buf = await res.arrayBuffer();
     if (!buf || buf.byteLength < 400) {
@@ -8049,13 +8074,13 @@
       obj = JSON.parse(raw);
     } catch (eJson) {
       if (/^\s*</.test(raw)) {
-        throw new Error("PO Management HTML 응답 — po-management 로그인 확인");
+        throw new Error(yan4LoginText(PO_MGMT_ORIGIN));
       }
       throw new Error("PO Management JSON 파싱 실패");
     }
     if (isFirstPage && obj && obj.valid === false && !obj.data) {
       throw new Error(
-        "PO Management 조회 실패 — po-management 로그인·YAN4·기간 확인"
+        "PO Management 조회 실패 — 상단 「PO」 로그인·YAN4·기간 확인"
       );
     }
     return obj;
@@ -9202,8 +9227,9 @@
   /** 로그인 페이지(HTML)·401·403 은 로그인 문제, 나머지는 실제 원인을 보여 준다 */
   function inboundBookingErrorText(err) {
     var msg = String((err && err.message) || err || "");
+    if (/ 로그인 필요 — /.test(msg)) return msg;
     if ((err && err.name === "SyntaxError") || /HTTP 40[13]\b/.test(msg)) {
-      return "쉽먼트 로그인 필요";
+      return yan4LoginText("https://shipments.coupang.net/");
     }
     return "쉽먼트 조회 실패 (" + msg + ")";
   }

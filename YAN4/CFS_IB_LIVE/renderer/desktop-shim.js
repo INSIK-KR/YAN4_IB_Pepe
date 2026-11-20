@@ -12,6 +12,38 @@
     return;
   }
 
+  /** 401·403 이 어느 시스템인지 — 상단 로그인 버튼 이름(WMS·PO·MOS·SHPT) */
+  function loginSystemOf(url) {
+    var h = "";
+    try {
+      h = new URL(String(url || ""), "https://inbound.coupang.com/").hostname;
+    } catch (eU) {}
+    if (/shipments\.coupang\.net$/.test(h)) return "SHPT";
+    if (/po-management\.coupang\.net$/.test(h)) return "PO";
+    if (/mos\.coupang\.net$/.test(h)) return "MOS";
+    if (/sharepoint\.com$/.test(h)) return "SharePoint";
+    return "WMS";
+  }
+
+  function loginNeededText(url, status) {
+    var sys = loginSystemOf(url);
+    var how =
+      sys === "SharePoint"
+        ? "SharePoint에 다시 로그인하세요"
+        : "상단 「" + sys + "」 버튼으로 로그인하세요";
+    return sys + " 로그인 필요 — " + how + (status ? " (HTTP " + status + ")" : "");
+  }
+
+  window.__YAN4_LOGIN_TEXT__ = function (url) {
+    return loginNeededText(url, 0);
+  };
+  /** status 가 401·403 이면 로그인 안내, 아니면 fallback 또는 「HTTP 500 …」 */
+  window.__YAN4_HTTP_ERR__ = function (status, url, rest, fallback) {
+    var s = Number(status);
+    if (s === 401 || s === 403) return loginNeededText(url, s);
+    return fallback || "HTTP " + status + (rest || "");
+  };
+
   function mkLastError(msg) {
     return msg ? { message: String(msg) } : null;
   }
@@ -46,6 +78,12 @@
         api
           .runtimeMessage(message)
           .then(function (res) {
+            var m401 = res && /^HTTP (401|403)\b/.exec(String(res.error || ""));
+            if (m401) {
+              res.error = loginNeededText(message && message.url, Number(m401[1]));
+            } else if (res && !res.error && (res.status === 401 || res.status === 403)) {
+              res.error = loginNeededText(message && message.url, res.status);
+            }
             if (res && res.ok === false && res.error) {
               chromeShim.runtime.lastError = mkLastError(res.error);
             }

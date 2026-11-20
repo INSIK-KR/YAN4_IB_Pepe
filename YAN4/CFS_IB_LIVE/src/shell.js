@@ -1,6 +1,19 @@
 (function () {
   "use strict";
 
+  /** HTTP 401·403 → 「WMS 로그인 필요 — 상단 「WMS」 버튼으로 로그인하세요」 (desktop-shim.js) */
+  function yan4HttpErr(status, url, rest, fallback) {
+    var f = window.__YAN4_HTTP_ERR__;
+    if (typeof f === "function") return f(status, url, rest, fallback);
+    return fallback || "HTTP " + status + (rest || "");
+  }
+
+  /** 로그인 화면(HTML)이 온 경우 — HTTP 코드 없이 */
+  function yan4LoginText(url) {
+    var f = window.__YAN4_LOGIN_TEXT__;
+    return typeof f === "function" ? f(url) : "로그인 필요";
+  }
+
   /** 페이지/구버전 스크립트와 id 충돌 시 패널이 영구히 안 뜰 수 있어 고유값 유지 */
   var ROOT_ID = "yna4UnifiedUiShell_v09";
 
@@ -811,7 +824,7 @@
         timeout: UNLOAD_GAP_REQ_TIMEOUT_MS,
         onload: function (r) {
           if (r.status >= 200 && r.status < 400) resolve(r.responseText);
-          else reject(new Error("HTTP " + r.status + " " + url));
+          else reject(new Error(yan4HttpErr(r.status, url, " " + url)));
         },
         onerror: function () {
           reject(new Error("요청 실패 " + url));
@@ -849,7 +862,7 @@
             timeout: UNLOAD_GAP_REQ_TIMEOUT_MS,
             onload: function (r) {
               if (r.status >= 200 && r.status < 400) resolve(r.responseText);
-              else reject(new Error("HTTP " + r.status + " POST " + url));
+              else reject(new Error(yan4HttpErr(r.status, url, " POST " + url)));
             },
             onerror: function () {
               reject(new Error("POST 실패 " + url));
@@ -890,7 +903,7 @@
             return;
           }
           if (res && res.ok) {
-            reject(new Error("HTTP " + res.status + " " + url));
+            reject(new Error(yan4HttpErr(res.status, url, " " + url)));
             return;
           }
           fallback().then(resolve, reject);
@@ -950,7 +963,7 @@
 
   /** 로그인 풀림 — HTTP 401/403 오류 */
   function unloadGapIsLoginError(e) {
-    return /^HTTP (401|403)\b/.test(String((e && e.message) || ""));
+    return /HTTP (401|403)\b/.test(String((e && e.message) || ""));
   }
 
   /** 로그인 풀림 — JSON 대신 로그인 화면 HTML 이 온 경우 */
@@ -2301,7 +2314,7 @@
         timeout: 0,
         onload: function (r) {
           if (r.status >= 200 && r.status < 400) resolve(String(r.responseText || ""));
-          else reject(new Error("HTTP " + r.status));
+          else reject(new Error(yan4HttpErr(r.status, url)));
         },
         onerror: function () {
           reject(new Error("네트워크 오류"));
@@ -2385,8 +2398,9 @@
   function unloadShipLoginText(err) {
     if (/^PO Management/.test(String((err && err.message) || ""))) return String(err.message);
     var msg = String((err && err.message) || err || "");
+    if (/ 로그인 필요 — /.test(msg)) return msg;
     if ((err && err.name === "SyntaxError") || /HTTP 40[13]\b/.test(msg)) {
-      return "쉽먼트 로그인 필요";
+      return yan4LoginText("https://shipments.coupang.net/");
     }
     return "쉽먼트 조회 실패 (" + msg + ")";
   }
@@ -2490,7 +2504,7 @@
               return;
             }
             if (res.ok && res.status >= 200 && res.status < 400) resolve(String(res.body || ""));
-            else reject(new Error(res.error || "HTTP " + (res.status || "?")));
+            else reject(new Error(yan4HttpErr(res.status || "?", UNLOAD_PO_DOWNLOAD_URL, "", res.error)));
           }
         );
       });
@@ -2518,7 +2532,7 @@
         timeout: 0,
         onload: function (r) {
           if (r.status >= 200 && r.status < 400) resolve(String(r.responseText || ""));
-          else reject(new Error("HTTP " + r.status));
+          else reject(new Error(yan4HttpErr(r.status, UNLOAD_PO_DOWNLOAD_URL)));
         },
         onerror: function () {
           reject(new Error("네트워크 오류"));
@@ -2624,7 +2638,7 @@
       try {
         obj = JSON.parse(raw);
       } catch (eJ) {
-        throw new Error(/^\s*</.test(raw) ? "PO Management 로그인 필요" : "PO Management 응답 오류");
+        throw new Error(/^\s*</.test(raw) ? yan4LoginText(UNLOAD_PO_ORIGIN) : "PO Management 응답 오류");
       }
       if (page === 1 && obj && obj.valid === false && !obj.data) {
         throw new Error("PO Management 조회 실패 (로그인·센터·날짜 확인)");
@@ -2806,7 +2820,9 @@
       stat.poDiag = po.diag;
     } catch (ePoMgmt) {
       var pm = String((ePoMgmt && ePoMgmt.message) || ePoMgmt);
-      if (/^HTTP (401|403)\b/.test(pm)) pm = "로그인 필요";
+      if (/HTTP (401|403)\b/.test(pm) || / 로그인 필요 — /.test(pm)) {
+        throw new Error(/ 로그인 필요 — /.test(pm) ? pm : yan4HttpErr(401, UNLOAD_PO_ORIGIN));
+      }
       throw new Error(/^PO Management/.test(pm) ? pm : "PO Management " + pm);
     }
     var poOwnerAll = Object.create(null);
@@ -3790,7 +3806,7 @@
         timeout: UNLOAD_REQ_TIMEOUT_MS,
         onload: function (r) {
           if (r.status >= 200 && r.status < 400) resolve(r.responseText);
-          else reject(new Error("HTTP " + r.status + " " + url));
+          else reject(new Error(yan4HttpErr(r.status, url, " " + url)));
         },
         onerror: function () {
           reject(new Error("요청 실패 " + url));
@@ -5841,7 +5857,7 @@
     try {
       parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
     } catch (eParse) {
-      throw new Error("응답 파싱 실패 — inventory 로그인 확인");
+      throw new Error("응답 파싱 실패 — " + yan4LoginText("https://inbound.coupang.com/"));
     }
     if (!parsed || parsed.success !== true) {
       var msg = String(
@@ -6273,7 +6289,7 @@
               resolve(String(r.responseText || ""));
             } else {
               reject(
-                new Error("HTTP " + r.status + (opt.tag ? " · " + opt.tag : ""))
+                new Error(yan4HttpErr(r.status, opt.url, opt.tag ? " · " + opt.tag : ""))
               );
             }
           },
@@ -7130,9 +7146,12 @@
             if (!msg || msg.ok === false || (msg.status && msg.status >= 400)) {
               reject(
                 new Error(
-                  "검품 엑셀 HTTP " +
-                    ((msg && msg.status) || "?") +
-                    " — Coupang 로그인 확인"
+                  yan4HttpErr(
+                    (msg && msg.status) || "?",
+                    url,
+                    "",
+                    "검품 엑셀 HTTP " + ((msg && msg.status) || "?") + " — 상단 「WMS」 로그인 확인"
+                  )
                 )
               );
               return;
@@ -7169,7 +7188,7 @@
             },
             onload: function (r) {
               if (r.status < 200 || r.status >= 400) {
-                reject(new Error("검품 엑셀 HTTP " + r.status));
+                reject(new Error(yan4HttpErr(r.status, url, "", "검품 엑셀 HTTP " + r.status)));
                 return;
               }
               var ab = r.response;
@@ -7210,7 +7229,7 @@
       },
     });
     if (!httpRes.ok) {
-      throw new Error("검품 엑셀 HTTP " + httpRes.status);
+      throw new Error(yan4HttpErr(httpRes.status, url, "", "검품 엑셀 HTTP " + httpRes.status));
     }
     var abFetch = await httpRes.arrayBuffer();
     if (!abFetch || !abFetch.byteLength) {
@@ -7223,7 +7242,7 @@
       );
     } catch (ePk) {}
     if (/^\s*</.test(peekHead) && /html/i.test(peekHead)) {
-      throw new Error("검품 엑셀 → HTML 응답(권한·로그인 확인)");
+      throw new Error("검품 엑셀 → HTML 응답 · " + yan4LoginText(url));
     }
     return abFetch;
   }
@@ -9491,7 +9510,7 @@
                     return;
                   }
                   if (resp.status < 200 || resp.status >= 400) {
-                    reject(new Error("HTTP " + resp.status));
+                    reject(new Error(yan4HttpErr(resp.status, "https://mos.coupang.net/")));
                     return;
                   }
                   resolve(JSON.parse(String(resp.body || "{}")));
@@ -9518,7 +9537,7 @@
               timeout: 28000,
               onload: function (r) {
                 if (r.status < 200 || r.status >= 400) {
-                  reject(new Error("HTTP " + r.status));
+                  reject(new Error(yan4HttpErr(r.status, GROSS_UPH_URL)));
                   return;
                 }
                 try {
@@ -9939,7 +9958,7 @@
               if (r.status >= 200 && r.status < 400) {
                 resolve(String(r.responseText || ""));
               } else {
-                reject(new Error(pathWithQuery.split("?")[0] + " HTTP " + r.status));
+                reject(new Error(yan4HttpErr(r.status, url, "", pathWithQuery.split("?")[0] + " HTTP " + r.status)));
               }
             },
             onerror: function () {
@@ -9957,7 +9976,7 @@
           Referer: LIST_REFERER,
         },
       });
-      if (!res.ok) throw new Error(pathWithQuery.split("?")[0] + " HTTP " + res.status);
+      if (!res.ok) throw new Error(yan4HttpErr(res.status, url, "", pathWithQuery.split("?")[0] + " HTTP " + res.status));
       return String(await res.text() || "");
     }
 
@@ -10827,7 +10846,7 @@
               return;
             }
             if (res && res.ok) {
-              reject(new Error("HTTP " + res.status + " " + url));
+              reject(new Error(yan4HttpErr(res.status, url, " " + url)));
               return;
             }
             gmGet(url, hdr).then(resolve, reject);
@@ -11758,7 +11777,7 @@
               return;
             }
             if (res && res.ok) {
-              reject(new Error("HTTP " + res.status + " " + url));
+              reject(new Error(yan4HttpErr(res.status, url, " " + url)));
               return;
             }
             gmGet(url, hdr).then(resolve, reject);
@@ -12496,7 +12515,7 @@
               if (r.status >= 200 && r.status < 400) {
                 resolve(String(r.responseText || ""));
               } else {
-                reject(new Error("HTTP " + r.status));
+                reject(new Error(yan4HttpErr(r.status, url)));
               }
             },
             onerror: function () {
@@ -12515,7 +12534,7 @@
       };
       if (m === "POST") fetchOpts.body = postData == null ? "" : String(postData);
       var res = await fetch(url, fetchOpts);
-      if (!res.ok) throw new Error("HTTP " + res.status);
+      if (!res.ok) throw new Error(yan4HttpErr(res.status, url));
       return String((await res.text()) || "");
     }
 
@@ -12551,7 +12570,7 @@
                 return;
               }
               if (resp.status < 200 || resp.status >= 400) {
-                reject(new Error("HTTP " + resp.status));
+                reject(new Error(yan4HttpErr(resp.status, "https://mos.coupang.net/")));
                 return;
               }
               resolve(String(resp.body || ""));
@@ -16160,7 +16179,7 @@
               return;
             }
             if (res && res.ok) {
-              reject(new Error("HTTP " + res.status + " " + url));
+              reject(new Error(yan4HttpErr(res.status, url, " " + url)));
               return;
             }
             gmGet(url, hdr).then(resolve, reject);
@@ -16330,14 +16349,18 @@
             if (!res || !res.ok) {
               reject(
                 new Error(
-                  (res && res.error) ||
-                    "HTTP " + (res && res.status != null ? res.status : "?")
+                  yan4HttpErr(
+                    res && res.status,
+                    url,
+                    "",
+                    (res && res.error) || "HTTP " + (res && res.status != null ? res.status : "?")
+                  )
                 )
               );
               return;
             }
             if (res.status < 200 || res.status >= 400) {
-              reject(new Error("HTTP " + res.status));
+              reject(new Error(yan4HttpErr(res.status, url)));
               return;
             }
             try {
@@ -16361,7 +16384,7 @@
       res
     ) {
       return res.text().then(function (text) {
-        if (!res.ok) throw new Error("HTTP " + res.status);
+        if (!res.ok) throw new Error(yan4HttpErr(res.status, url));
         return parseBody(text);
       });
     });

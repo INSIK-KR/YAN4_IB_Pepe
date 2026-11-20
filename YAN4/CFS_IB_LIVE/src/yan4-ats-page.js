@@ -5,6 +5,19 @@
 (function () {
   "use strict";
 
+  /** HTTP 401·403 → 「WMS 로그인 필요 — 상단 「WMS」 버튼으로 로그인하세요」 (desktop-shim.js) */
+  function yan4HttpErr(status, url, rest, fallback) {
+    var f = window.__YAN4_HTTP_ERR__;
+    if (typeof f === "function") return f(status, url, rest, fallback);
+    return fallback || "HTTP " + status + (rest || "");
+  }
+
+  /** 로그인 화면(HTML)이 온 경우 — HTTP 코드 없이 */
+  function yan4LoginText(url) {
+    var f = window.__YAN4_LOGIN_TEXT__;
+    return typeof f === "function" ? f(url) : "로그인 필요";
+  }
+
   /** DOM/문구 변경 시 증가 — 확장만 새로고침해도 예전 ATS 마크업 자동 재구성 */
   var ATS_UI_REV = "78";
   window.__YAN4_ATS_UI_REV__ = ATS_UI_REV;
@@ -1330,7 +1343,7 @@
           if (r.status >= 200 && r.status < 400) {
             resolve(String(r.responseText || ""));
           } else {
-            reject(new Error("HTTP " + r.status + (opt.tag ? " · " + opt.tag : "")));
+            reject(new Error(yan4HttpErr(r.status, opt.url, opt.tag ? " · " + opt.tag : "")));
           }
         },
         onerror: function () {

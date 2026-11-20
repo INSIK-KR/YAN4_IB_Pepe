@@ -5,6 +5,19 @@
 (function () {
   "use strict";
 
+  /** HTTP 401·403 → 「WMS 로그인 필요 — 상단 「WMS」 버튼으로 로그인하세요」 (desktop-shim.js) */
+  function yan4HttpErr(status, url, rest, fallback) {
+    var f = window.__YAN4_HTTP_ERR__;
+    if (typeof f === "function") return f(status, url, rest, fallback);
+    return fallback || "HTTP " + status + (rest || "");
+  }
+
+  /** 로그인 화면(HTML)이 온 경우 — HTTP 코드 없이 */
+  function yan4LoginText(url) {
+    var f = window.__YAN4_LOGIN_TEXT__;
+    return typeof f === "function" ? f(url) : "로그인 필요";
+  }
+
   var STOW_ERR_UI_REV = "8";
   window.__YAN4_STOW_ERR_UI_REV__ = STOW_ERR_UI_REV;
   /** 조회 표에 노출할 최소 O+S 합 (미만 작업자 숨김) */
@@ -265,10 +278,15 @@
           if (!msg || msg.ok === false || (msg.status && msg.status >= 400)) {
             reject(
               new Error(
-                "HTTP " +
-                  ((msg && msg.status) || "?") +
-                  ((msg && msg.error) ? " (" + msg.error + ")" : "") +
-                  " — Coupang 로그인 확인"
+                yan4HttpErr(
+                  msg && msg.status,
+                  url,
+                  "",
+                  "HTTP " +
+                    ((msg && msg.status) || "?") +
+                    ((msg && msg.error) ? " (" + msg.error + ")" : "") +
+                    " — 상단 「WMS」 로그인 확인"
+                )
               )
             );
             return;
@@ -308,7 +326,7 @@
             if (r.status >= 200 && r.status < 400) {
               resolve(String(r.responseText || ""));
             } else {
-              reject(new Error("HTTP " + r.status));
+              reject(new Error(yan4HttpErr(r.status, url)));
             }
           },
           onerror: function () {
@@ -326,7 +344,7 @@
         Referer: LIST_REFERER,
       },
     });
-    if (!res.ok) throw new Error("HTTP " + res.status);
+    if (!res.ok) throw new Error(yan4HttpErr(res.status, url));
     return String((await res.text()) || "");
   }
 
