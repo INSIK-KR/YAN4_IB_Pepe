@@ -2,6 +2,19 @@
 (function () {
   "use strict";
 
+  /** HTTP 401·403 → 「WMS 로그인 필요 — 상단 「WMS」 버튼으로 로그인하세요」 (desktop-shim.js) */
+  function yan4HttpErr(status, url, rest, fallback) {
+    var f = window.__YAN4_HTTP_ERR__;
+    if (typeof f === "function") return f(status, url, rest, fallback);
+    return fallback || "HTTP " + status + (rest || "");
+  }
+
+  /** 로그인 화면(HTML)이 온 경우 — HTTP 코드 없이 */
+  function yan4LoginText(url) {
+    var f = window.__YAN4_LOGIN_TEXT__;
+    return typeof f === "function" ? f(url) : "로그인 필요";
+  }
+
   var ROOT_ID = "yna4-damage-verify-root";
   var INV_SEARCH =
     "https://inventory.coupang.com/async/inventory/search";
@@ -710,7 +723,7 @@
           timeout: 45000,
           onload: function (r) {
             if (r.status >= 200 && r.status < 400) resolve(r.responseText);
-            else reject(new Error("HTTP " + r.status));
+            else reject(new Error(yan4HttpErr(r.status, url)));
           },
           onerror: function () {
             reject(new Error("네트워크 오류"));
