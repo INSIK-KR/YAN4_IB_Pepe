@@ -512,6 +512,9 @@
     hasRecord: hasActiveCenterRecord,
     switchTo: switchActiveCenter,
     detect: detectCurrentCenter,
+    /** WMS 세션 센터만 잠깐 바꿈 (앱 기준 센터 · 상단 표시는 그대로) — 끝나면 activeId() 로 되돌릴 것 */
+    changeSession: changeCenter,
+    switchDelayMs: CENTER_SWITCH_DELAY_MS,
   };
 
   function centerName(centerId) {

@@ -14457,6 +14457,48 @@
     var mod = document.createElement("div");
     mod.className = "yna4-pane-mod yna4-pane-mod--recv";
 
+    /* 센터 — 상단 전환 없이 카드에서 고름. 조회 중에만 WMS 센터를 바꾸고 끝나면 복귀 */
+    var rowCenter = document.createElement("div");
+    rowCenter.className = "yna4-pane-row";
+    var lblC = document.createElement("span");
+    lblC.className = "yna4-pane-k";
+    lblC.textContent = "센터";
+    var selCenter = document.createElement("select");
+    selCenter.id = ROOT_ID + "-recv-center";
+    selCenter.className = "yna4-pane-inp";
+    selCenter.style.flex = "1";
+    selCenter.style.minWidth = "0";
+    (function fillCenters() {
+      var api = window.__CFS_CENTER__;
+      var list = (api && api.list) || [["1007", "YAN4"]];
+      var idByName = Object.create(null);
+      list.forEach(function (c) {
+        idByName[c[1]] = c[0];
+      });
+      var used = Object.create(null);
+      var addOpt = function (parent, id) {
+        var opt = document.createElement("option");
+        opt.value = id;
+        opt.textContent = recvCenterText(id);
+        parent.appendChild(opt);
+        used[id] = true;
+      };
+      ((api && api.regions) || []).forEach(function (rg) {
+        var og = document.createElement("optgroup");
+        og.label = rg[0];
+        (rg[1] || []).forEach(function (name) {
+          if (idByName[name]) addOpt(og, idByName[name]);
+        });
+        if (og.children.length) selCenter.appendChild(og);
+      });
+      list.forEach(function (c) {
+        if (!used[c[0]]) addOpt(selCenter, c[0]);
+      });
+    })();
+    selCenter.value = cfsActiveCenterId("1007");
+    rowCenter.appendChild(lblC);
+    rowCenter.appendChild(selCenter);
+
     var rowTote = document.createElement("div");
     rowTote.className = "yna4-pane-row";
     var lblT = document.createElement("span");
@@ -14467,10 +14509,10 @@
     selTote.className = "yna4-pane-inp";
     selTote.style.flex = "1";
     selTote.style.minWidth = "0";
-    /** 상단에서 고른 센터의 RCRT 선택지 — 센터를 바꾸면 다시 그림 */
+    /** 카드에서 고른 센터의 RCRT 선택지 — 센터를 바꾸면 다시 그림 */
     var recvCenterId = "";
     function fillRecvToteOptions() {
-      recvCenterId = cfsActiveCenterId("1007");
+      recvCenterId = selCenter.value || cfsActiveCenterId("1007");
       selTote.textContent = "";
       recvToteOptionsFor(recvCenterId)
         .concat([["", "전체"]])
@@ -14480,7 +14522,7 @@
           opt.textContent = o[1];
           selTote.appendChild(opt);
         });
-      selTote.title = recvCenterText(recvCenterId) + " 기준 · 센터는 상단에서 바꿉니다";
+      selTote.title = recvCenterText(recvCenterId) + " RCRT";
     }
     fillRecvToteOptions();
     rowTote.appendChild(lblT);
@@ -14539,6 +14581,7 @@
     }
     status.textContent = recvIdleText();
 
+    mod.appendChild(rowCenter);
     mod.appendChild(rowTote);
     mod.appendChild(rowDate);
     mod.appendChild(rowPresto);
@@ -14556,11 +14599,18 @@
       btnStop.disabled = !on;
       btnSavePresto.disabled = on;
       selTote.disabled = on;
+      selCenter.disabled = on;
     }
 
-    /* 상단 센터 전환 → 그 센터 RCRT 로 (조회 중엔 끝난 뒤 반영) */
+    selCenter.addEventListener("change", function () {
+      fillRecvToteOptions();
+      setRecvStatus(recvIdleText());
+    });
+
+    /* 상단 센터를 바꾸면 카드 센터도 따라감 (조회 중엔 그대로) */
     window.addEventListener("cfs-center-changed", function () {
       if (recvExportRunning) return;
+      selCenter.value = cfsActiveCenterId("1007");
       fillRecvToteOptions();
       setRecvStatus(recvIdleText());
     });
@@ -14596,17 +14646,24 @@
         alert("입고일시를 선택하세요.");
         return;
       }
-      if (cfsActiveCenterId("1007") !== recvCenterId) {
-        fillRecvToteOptions();
-        alert(recvCenterText(recvCenterId) + " 기준으로 토트 목록을 바꿨습니다. 토트를 확인한 뒤 다시 눌러 주세요.");
-        setRecvStatus(recvIdleText());
-        return;
-      }
       var runCenterId = recvCenterId;
+      var homeCenterId = cfsActiveCenterId("1007");
+      var centerApi = window.__CFS_CENTER__;
+      var switched = false;
       recvExportStop = false;
       setRecvRunning(true);
       setRecvStatus(recvCenterText(runCenterId) + " · 시작…");
       try {
+        /* 다른 센터 — WMS 세션만 잠깐 바꿈 (끝나면 finally 에서 복귀) */
+        if (runCenterId !== homeCenterId) {
+          if (!centerApi || typeof centerApi.changeSession !== "function") {
+            throw new Error("센터 전환 기능 없음 — 상단에서 센터를 바꾼 뒤 조회하세요");
+          }
+          setRecvStatus(recvCenterText(runCenterId) + " 센터로 전환 중…");
+          await centerApi.changeSession(runCenterId);
+          switched = true;
+          await recvSleep(centerApi.switchDelayMs || 400);
+        }
         var listRows = await recvFetchAllListRows(toteFilter, ymd, setRecvStatus);
         if (!listRows.length) {
           alert("조회 결과가 없습니다.");
@@ -14672,9 +14729,19 @@
         setRecvStatus("오류: " + (eRun && eRun.message ? eRun.message : String(eRun)));
         alert("실패: " + (eRun && eRun.message ? eRun.message : String(eRun)));
       } finally {
+        if (switched) {
+          var doneText = status.textContent;
+          try {
+            setRecvStatus(recvCenterText(homeCenterId) + " 센터로 복귀 중…");
+            await centerApi.changeSession(homeCenterId);
+            setRecvStatus(doneText);
+          } catch (eHome) {
+            setRecvStatus(doneText + " · " + recvCenterText(homeCenterId) + " 복귀 실패 — 상단에서 다시 전환하세요");
+            alert(recvCenterText(homeCenterId) + " 센터로 돌아가지 못했습니다. 상단 센터 선택에서 다시 전환해 주세요.");
+          }
+        }
         setRecvRunning(false);
         recvExportStop = false;
-        if (cfsActiveCenterId("1007") !== recvCenterId) fillRecvToteOptions();
       }
     });
 
