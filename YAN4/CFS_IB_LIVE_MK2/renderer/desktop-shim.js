@@ -31,7 +31,7 @@
       sys === "SharePoint"
         ? "SharePoint에 다시 로그인하세요"
         : "상단 「" + sys + "」 버튼으로 로그인하세요";
-    return sys + " 로그인 필요 — " + how + (status ? " (HTTP " + status + ")" : "");
+    return sys + " 로그인 필요 — " + how;
   }
 
   window.__YAN4_LOGIN_TEXT__ = function (url) {

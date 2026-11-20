@@ -963,7 +963,7 @@
 
   /** 로그인 풀림 — HTTP 401/403 오류 */
   function unloadGapIsLoginError(e) {
-    return /HTTP (401|403)\b/.test(String((e && e.message) || ""));
+    return /HTTP (401|403)\b| 로그인 필요 — /.test(String((e && e.message) || ""));
   }
 
   /** 로그인 풀림 — JSON 대신 로그인 화면 HTML 이 온 경우 */
