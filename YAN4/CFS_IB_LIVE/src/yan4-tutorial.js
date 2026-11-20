@@ -191,7 +191,7 @@
         t: "#yna4TutorialBtn",
         title: "튜토리얼 켜기 · 끄기",
         text:
-          "이 개구리 버튼으로 튜토리얼을 켜고 끕니다.<br>켜면 <b>화면 오른쪽 아래</b>와 1·2페이지 카드 오른쪽 위에 개구리가 뜹니다. 개구리를 누르면 그 페이지나 카드를 안내합니다.",
+          "이 개구리 버튼으로 튜토리얼을 켜고 끕니다.<br>켜면 SLA · ATS · 3 · 4페이지는 <b>화면 오른쪽 아래</b>, 1·2페이지는 카드 오른쪽 위에 개구리가 뜹니다. 개구리를 누르면 그 페이지나 카드를 안내합니다.",
       },
     ],
     true
@@ -761,7 +761,7 @@
       "#yna4TutPageFrog{position:fixed;right:18px;bottom:18px;z-index:2147483646;width:44px;height:44px;padding:0;border:2px solid #22c55e;border-radius:50%;background:#fff;cursor:pointer;display:none;align-items:center;justify-content:center;overflow:hidden;box-shadow:0 4px 14px rgba(15,23,42,.35);}",
       "#yna4TutPageFrog img{width:40px;height:40px;display:block;}",
       "#yna4TutPageFrog:hover{transform:scale(1.1);box-shadow:0 0 0 4px rgba(34,197,94,.3),0 4px 14px rgba(15,23,42,.35);}",
-      "body.yna4-tut-on #yna4TutPageFrog{display:inline-flex;}",
+      "body.yna4-tut-on #yna4TutPageFrog.has-page{display:inline-flex;}",
       "body:not(.yna4-tut-on) .yna4-tut-card-btn{display:none !important;}",
       ".yna4-tut-card-btn{margin-left:auto;flex:0 0 auto;width:24px;height:24px;padding:0;border:1px solid #93c5fd;border-radius:50%;background:#fff;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;overflow:hidden;}",
       ".yna4-tut-card-btn:hover{border-color:#16a34a;box-shadow:0 0 0 2px rgba(22,163,74,.25);}",
@@ -1283,15 +1283,19 @@
   }
 
   /** 지금 보는 페이지 → 투어 */
+  /* 1·2페이지는 카드마다 개구리가 있어 오른쪽 아래 개구리는 안 띄움 */
   var PAGE_TOURS = [
     ["sla", "sla"],
     ["ats", "ats"],
-    ["1", "p1"],
-    ["2", "p2"],
     ["3", "p3"],
     ["4", "p4"],
   ];
+  var NO_FLOAT_PAGES = ["1", "2"];
   function activePageTour() {
+    for (var n = 0; n < NO_FLOAT_PAGES.length; n++) {
+      var np = pageEl(NO_FLOAT_PAGES[n]);
+      if (np && np.style.display !== "none" && isVis(np)) return null;
+    }
     for (var i = 0; i < PAGE_TOURS.length; i++) {
       var p = pageEl(PAGE_TOURS[i][0]);
       if (p && p.style.display !== "none" && isVis(p)) return PAGE_TOURS[i][1];
@@ -1299,8 +1303,13 @@
     return null;
   }
   /** 화면 오른쪽 아래 개구리 하나 — 켜졌을 때만 보임(CSS). 누를 때 보고 있는 페이지 투어 */
+  /** 지금 페이지가 1·2페이지면 숨김 */
+  function syncPageFrog() {
+    var b = document.getElementById("yna4TutPageFrog");
+    if (b) b.classList.toggle("has-page", !!activePageTour());
+  }
   function ensurePageFrogs() {
-    if (document.getElementById("yna4TutPageFrog")) return;
+    if (document.getElementById("yna4TutPageFrog")) return syncPageFrog();
     var b = document.createElement("button");
     b.type = "button";
     b.id = "yna4TutPageFrog";
@@ -1318,6 +1327,15 @@
       b.title = id && TOURS[id] ? TOURS[id].name + " 안내" : "이 페이지 안내";
     });
     document.body.appendChild(b);
+    syncPageFrog();
+    /* 페이지 버튼을 누르면 바로 반영 */
+    document.addEventListener(
+      "click",
+      function () {
+        setTimeout(syncPageFrog, 50);
+      },
+      true
+    );
   }
 
   function ensureCardButtons() {
