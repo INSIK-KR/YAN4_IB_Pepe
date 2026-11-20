@@ -14491,11 +14491,11 @@
         });
         if (og.children.length) selCenter.appendChild(og);
       });
-      list.forEach(function (c) {
-        if (!used[c[0]]) addOpt(selCenter, c[0]);
-      });
+      /* 리전 목록에 없는 센터(YON3 등)는 안 보여 줌 — 목록이 비면 YAN4 만 */
+      if (!selCenter.options.length) addOpt(selCenter, "1007");
     })();
     selCenter.value = cfsActiveCenterId("1007");
+    if (selCenter.selectedIndex < 0) selCenter.value = "1007";
     rowCenter.appendChild(lblC);
     rowCenter.appendChild(selCenter);
 
@@ -14611,6 +14611,7 @@
     window.addEventListener("cfs-center-changed", function () {
       if (recvExportRunning) return;
       selCenter.value = cfsActiveCenterId("1007");
+      if (selCenter.selectedIndex < 0) selCenter.value = "1007";
       fillRecvToteOptions();
       setRecvStatus(recvIdleText());
     });
