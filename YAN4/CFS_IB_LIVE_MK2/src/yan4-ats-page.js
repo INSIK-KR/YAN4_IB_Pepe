@@ -981,7 +981,21 @@
     return expirySortKey((row && row._expiredAt) || "");
   }
 
-  /** 버퍼존 우선 → 비버퍼는 LPN 유통기한 짧은 순(FIFO) → 재고 내림차순. */
+  /**
+   * 이관 상태 순위 — 유통기한이 같을 때 센터 안에 있는 재고 먼저.
+   * 0 = GC 아님(RCRT 등) · 진열대기 · 진열중 · 부분진열, 1 = GC 상태 모름,
+   * 2 = 이동중(센터 미도착), 3 = 진열완료(뒤에서 다음 재고로 교체됨)
+   */
+  function atsInventoryTransferRank(m) {
+    if (!atsGcToteBarcodeFromLocation(m && m.location)) return 0;
+    var st = String((m && m._transferStatus) || "").replace(/\s+/g, "");
+    if (!st) return 1;
+    if (st.indexOf("이동중") >= 0) return 2;
+    if (atsStatusIsStowComplete(st)) return 3;
+    return 0;
+  }
+
+  /** 버퍼존 우선 → 비버퍼는 LPN 유통기한 짧은 순(FIFO) → 같은 날이면 진열대기 GC가 이동중 GC보다 먼저 → 재고 내림차순. */
   function sortInventoryMatchesBufferFirst(matched) {
     return matched.slice().sort(function (a, b) {
       var ba = atsLocationIsBufferZone(a && a.location) ? 0 : 1;
@@ -990,6 +1004,9 @@
       var ea = inventoryExpirySortKey(a);
       var eb = inventoryExpirySortKey(b);
       if (ea !== eb) return ea < eb ? -1 : 1;
+      var ra = atsInventoryTransferRank(a);
+      var rb = atsInventoryTransferRank(b);
+      if (ra !== rb) return ra - rb;
       var qa = inventoryRowQtyNumber(a);
       var qb = inventoryRowQtyNumber(b);
       var na = isFinite(qa) ? qa : 0;
@@ -2068,6 +2085,51 @@
       return fetchPage();
     }
     return tryPagingBase(0);
+  }
+
+  /**
+   * 재고 후보 중 유통기한(버퍼존 여부 포함)이 같은 묶음이 2개 이상이면
+   * 그 묶음의 GC 이관 상태를 조회해 m._transferStatus 에 담음 (정렬용, 캐시 공유)
+   */
+  async function enrichInventoryMatchesTransferStatus(matched) {
+    if (!matched || matched.length < 2) return;
+    var groups = Object.create(null);
+    var i, m, key, cart;
+    for (i = 0; i < matched.length; i++) {
+      m = matched[i];
+      key =
+        (atsLocationIsBufferZone(m && m.location) ? "B" : "N") +
+        "|" +
+        inventoryExpirySortKey(m);
+      (groups[key] = groups[key] || []).push(m);
+    }
+    var need = [];
+    var seen = Object.create(null);
+    var g, list, j;
+    for (g in groups) {
+      list = groups[g];
+      if (list.length < 2) continue;
+      for (j = 0; j < list.length; j++) {
+        cart = atsGcToteBarcodeFromLocation(list[j] && list[j].location);
+        if (!cart) continue;
+        need.push(list[j]);
+        if (!seen[normKey(cart)]) seen[normKey(cart)] = cart;
+      }
+    }
+    if (!need.length) return;
+    var carts = Object.keys(seen);
+    for (i = 0; i < carts.length; i++) {
+      if (stopRequested) break;
+      if (transferInfoCache[carts[i]] === undefined) {
+        await fetchTransferInfoForCart(seen[carts[i]]);
+        if (i + 1 < carts.length) await sleep(TRANSFER_DELAY_MS);
+      }
+    }
+    for (i = 0; i < need.length; i++) {
+      cart = normKey(atsGcToteBarcodeFromLocation(need[i].location));
+      var info = transferInfoCache[cart];
+      if (info) need[i]._transferStatus = info.status || "";
+    }
   }
 
   async function enrichRowsTransferByCart(allRows, onProgress) {
@@ -6826,6 +6888,7 @@
       btnGloc.disabled = true;
       setAtsPipelineProgress(0, ATS_PIPELINE_PROGRESS_LABEL);
       atsAllRows = [];
+      transferInfoCache = Object.create(null);
       clearAtsReplenishDoneKeys();
       clearAllDashboardPanels();
       try {
@@ -6943,6 +7006,7 @@
             }
             bufferPartialCt += 1;
           }
+          await enrichInventoryMatchesTransferStatus(matched);
           var picked = selectInventoryMatchesForObQty(matched, needQtyNum);
           if (picked.length) {
             var built = buildAtsRowsFromInventoryPicks(picked, ob, needQtyNum);
@@ -6957,7 +7021,6 @@
         }
         var fallbackInfo = { replacedCt: 0, noStockCt: 0 };
         if (!stopRequested && allRows.length) {
-          transferInfoCache = Object.create(null);
           var gcCartCount = 0;
           var riGc;
           for (riGc = 0; riGc < allRows.length; riGc++) {
