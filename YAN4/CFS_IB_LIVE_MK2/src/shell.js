@@ -14359,11 +14359,12 @@
     };
   }
 
-  function recvDownloadExcel(rows, ymd, toteFilter, prodRows) {
-    if (typeof XLSX === "undefined") {
-      throw new Error("XLSX 라이브러리 없음");
-    }
-    var toSheet = function (list, sheetName) {
+  /**
+   * 입고내역 시트를 wb 에 붙임. sheetPrefix 가 있으면 시트 이름 앞에 붙임(여러 날 조회 — 날짜).
+   * 생산성 표는 RCRT 이름(prodKey)으로 거름 — 시트 이름과 따로.
+   */
+  function recvAppendReceiveSheets(wb, rows, toteFilter, prodRows, sheetPrefix) {
+    var toSheet = function (list, prodKey) {
       var data = [RECV_EXCEL_HEADERS.slice()];
       list.forEach(function (r) {
         data.push([
@@ -14386,39 +14387,95 @@
       var ws = XLSX.utils.aoa_to_sheet(data);
       recvApplyProductivityBlock(
         ws,
-        recvFilterProdRowsForSheet(prodRows || [], sheetName),
+        recvFilterProdRowsForSheet(prodRows || [], prodKey),
         list
       );
       return ws;
     };
+    var pre = String(sheetPrefix || "").trim();
     var prefixes = recvTotePrefixes(toteFilter);
-    var wb = XLSX.utils.book_new();
     if (prefixes.length > 1) {
       prefixes.forEach(function (prefix) {
-        var sheetName = prefix.replace(/^\d+-/, "").slice(0, 31);
+        var area = prefix.replace(/^\d+-/, "");
+        var sheetName = (pre ? pre + " " + area : area).slice(0, 31);
         XLSX.utils.book_append_sheet(
           wb,
           toSheet(
             rows.filter(function (r) {
               return r._toteGroup === prefix;
             }),
-            sheetName
+            area.slice(0, 31)
           ),
           sheetName
         );
       });
     } else {
-      XLSX.utils.book_append_sheet(wb, toSheet(rows, "입고내역"), "입고내역");
+      XLSX.utils.book_append_sheet(wb, toSheet(rows, "입고내역"), (pre || "입고내역").slice(0, 31));
     }
-    var suffix = prefixes.length
+  }
+
+  function recvExcelNameSuffix(toteFilter) {
+    var prefixes = recvTotePrefixes(toteFilter);
+    return prefixes.length
       ? "_" +
-        prefixes
-          .map(function (p, i) {
-            return i ? p.replace(/^\d+-/, "") : p;
-          })
-          .join("_")
+          prefixes
+            .map(function (p, i) {
+              return i ? p.replace(/^\d+-/, "") : p;
+            })
+            .join("_")
       : "";
-    return recvSaveWorkbook(wb, "입고내역_" + ymd + suffix + ".xlsx");
+  }
+
+  function recvDownloadExcel(rows, ymd, toteFilter, prodRows) {
+    if (typeof XLSX === "undefined") {
+      throw new Error("XLSX 라이브러리 없음");
+    }
+    var wb = XLSX.utils.book_new();
+    recvAppendReceiveSheets(wb, rows, toteFilter, prodRows, "");
+    return recvSaveWorkbook(wb, "입고내역_" + ymd + recvExcelNameSuffix(toteFilter) + ".xlsx");
+  }
+
+  /** 여러 날 — days: [{ ymd, rows, prodRows }] (행 있는 날만). 날짜별 시트, 파일 하나 */
+  function recvDownloadExcelMultiDay(days, startYmd, endYmd, toteFilter) {
+    if (typeof XLSX === "undefined") {
+      throw new Error("XLSX 라이브러리 없음");
+    }
+    var wb = XLSX.utils.book_new();
+    days.forEach(function (d) {
+      recvAppendReceiveSheets(wb, d.rows, toteFilter, d.prodRows, d.ymd);
+    });
+    return recvSaveWorkbook(
+      wb,
+      "입고내역_" + startYmd + "~" + endYmd + recvExcelNameSuffix(toteFilter) + ".xlsx"
+    );
+  }
+
+  /** 시작 ~ 끝(YYYY-MM-DD) 날짜 목록. 거꾸로 넣으면 바꿔서 */
+  var RECV_MAX_DAYS = 31;
+  function recvYmdRange(a, b) {
+    var re = /^(\d{4})-(\d{2})-(\d{2})$/;
+    var ma = re.exec(String(a || "").trim());
+    var mb = re.exec(String(b || "").trim()) || ma;
+    if (!ma) return [];
+    var ta = Date.UTC(+ma[1], +ma[2] - 1, +ma[3]);
+    var tb = Date.UTC(+mb[1], +mb[2] - 1, +mb[3]);
+    if (tb < ta) {
+      var t = ta;
+      ta = tb;
+      tb = t;
+    }
+    var out = [];
+    for (var x = ta; x <= tb && out.length <= RECV_MAX_DAYS; x += 86400000) {
+      var d = new Date(x);
+      out.push(
+        d.getUTCFullYear() +
+          "-" +
+          String(d.getUTCMonth() + 1).padStart(2, "0") +
+          "-" +
+          String(d.getUTCDate()).padStart(2, "0")
+      );
+    }
+    return out;
   }
 
   function recvSaveWorkbook(wb, filename) {
@@ -14540,8 +14597,28 @@
     inpD.value = recvTodayYmd();
     inpD.style.flex = "1";
     inpD.style.minWidth = "0";
+    /* 끝 날짜 — 시작과 같으면 하루, 다르면 날짜별 시트로 한 파일 */
+    var sepD = document.createElement("span");
+    sepD.textContent = "~";
+    sepD.style.flex = "0 0 auto";
+    sepD.style.padding = "0 2px";
+    var inpD2 = document.createElement("input");
+    inpD2.type = "date";
+    inpD2.id = ROOT_ID + "-recv-date-end";
+    inpD2.className = "yna4-pane-inp";
+    inpD2.value = inpD.value;
+    inpD2.title = "끝 날짜 — 시작과 다르면 날짜별 시트로 한 파일에 저장 (최대 " + RECV_MAX_DAYS + "일)";
+    inpD2.style.flex = "1";
+    inpD2.style.minWidth = "0";
+    inpD.title = "시작 날짜";
     rowDate.appendChild(lblD);
     rowDate.appendChild(inpD);
+    rowDate.appendChild(sepD);
+    rowDate.appendChild(inpD2);
+    /* 시작을 끝보다 뒤로 옮기면 끝도 같이 */
+    inpD.addEventListener("change", function () {
+      if (!inpD2.value || inpD2.value < inpD.value) inpD2.value = inpD.value;
+    });
 
     var prestoAcc = buildPrestoAccountRow();
     var rowPresto = prestoAcc.row;
@@ -14575,7 +14652,7 @@
     function recvIdleText() {
       return (
         recvCenterText(recvCenterId) +
-        " · 토트 · 날짜 선택 후 작업 시작 (생산성은 Presto 계정 저장 후)" +
+        " · 토트 · 날짜(여러 날이면 날짜별 시트) 선택 후 작업 시작 (생산성은 Presto 계정 저장 후)" +
         (recvToteOptionsFor(recvCenterId).length ? "" : " · 이 센터는 RCRT 미지정이라 「전체」만")
       );
     }
@@ -14600,6 +14677,8 @@
       btnSavePresto.disabled = on;
       selTote.disabled = on;
       selCenter.disabled = on;
+      inpD.disabled = on;
+      inpD2.disabled = on;
     }
 
     selCenter.addEventListener("change", function () {
@@ -14647,6 +14726,16 @@
         alert("입고일시를 선택하세요.");
         return;
       }
+      var dayList = recvYmdRange(ymd, String(inpD2.value || "").trim() || ymd);
+      if (!dayList.length) {
+        alert("입고일시를 선택하세요.");
+        return;
+      }
+      if (dayList.length > RECV_MAX_DAYS) {
+        alert("여러 날 조회는 최대 " + RECV_MAX_DAYS + "일까지입니다.");
+        return;
+      }
+      var multi = dayList.length > 1;
       var runCenterId = recvCenterId;
       var homeCenterId = cfsActiveCenterId("1007");
       var centerApi = window.__CFS_CENTER__;
@@ -14665,66 +14754,85 @@
           switched = true;
           await recvSleep(centerApi.switchDelayMs || 400);
         }
-        var listRows = await recvFetchAllListRows(toteFilter, ymd, setRecvStatus);
-        if (!listRows.length) {
+        var dayResults = [];
+        var di;
+        for (di = 0; di < dayList.length; di++) {
+          var dayYmd = dayList[di];
+          var tag = multi ? "[" + dayYmd + " " + (di + 1) + "/" + dayList.length + "] " : "";
+          var st = (function (t) {
+            return function (m) {
+              setRecvStatus(t + (m || ""));
+            };
+          })(tag);
+          var listRows = await recvFetchAllListRows(toteFilter, dayYmd, st);
+          if (recvExportStop) break;
+          if (!listRows.length) {
+            dayResults.push({ ymd: dayYmd, rows: [], prodRows: [], prodNote: "" });
+            continue;
+          }
+          st("목록 " + listRows.length + "행 · 상세 조회…");
+          var enriched = await recvEnrichRowsWithDetail(listRows, st);
+          if (recvExportStop) break;
+          st("목록 " + enriched.length + "행 · 박스내 수량(상품관리) 조회…");
+          enriched = await recvEnrichRowsWithBoxQty(enriched, st);
+          if (recvExportStop) break;
+          var workers = recvUniqueStowWorkers(enriched);
+          var prodRows = [];
+          var prodNote = "";
+          try {
+            var prodPack = await recvFetchProductivityRows(
+              dayYmd,
+              workers,
+              st,
+              toteFilter,
+              runCenterId
+            );
+            prodRows = (prodPack && prodPack.rows) || [];
+            prodNote = (prodPack && prodPack.note) || "";
+          } catch (eProd) {
+            prodNote =
+              "생산성 조회 실패: " +
+              (eProd && eProd.message ? eProd.message : String(eProd));
+            st(prodNote + " · 입고내역만 저장 진행…");
+          }
+          if (recvExportStop) break;
+          dayResults.push({ ymd: dayYmd, rows: enriched, prodRows: prodRows, prodNote: prodNote });
+        }
+        if (recvExportStop) {
+          setRecvStatus("중단됨" + (multi && dayResults.length ? " (" + dayResults.length + "일 조회 뒤 · 저장 안 함)" : ""));
+          return;
+        }
+        var withRows = dayResults.filter(function (d) {
+          return d.rows.length > 0;
+        });
+        if (!withRows.length) {
           alert("조회 결과가 없습니다.");
           setRecvStatus("결과 없음");
           return;
         }
-        if (recvExportStop) {
-          setRecvStatus("중단됨 (목록 " + listRows.length + "행)");
-          return;
-        }
-        setRecvStatus("목록 " + listRows.length + "행 · 상세 조회…");
-        var enriched = await recvEnrichRowsWithDetail(listRows, setRecvStatus);
-        if (recvExportStop) {
-          setRecvStatus("중단됨");
-          return;
-        }
-        setRecvStatus(
-          "목록 " + enriched.length + "행 · 박스내 수량(상품관리) 조회…"
-        );
-        enriched = await recvEnrichRowsWithBoxQty(enriched, setRecvStatus);
-        if (recvExportStop) {
-          setRecvStatus("중단됨");
-          return;
-        }
-        var workers = recvUniqueStowWorkers(enriched);
-        var prodRows = [];
-        var prodNote = "";
-        try {
-          var prodPack = await recvFetchProductivityRows(
-            ymd,
-            workers,
-            setRecvStatus,
-            toteFilter,
-            runCenterId
-          );
-          prodRows = (prodPack && prodPack.rows) || [];
-          prodNote = (prodPack && prodPack.note) || "";
-        } catch (eProd) {
-          prodNote =
-            "생산성 조회 실패: " +
-            (eProd && eProd.message ? eProd.message : String(eProd));
-          setRecvStatus(prodNote + " · 입고내역만 저장 진행…");
-        }
-        if (recvExportStop) {
-          setRecvStatus("중단됨");
-          return;
-        }
-        var savedName = await recvDownloadExcel(
-          enriched,
-          ymd,
-          toteFilter,
-          prodRows
-        );
+        var totalRows = 0;
+        var noteSeen = Object.create(null);
+        var notes = [];
+        withRows.forEach(function (d) {
+          totalRows += d.rows.length;
+          if (d.prodNote && !noteSeen[d.prodNote]) {
+            noteSeen[d.prodNote] = 1;
+            notes.push((multi ? d.ymd + " " : "") + d.prodNote);
+          }
+        });
+        var savedName = multi
+          ? await recvDownloadExcelMultiDay(withRows, dayList[0], dayList[dayList.length - 1], toteFilter)
+          : await recvDownloadExcel(withRows[0].rows, dayList[0], toteFilter, withRows[0].prodRows);
+        var emptyDays = dayResults.length - withRows.length;
         setRecvStatus(
           "완료 · " +
-            enriched.length +
+            (multi ? withRows.length + "일 · " : "") +
+            totalRows +
             "행 Excel 저장 (다운로드/" +
             savedName +
             ")" +
-            (prodNote ? " · " + prodNote : "")
+            (multi && emptyDays ? " · 결과 없는 날 " + emptyDays + "일은 시트 없음" : "") +
+            (notes.length ? " · " + notes.join(" · ") : "")
         );
       } catch (eRun) {
         setRecvStatus("오류: " + (eRun && eRun.message ? eRun.message : String(eRun)));
