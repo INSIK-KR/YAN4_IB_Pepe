@@ -995,11 +995,19 @@
     return 0;
   }
 
-  /** 버퍼존 우선 → 비버퍼는 LPN 유통기한 짧은 순(FIFO) → 같은 날이면 진열대기 GC가 이동중 GC보다 먼저 → 재고 내림차순. */
+  /** 로케이션 층: 0 = 버퍼존, 1 = RCRT, 2 = 그 밖(GC 등) */
+  function atsInventoryLocationTier(m) {
+    var loc = String((m && m.location) || "").trim().toUpperCase();
+    if (atsLocationIsBufferZone(loc)) return 0;
+    if (/(^|-)RCRT/.test(loc)) return 1;
+    return 2;
+  }
+
+  /** 버퍼존 → RCRT → GC 등 순 → 같은 층은 LPN 유통기한 짧은 순(FIFO) → 같은 날이면 진열대기 GC가 이동중 GC보다 먼저 → 재고 내림차순. */
   function sortInventoryMatchesBufferFirst(matched) {
     return matched.slice().sort(function (a, b) {
-      var ba = atsLocationIsBufferZone(a && a.location) ? 0 : 1;
-      var bb = atsLocationIsBufferZone(b && b.location) ? 0 : 1;
+      var ba = atsInventoryLocationTier(a);
+      var bb = atsInventoryLocationTier(b);
       if (ba !== bb) return ba - bb;
       var ea = inventoryExpirySortKey(a);
       var eb = inventoryExpirySortKey(b);
@@ -2088,7 +2096,7 @@
   }
 
   /**
-   * 재고 후보 중 유통기한(버퍼존 여부 포함)이 같은 묶음이 2개 이상이면
+   * 재고 후보 중 로케이션 층(버퍼존 · RCRT · 그 밖)과 유통기한이 같은 묶음이 2개 이상이면
    * 그 묶음의 GC 이관 상태를 조회해 m._transferStatus 에 담음 (정렬용, 캐시 공유)
    */
   async function enrichInventoryMatchesTransferStatus(matched) {
@@ -2097,10 +2105,7 @@
     var i, m, key, cart;
     for (i = 0; i < matched.length; i++) {
       m = matched[i];
-      key =
-        (atsLocationIsBufferZone(m && m.location) ? "B" : "N") +
-        "|" +
-        inventoryExpirySortKey(m);
+      key = atsInventoryLocationTier(m) + "|" + inventoryExpirySortKey(m);
       (groups[key] = groups[key] || []).push(m);
     }
     var need = [];
