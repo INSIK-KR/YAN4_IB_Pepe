@@ -504,6 +504,11 @@
       },
       {
         t: function () {
+          /* 목록 보기로 두었으면 요약으로 돌려 놓고 */
+          var ovSum = qa(".yna4-ats-ov-mode button", atsP()).filter(function (b) {
+            return b.textContent === "요약";
+          })[0];
+          if (ovSum && !ovSum.classList.contains("is-on")) ovSum.click();
           /* 이미 펼친 줄(is-open)은 누르면 접히므로, 아직 안 펼친 첫 CT 줄 */
           return q("tr.yna4-ats-ov-ct:not(.is-open)", atsP());
         },
@@ -523,6 +528,29 @@
         },
         title: "CT 안의 상품",
         text: "그 CT에서 보충할 상품 · 보충 수량 · 재고 · 로케이션 · 보충기한입니다. 다시 누르면 접힙니다.",
+      },
+      {
+        t: function () {
+          return qa(".yna4-ats-ov-mode button", atsP()).filter(function (b) {
+            return b.textContent === "목록";
+          })[0];
+        },
+        act: "「목록」을 눌러 보세요",
+        done: function () {
+          var b = qa(".yna4-ats-ov-mode button", atsP()).filter(function (x) {
+            return x.textContent === "목록";
+          })[0];
+          return !!(b && b.classList.contains("is-on"));
+        },
+        title: "요약 / 목록",
+        text: "<b>목록</b>은 펼치지 않아도 상품이 한 줄씩 나오고, 같은 CT는 같은 색으로 묶입니다.<br><b>요약</b>은 CT 한 줄씩입니다. 고른 보기는 다음에도 유지됩니다.",
+      },
+      {
+        t: function () {
+          return qa(".yna4-ats-teams-btn-group button", atsP()).filter(isVis);
+        },
+        title: "현황판 복사",
+        text: "CT 현황판을 보고 있을 때 위 구간 버튼을 누르면 그 구간의 <b>현황판 목록</b>(CT별 색)이 복사됩니다. 「전체」는 모든 구간입니다.<br>「팀즈」 모드면 표로, 「이미지」 모드면 이미지로 복사됩니다.",
       },
       {
         t: function () {
