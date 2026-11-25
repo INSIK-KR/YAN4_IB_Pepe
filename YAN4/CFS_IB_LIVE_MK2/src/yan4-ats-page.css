@@ -1103,7 +1103,6 @@ background-color: #fdba74 !important;
 .yna4-ats-ov-list td.is-ct { text-align: center; font-weight: 700; }
 .yna4-ats-ov-list td.is-overdue { color: #b91c1c; font-weight: 700; }
 .yna4-ats-ov-list td.is-soon { color: #c2410c; font-weight: 700; }
-.yna4-ats-teams-btn-group[data-ats-zone-mode=pdf] .yna4-ats-ov-all-btn { display: none !important; }
 .yna4-ats-ov-empty {
   color: #64748b;
   font-size: 12px;
