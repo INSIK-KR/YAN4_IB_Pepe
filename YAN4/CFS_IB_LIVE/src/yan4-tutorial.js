@@ -337,7 +337,7 @@
           return q(".yna4-sla-pivot-drill-teams-btn", slaDrillHost());
         },
         title: "팀즈 공유",
-        text: "「팀즈」를 누르면 지금 드릴 표가 복사됩니다. 팀즈 채팅에 그대로 붙여넣으면 됩니다.",
+        text: "「팀즈」를 누르면 지금 드릴 표가 복사됩니다. 팀즈 채팅에 그대로 붙여넣으면 됩니다.<br>「이미지」는 같은 표를 이미지로 복사합니다. 팀즈에서 표가 크게 붙을 때 쓰세요.",
       },
       {
         tab: "피벗 표",
@@ -482,9 +482,9 @@
             return isVis(b) && !b.classList.contains("yna4-ats-sort-mode-btn");
           }).concat(qa(".yna4-ats-zone-btn", atsP()).filter(isVis));
         },
-        title: "팀즈 모드 · PDF 모드 · 구간 버튼",
+        title: "팀즈 · 이미지 · PDF 모드 · 구간 버튼",
         text:
-          "<b>팀즈</b> 모드: 구간 버튼(EGG · 냉장 · 상온 · 냉동 · RM · 버퍼존)을 누르면 그 구간 표가 복사됩니다 → 팀즈에 붙여넣기.<br><b>PDF</b> 모드: 구간 버튼으로 보충지에 넣을 구간을 켜고 끕니다.",
+          "<b>팀즈</b> 모드: 구간 버튼(EGG · 냉장 · 상온 · 냉동 · RM · 버퍼존)을 누르면 그 구간 표가 복사됩니다 → 팀즈에 붙여넣기.<br><b>이미지</b> 모드: 같은 표를 이미지로 복사합니다. 팀즈에서 표가 크게 붙을 때 쓰면 크기 그대로 붙습니다.<br><b>PDF</b> 모드: 구간 버튼으로 보충지에 넣을 구간을 켜고 끕니다.",
       },
       {
         t: "#btnAtsPrintMergePdf",
