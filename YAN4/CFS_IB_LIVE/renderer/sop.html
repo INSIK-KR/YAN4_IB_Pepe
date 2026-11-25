@@ -245,7 +245,14 @@
         a.addEventListener("click", function (ev) {
           ev.preventDefault();
           ev.stopPropagation();
-          var go = parseInt(a.dataset.page || "", 10);
+          /* 누른 링크 자신(ev.currentTarget) — 바깥 변수 a 는 마지막 링크라서 쓰면 안 됨 */
+          var go = parseInt(ev.currentTarget.dataset.page || "", 10);
+          var url = ev.currentTarget.dataset.url || "";
+          if (!go && /^https?:/i.test(url)) {
+            /* WMS · 위키 등 바깥 주소 — 앱 로그인 그대로 쓰는 새 창으로 */
+            window.open(url, "_blank");
+            return;
+          }
           if (go) {
             setHit("");
             hits = [];
@@ -274,10 +281,18 @@
         var avail = Math.max(320, stage.clientWidth - 24);
         var scale = Math.min(2.2, avail / base.width);
         var viewport = page.getViewport({ scale: scale });
-        canvas.width = Math.floor(viewport.width);
-        canvas.height = Math.floor(viewport.height);
+        /* 화면 배율(125% · 150% 등)만큼 더 촘촘히 그려서 글자 · 이미지가 흐리지 않게 (최소 2배) */
+        var outputScale = Math.min(3, Math.max(2, window.devicePixelRatio || 1));
+        canvas.width = Math.floor(viewport.width * outputScale);
+        canvas.height = Math.floor(viewport.height * outputScale);
+        canvas.style.width = Math.floor(viewport.width) + "px";
+        canvas.style.height = Math.floor(viewport.height) + "px";
         clearLinks();
-        await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+        await page.render({
+          canvasContext: ctx,
+          viewport: viewport,
+          transform: [outputScale, 0, 0, outputScale, 0, 0],
+        }).promise;
         if (myToken !== renderToken) return;
         currentPage = pageNum;
         setStatus("");

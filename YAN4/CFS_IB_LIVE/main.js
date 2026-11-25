@@ -1803,7 +1803,8 @@ function openInboundSopWindow(opts) {
     },
   });
 
-  guardAppWindow(sopWindow, { openLinks: false });
+  /* SOP 속 WMS · 위키 등 바깥 링크는 로그인 세션 쓰는 링크 창으로 */
+  guardAppWindow(sopWindow, { openLinks: true });
   sopWindow.loadFile(path.join(__dirname, "renderer", "sop.html"));
   sopWindow.on("closed", function () {
     sopWindow = null;
