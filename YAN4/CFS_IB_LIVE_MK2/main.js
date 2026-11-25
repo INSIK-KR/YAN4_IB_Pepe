@@ -536,6 +536,17 @@ function isChromeRunning() {
   }
 }
 
+/** SOP 링크 — 크롬 새 탭, 최소화 없이 앞으로 (크롬 없으면 기본 브라우저) */
+function openSopLinkInChrome(url) {
+  const chrome = findChromeExe();
+  if (chrome) {
+    spawn(chrome, ["--new-tab", url], { detached: true, stdio: "ignore" }).unref();
+    return { ok: true, via: "chrome" };
+  }
+  shell.openExternal(url);
+  return { ok: true, via: "default-browser" };
+}
+
 function openUrlInChrome(url) {
   const chrome = findChromeExe();
   if (chrome) {
@@ -1803,8 +1814,12 @@ function openInboundSopWindow(opts) {
     },
   });
 
-  /* SOP 속 WMS · 위키 등 바깥 링크는 로그인 세션 쓰는 링크 창으로 */
-  guardAppWindow(sopWindow, { openLinks: true });
+  guardAppWindow(sopWindow, { openLinks: false });
+  /* SOP 속 WMS · 위키 등 바깥 링크는 크롬 새 탭으로 (앱 안 창 아님) */
+  sopWindow.webContents.setWindowOpenHandler(function (d) {
+    if (/^https?:/i.test(d.url)) openSopLinkInChrome(d.url);
+    return { action: "deny" };
+  });
   sopWindow.loadFile(path.join(__dirname, "renderer", "sop.html"));
   sopWindow.on("closed", function () {
     sopWindow = null;
