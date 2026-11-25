@@ -4340,7 +4340,8 @@
           (spec.title || spec.label) +
           (mode === "image"
             ? " · 이미지로 복사 (팀즈에 붙여넣기) · 초록·주황 제외"
-            : " · 팀즈 HTML+TSV 복사 · 초록·주황 제외");
+            : " · 팀즈 HTML+TSV 복사 · 초록·주황 제외") +
+          " · CT 현황판 탭에서는 현황판 목록 복사";
       }
     }
     applyAtsZoneModeChrome(
@@ -5890,6 +5891,14 @@
       );
       teamsBtnGroup.appendChild(teamBtn);
     }
+    var btnOvAll = document.createElement("button");
+    btnOvAll.type = "button";
+    btnOvAll.className = "yna4-ats-btn yna4-ats-btn--teams yna4-ats-ov-all-btn";
+    btnOvAll.setAttribute("data-ats-ov-all", "1");
+    btnOvAll.textContent = "전체";
+    btnOvAll.title = "CT 현황판 전체 목록 복사 (팀즈 · 이미지 모드대로)";
+    btnOvAll.style.display = "none";
+    teamsBtnGroup.appendChild(btnOvAll);
 
     var deadlineChipsHost = document.createElement("div");
     deadlineChipsHost.id = "atsDeadlineExportChips";
@@ -6003,6 +6012,7 @@
       tabOverview.classList.toggle("is-on", ov);
       dashboardsScroll.style.display = ov ? "none" : "";
       overviewHost.style.display = ov ? "" : "none";
+      btnOvAll.style.display = ov ? "" : "none";
       if (ov) renderAtsOverview();
     }
     function setAtsViewTab(t) {
@@ -6364,39 +6374,234 @@
       return arr.length > 1 ? arr[0] + " 외 " + (arr.length - 1) : arr[0];
     }
 
-    /** CT 현황판 요약 → 팀즈 표 (펼침 상세 제외) */
-    function copyAtsOverviewToTeams(groups, summaryText, asImage) {
+    /** CT 현황판 보기: "summary"(CT 한 줄 요약) | "list"(상품 한 줄씩, CT별 색) */
+    var ATS_OV_MODE_STORAGE_KEY = "yna4_ats_ov_mode_v1";
+    function loadAtsOvMode() {
+      try {
+        return localStorage.getItem(ATS_OV_MODE_STORAGE_KEY) === "list" ? "list" : "summary";
+      } catch (eOm) {
+        return "summary";
+      }
+    }
+    function saveAtsOvMode(m) {
+      try {
+        localStorage.setItem(ATS_OV_MODE_STORAGE_KEY, m === "list" ? "list" : "summary");
+      } catch (eOs) {}
+    }
+
+    /** 목록 보기 열 — 현황판 요약 · 펼침 열을 상품 한 줄에 */
+    var ATS_OV_LIST_HEAD = [
+      "로케이션",
+      "보충",
+      "재고",
+      "FROM FC",
+      "CT",
+      "차량번호",
+      "상품명",
+      "SKU ID",
+      "온도대",
+      "상태",
+      "우선순위",
+      "하차시간",
+      "보충기한",
+      "남은 시간",
+    ];
+    var ATS_OV_LIST_CT_COL = 4;
+    var ATS_OV_LIST_REMAIN_COL = 13;
+    var ATS_OV_LIST_COLORS = [
+      "#e9d5ff",
+      "#bfdbfe",
+      "#bbf7d0",
+      "#fde68a",
+      "#fbcfe8",
+      "#a5f3fc",
+      "#fed7aa",
+      "#c7d2fe",
+      "#d9f99d",
+      "#fecaca",
+    ];
+
+    /**
+     * 현황판 그룹 → 상품 한 줄씩. dashSet 이 있으면 그 대시보드(구간) 행만.
+     * CT 순서는 현황판과 같고, CT 없는 행은 맨 아래. CT마다 색을 돌려 가며 붙임.
+     */
+    function atsOverviewListRows(groups, dashSet) {
+      var out = [];
+      var colorIdx = 0;
+      var withCt = groups.filter(function (g) {
+        return g.key !== "(CT 없음)";
+      });
+      var noCt = groups.filter(function (g) {
+        return g.key === "(CT 없음)";
+      });
+      withCt.concat(noCt).forEach(function (g) {
+        var items = g.rows.filter(function (x) {
+          return !dashSet || dashSet[x.dash];
+        });
+        if (!items.length) return;
+        items = items.slice().sort(function (a, b) {
+          return String((a.row && a.row.location) || "").localeCompare(
+            String((b.row && b.row.location) || "")
+          );
+        });
+        var isNoCt = g.key === "(CT 없음)";
+        var color = isNoCt ? "" : ATS_OV_LIST_COLORS[colorIdx++ % ATS_OV_LIST_COLORS.length];
+        items.forEach(function (x, xi) {
+          var r = x.row;
+          var rem = atsRemainMinutes(r.atsDeadline);
+          out.push({
+            color: color,
+            ctStart: xi === 0,
+            ct: isNoCt ? "" : g.key,
+            obQty: r.obQty,
+            overdue: rem < 0,
+            soon: rem >= 0 && rem <= 30,
+            cells: [
+              r.location || "",
+              r.obQty || "",
+              r.qty || "",
+              r.fromCenter || "",
+              isNoCt ? "-" : g.key,
+              r.vehicleNo || "",
+              r.name || "",
+              r.skuId || "",
+              atsOverviewTemp(r, x.dash),
+              r.status || "",
+              r.priority || "",
+              formatAtsDateTimeCompact(r.unloadTime || ""),
+              r.atsDeadline || "",
+              atsFormatRemain(rem),
+            ],
+          });
+        });
+      });
+      return out;
+    }
+
+    function buildAtsOverviewListHtml(title, rows) {
+      var e = escapeHtmlForTeamsClipboard;
+      var h =
+        "<p style=\"margin:0 0 6px 0;font-weight:700;font-family:Segoe UI,Malgun Gothic,sans-serif;font-size:13px;\">" +
+        e(title) +
+        "</p>" +
+        "<table cellpadding=\"3\" cellspacing=\"0\" style=\"border-collapse:collapse;border:1px solid #94a3b8;font-family:Segoe UI,Malgun Gothic,sans-serif;font-size:12px;color:#0f172a;\"><thead><tr>";
+      ATS_OV_LIST_HEAD.forEach(function (th) {
+        h +=
+          "<th style=\"background:#e2e8f0;border:1px solid #94a3b8;padding:3px 6px;text-align:left;white-space:nowrap;\">" +
+          e(th) +
+          "</th>";
+      });
+      h += "</tr></thead><tbody>";
+      rows.forEach(function (r) {
+        h += "<tr>";
+        r.cells.forEach(function (c, ci) {
+          var st = "border:1px solid #cbd5e1;padding:3px 6px;white-space:nowrap;";
+          if (ci === 1 || ci === 2) st += "text-align:right;";
+          if (ci === ATS_OV_LIST_CT_COL) {
+            st += "text-align:center;font-weight:700;" + (r.color ? "background:" + r.color + ";" : "");
+          }
+          if (ci === ATS_OV_LIST_REMAIN_COL && (r.overdue || r.soon)) {
+            st += "font-weight:700;color:" + (r.overdue ? "#b91c1c" : "#c2410c") + ";";
+          }
+          h += "<td style=\"" + st + "\">" + e(c) + "</td>";
+        });
+        h += "</tr>";
+      });
+      return h + "</tbody></table>";
+    }
+
+    /** 화면용 목록 표 */
+    function renderAtsOverviewListTable(rows) {
+      var table = document.createElement("table");
+      table.className = "yna4-ats-ov-table yna4-ats-ov-list";
+      var thead = document.createElement("thead");
+      var hr = document.createElement("tr");
+      ATS_OV_LIST_HEAD.forEach(function (h) {
+        var th = document.createElement("th");
+        th.textContent = h;
+        hr.appendChild(th);
+      });
+      thead.appendChild(hr);
+      table.appendChild(thead);
+      var tbody = document.createElement("tbody");
+      rows.forEach(function (r) {
+        var tr = document.createElement("tr");
+        if (r.ctStart) tr.className = "is-ct-start";
+        r.cells.forEach(function (c, ci) {
+          var td = document.createElement("td");
+          td.textContent = c;
+          td.title = c;
+          if (ci === 1 || ci === 2) td.className = "is-num";
+          if (ci === ATS_OV_LIST_CT_COL) {
+            td.className = "is-ct";
+            if (r.color) td.style.background = r.color;
+          }
+          if (ci === ATS_OV_LIST_REMAIN_COL && (r.overdue || r.soon)) {
+            td.className = r.overdue ? "is-overdue" : "is-soon";
+          }
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      return table;
+    }
+
+    /** 툴바 구간 버튼 · 「전체」(CT 현황판 탭) → 현황판 목록을 팀즈 표 또는 이미지로 */
+    function copyAtsOverviewList(btn, restLabel, dashboards, asImage) {
+      function flash(t) {
+        btn.textContent = t;
+        window.setTimeout(function () {
+          btn.textContent = restLabel;
+        }, 1600);
+      }
+      if (!atsLastBuckets) {
+        flash("조회 먼저");
+        return;
+      }
+      var dashSet = null;
+      if (dashboards) {
+        dashSet = Object.create(null);
+        dashboards.forEach(function (d) {
+          dashSet[d] = 1;
+        });
+      }
+      var rows = atsOverviewListRows(collectAtsOverviewGroups(atsLastBuckets), dashSet);
+      if (!rows.length) {
+        flash("복사할 내용 없음");
+        return;
+      }
+      var ctSeen = Object.create(null);
+      var ctN = 0;
+      var unit = 0;
+      rows.forEach(function (r) {
+        if (r.ct && !ctSeen[r.ct]) {
+          ctSeen[r.ct] = 1;
+          ctN++;
+        }
+        var q = parseObQtyNumber(r.obQty);
+        if (isFinite(q)) unit += q;
+      });
       var now = new Date();
       var hm = String(now.getHours()).padStart(2, "0") + ":" + String(now.getMinutes()).padStart(2, "0");
-      var header = ["우선순위", "CT", "온도대", "FROM FC", "차량번호", "하차시간", "건수", "보충수량", "보충기한", "남은 시간"];
-      var rows = groups.map(function (g) {
-        return [
-          atsJoinShort(g.prio),
-          g.key,
-          g.temps.join(" · "),
-          atsJoinShort(g.from),
-          atsJoinShort(g.vehicle),
-          formatAtsDateTimeCompact(g.unload || ""),
-          String(g.rows.length) + (g.moving ? " (이동중 " + g.moving + ")" : ""),
-          formatObQtyNumber(g.obSum) || "0",
-          g.deadline || "",
-          atsFormatRemain(g.remain),
-        ];
-      });
-      var sections = [
-        {
-          title: "CT 현황판 (" + hm + " 기준) · " + summaryText,
-          headerCells: header,
-          dataRows: rows,
-        },
-      ];
+      var title =
+        "CT 현황판 · " + (dashboards ? restLabel : "전체") + " (" + hm + " 기준) · CT " + ctN + "개 · " +
+        rows.length + "건 · 보충 " + (formatObQtyNumber(unit) || "0") + "unit";
+      var tsv = [title, ATS_OV_LIST_HEAD.join("\t")]
+        .concat(
+          rows.map(function (r) {
+            return r.cells
+              .map(function (c) {
+                return String(c == null ? "" : c).replace(/[\t\r\n]+/g, " ");
+              })
+              .join("\t");
+          })
+        )
+        .join("\n");
       var what = asImage ? "이미지 복사" : "팀즈 복사";
-      copyHtmlPlainToClipboardAts(
-        buildAtsTeamsHtmlFromSections(sections),
-        buildAtsTeamsCopyTsvLines(sections).join("\n"),
-        asImage
-      ).then(function (ok) {
-        setStatus(ok ? what + " 완료 · CT " + rows.length + "줄" : what + " 실패", ok ? "ok" : "err");
+      copyHtmlPlainToClipboardAts(buildAtsOverviewListHtml(title, rows), tsv, asImage).then(function (ok) {
+        flash(ok ? "복사됨" : "복사 실패");
+        setStatus(ok ? "현황판 " + what + " 완료 · " + rows.length + "줄" : "현황판 " + what + " 실패", ok ? "ok" : "err");
       });
     }
 
@@ -6427,36 +6632,41 @@
         (formatObQtyNumber(totalOb) || "0") + "unit" +
         (overdue ? " · 기한 지남 " + overdue : "") +
         (soon ? " · 30분 이내 " + soon : "") +
-        " · 진열완료(초록)·부분진열(주황) 제외 · 줄을 누르면 펼침";
+        " · 진열완료(초록)·부분진열(주황) 제외" +
+        (loadAtsOvMode() === "list" ? "" : " · 줄을 누르면 펼침");
       sumBar.appendChild(sum);
-      if (groups.length) {
-        var btnOvTeams = document.createElement("button");
-        btnOvTeams.type = "button";
-        btnOvTeams.className = "yna4-ats-ov-teams-btn";
-        btnOvTeams.textContent = "팀즈 복사";
-        btnOvTeams.title = "CT별 요약 표를 팀즈에 붙여넣기용(HTML+TSV)으로 복사";
-        btnOvTeams.addEventListener("click", function (ev) {
+      var ovMode = loadAtsOvMode();
+      var ovSwitch = document.createElement("span");
+      ovSwitch.className = "yna4-ats-ov-mode";
+      ovSwitch.setAttribute("role", "group");
+      ovSwitch.setAttribute("aria-label", "CT 현황판 보기");
+      [
+        ["summary", "요약", "CT 한 줄씩 · 줄을 누르면 펼침"],
+        ["list", "목록", "상품 한 줄씩 · CT마다 색으로 구분"],
+      ].forEach(function (o) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.textContent = o[1];
+        b.title = o[2];
+        if (ovMode === o[0]) b.className = "is-on";
+        b.addEventListener("click", function (ev) {
           ev.stopPropagation();
-          copyAtsOverviewToTeams(groups, sum.textContent.split(" · 진열완료")[0]);
+          saveAtsOvMode(o[0]);
+          renderAtsOverview();
         });
-        sumBar.appendChild(btnOvTeams);
-        var btnOvImage = document.createElement("button");
-        btnOvImage.type = "button";
-        btnOvImage.className = "yna4-ats-ov-teams-btn";
-        btnOvImage.textContent = "이미지";
-        btnOvImage.title = "CT별 요약 표를 이미지로 복사 (팀즈에 붙이면 크기 그대로)";
-        btnOvImage.addEventListener("click", function (ev) {
-          ev.stopPropagation();
-          copyAtsOverviewToTeams(groups, sum.textContent.split(" · 진열완료")[0], true);
-        });
-        sumBar.appendChild(btnOvImage);
-      }
+        ovSwitch.appendChild(b);
+      });
+      sumBar.appendChild(ovSwitch);
       overviewHost.appendChild(sumBar);
       if (!groups.length) {
         var p1 = document.createElement("p");
         p1.className = "yna4-ats-ov-empty";
         p1.textContent = "남은 보충 없음";
         overviewHost.appendChild(p1);
+        return;
+      }
+      if (ovMode === "list") {
+        overviewHost.appendChild(renderAtsOverviewListTable(atsOverviewListRows(groups, null)));
         return;
       }
       var table = document.createElement("table");
@@ -7217,6 +7427,13 @@
         void runAtsGlocLookupForRowEl(rowEl);
         return;
       }
+      var ovAllBtn = t.closest("button[data-ats-ov-all]");
+      if (ovAllBtn && ovAllBtn.closest(".yna4-ats-teams-btn-group")) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        copyAtsOverviewList(ovAllBtn, "전체", null, loadAtsZoneMode() === "image");
+        return;
+      }
       var zoneBtn = t.closest("button[data-zone-key]");
       if (zoneBtn && zoneBtn.closest(".yna4-ats-teams-btn-group")) {
         ev.preventDefault();
@@ -7225,6 +7442,10 @@
         var zspec = findAtsZoneSpecByLabel(zlbl);
         if (!zspec) return;
         var zMode = loadAtsZoneMode();
+        if (zMode !== "pdf" && atsViewTab === "overview") {
+          copyAtsOverviewList(zoneBtn, zspec.label, zspec.dashboards, zMode === "image");
+          return;
+        }
         if (zMode === "pdf") {
           var zcur = loadAtsPrintDashChipStateMap();
           zcur[zlbl] = zcur[zlbl] === false;
