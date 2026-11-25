@@ -504,46 +504,10 @@
       },
       {
         t: function () {
-          /* 목록 보기로 두었으면 요약으로 돌려 놓고 */
-          var ovSum = qa(".yna4-ats-ov-mode button", atsP()).filter(function (b) {
-            return b.textContent === "요약";
-          })[0];
-          if (ovSum && !ovSum.classList.contains("is-on")) ovSum.click();
-          /* 이미 펼친 줄(is-open)은 누르면 접히므로, 아직 안 펼친 첫 CT 줄 */
-          return q("tr.yna4-ats-ov-ct:not(.is-open)", atsP());
+          return q(".yna4-ats-ov-list", atsP());
         },
-        act: "이 줄을 눌러 펼쳐 보세요",
-        snap: function () {
-          return qa(".yna4-ats-ov-detail", atsP()).length;
-        },
-        done: function (n0) {
-          return qa(".yna4-ats-ov-detail", atsP()).length > n0;
-        },
-        title: "CT 줄 펼치기",
-        text: "줄마다 CT · 온도대 · 품목 수 · 보충 unit · 보충기한 · 남은 시간이 나옵니다.",
-      },
-      {
-        t: function () {
-          return q(".yna4-ats-ov-detail", atsP());
-        },
-        title: "CT 안의 상품",
-        text: "그 CT에서 보충할 상품 · 보충 수량 · 재고 · 로케이션 · 보충기한입니다. 다시 누르면 접힙니다.",
-      },
-      {
-        t: function () {
-          return qa(".yna4-ats-ov-mode button", atsP()).filter(function (b) {
-            return b.textContent === "목록";
-          })[0];
-        },
-        act: "「목록」을 눌러 보세요",
-        done: function () {
-          var b = qa(".yna4-ats-ov-mode button", atsP()).filter(function (x) {
-            return x.textContent === "목록";
-          })[0];
-          return !!(b && b.classList.contains("is-on"));
-        },
-        title: "요약 / 목록",
-        text: "<b>목록</b>은 펼치지 않아도 상품이 한 줄씩 나오고, 같은 CT는 같은 색으로 묶입니다.<br><b>요약</b>은 CT 한 줄씩입니다. 고른 보기는 다음에도 유지됩니다.",
+        title: "CT별 목록",
+        text: "보충할 상품이 한 줄씩 나오고, 같은 CT는 CT 칸이 같은 색으로 묶입니다. 위에서부터 급한 CT 순이며, CT가 없는 행은 맨 아래에 「-」로 나옵니다.",
       },
       {
         t: function () {
