@@ -4340,8 +4340,7 @@
           (spec.title || spec.label) +
           (mode === "image"
             ? " · 이미지로 복사 (팀즈에 붙여넣기) · 초록·주황 제외"
-            : " · 팀즈 HTML+TSV 복사 · 초록·주황 제외") +
-          " · CT 현황판 탭에서는 현황판 목록 복사";
+            : " · 팀즈 HTML+TSV 복사 · 초록·주황 제외");
       }
     }
     applyAtsZoneModeChrome(
@@ -5010,6 +5009,8 @@
   var ATS_CT_EMPTY_KEY = "__EMPTY__";
   /** CT 현황판 탭 — 마지막 탭 기억, 마지막 구간별 행(필터 전), 펼친 CT */
   var ATS_VIEW_TAB_STORAGE_KEY = "yna4_ats_view_tab_v1";
+  /** CT 현황판 탭 온도대 복사 버튼 */
+  var ATS_OV_TEMP_CATS = ["냉장", "상온", "냉동", "기타"];
   var atsLastBuckets = null;
   var atsOverviewOpen = Object.create(null);
 
@@ -5891,14 +5892,25 @@
       );
       teamsBtnGroup.appendChild(teamBtn);
     }
-    var btnOvAll = document.createElement("button");
-    btnOvAll.type = "button";
-    btnOvAll.className = "yna4-ats-btn yna4-ats-btn--teams yna4-ats-ov-all-btn";
-    btnOvAll.setAttribute("data-ats-ov-all", "1");
-    btnOvAll.textContent = "전체";
-    btnOvAll.title = "CT 현황판 전체 목록 복사 (팀즈 · 이미지 모드대로)";
-    btnOvAll.style.display = "none";
-    teamsBtnGroup.appendChild(btnOvAll);
+    /* CT 현황판 탭 복사 버튼 — 온도대별 (대시보드 구간 버튼 대신) */
+    var ovTempGroup = document.createElement("span");
+    ovTempGroup.className = "yna4-ats-teams-btn-group yna4-ats-ov-temp-group";
+    ovTempGroup.setAttribute("role", "group");
+    ovTempGroup.setAttribute("aria-label", "CT 현황판 온도대별 복사");
+    ovTempGroup.setAttribute("data-ats-zone-mode", "teams");
+    ovTempGroup.style.display = "none";
+    ATS_OV_TEMP_CATS.concat(["전체"]).forEach(function (cat) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "yna4-ats-btn yna4-ats-btn--teams yna4-ats-zone-btn";
+      b.setAttribute("data-ats-ov-temp", cat);
+      b.setAttribute("data-label", cat);
+      b.textContent = cat;
+      b.title =
+        (cat === "전체" ? "CT 현황판 전체" : "CT 현황판 " + cat) +
+        " 목록 복사 · 「팀즈」 모드는 표, 「이미지」 모드는 이미지";
+      ovTempGroup.appendChild(b);
+    });
 
     var deadlineChipsHost = document.createElement("div");
     deadlineChipsHost.id = "atsDeadlineExportChips";
@@ -5925,6 +5937,7 @@
     toolbarRowTeams.appendChild(btnUrgent);
     toolbarRowTeams.appendChild(zoneModeSwitch);
     toolbarRowTeams.appendChild(teamsBtnGroup);
+    toolbarRowTeams.appendChild(ovTempGroup);
     toolbarRowTeams.appendChild(btnPrintPdf);
     toolbarRowDeadline.appendChild(deadlineChipsHost);
     toolbar.appendChild(toolbarRowMain);
@@ -6012,7 +6025,13 @@
       tabOverview.classList.toggle("is-on", ov);
       dashboardsScroll.style.display = ov ? "none" : "";
       overviewHost.style.display = ov ? "" : "none";
-      btnOvAll.style.display = ov ? "" : "none";
+      teamsBtnGroup.style.display = ov ? "none" : "";
+      ovTempGroup.style.display = ov ? "" : "none";
+      btnPrintPdf.style.display = ov ? "none" : "";
+      if (ov) btnZoneModePdf.style.setProperty("display", "none", "important");
+      else btnZoneModePdf.style.removeProperty("display");
+      /* 현황판에는 PDF 모드가 없음 — PDF 모드였으면 팀즈로 */
+      if (ov && loadAtsZoneMode() === "pdf") setAtsZoneModeLocal("teams");
       if (ov) renderAtsOverview();
     }
     function setAtsViewTab(t) {
@@ -6422,10 +6441,10 @@
     ];
 
     /**
-     * 현황판 그룹 → 상품 한 줄씩. dashSet 이 있으면 그 대시보드(구간) 행만.
+     * 현황판 그룹 → 상품 한 줄씩. keep(x) 가 있으면 true 인 행만 (온도대 등).
      * CT 순서는 현황판과 같고, CT 없는 행은 맨 아래. CT마다 색을 돌려 가며 붙임.
      */
-    function atsOverviewListRows(groups, dashSet) {
+    function atsOverviewListRows(groups, keep) {
       var out = [];
       var colorIdx = 0;
       var withCt = groups.filter(function (g) {
@@ -6436,7 +6455,7 @@
       });
       withCt.concat(noCt).forEach(function (g) {
         var items = g.rows.filter(function (x) {
-          return !dashSet || dashSet[x.dash];
+          return !keep || keep(x);
         });
         if (!items.length) return;
         items = items.slice().sort(function (a, b) {
@@ -6476,6 +6495,33 @@
         });
       });
       return out;
+    }
+
+    /** 현황판 행 → 냉장 · 상온 · 냉동 · 기타 */
+    function atsOvTempCat(x) {
+      var t = String(atsOverviewTemp(x.row, x.dash) || "").toUpperCase();
+      if (/CHILL|냉장/.test(t)) return "냉장";
+      if (/AMBIENT|상온/.test(t)) return "상온";
+      if (/FROZEN|FREEZ|냉동/.test(t)) return "냉동";
+      return "기타";
+    }
+
+    /** 온도대 버튼에 건수 · 없는 「기타」는 숨김 */
+    function refreshAtsOvTempButtons(groups) {
+      var cnt = { 냉장: 0, 상온: 0, 냉동: 0, 기타: 0, 전체: 0 };
+      (groups || []).forEach(function (g) {
+        g.rows.forEach(function (x) {
+          cnt[atsOvTempCat(x)]++;
+          cnt.전체++;
+        });
+      });
+      [].forEach.call(ovTempGroup.querySelectorAll("button[data-ats-ov-temp]"), function (b) {
+        var cat = b.getAttribute("data-ats-ov-temp");
+        var label = cat + (groups && cnt[cat] ? " · " + cnt[cat] + "건" : "");
+        b.setAttribute("data-label", label);
+        if (!b.getAttribute("data-flashing")) b.textContent = label;
+        b.style.display = cat === "기타" && !cnt.기타 ? "none" : "";
+      });
     }
 
     function buildAtsOverviewListHtml(title, rows) {
@@ -6548,25 +6594,27 @@
     }
 
     /** 툴바 구간 버튼 · 「전체」(CT 현황판 탭) → 현황판 목록을 팀즈 표 또는 이미지로 */
-    function copyAtsOverviewList(btn, restLabel, dashboards, asImage) {
+    function copyAtsOverviewList(btn, tempCat, asImage) {
+      var restLabel = tempCat;
       function flash(t) {
+        btn.setAttribute("data-flashing", "1");
         btn.textContent = t;
         window.setTimeout(function () {
-          btn.textContent = restLabel;
+          btn.removeAttribute("data-flashing");
+          btn.textContent = btn.getAttribute("data-label") || tempCat;
         }, 1600);
       }
       if (!atsLastBuckets) {
         flash("조회 먼저");
         return;
       }
-      var dashSet = null;
-      if (dashboards) {
-        dashSet = Object.create(null);
-        dashboards.forEach(function (d) {
-          dashSet[d] = 1;
-        });
-      }
-      var rows = atsOverviewListRows(collectAtsOverviewGroups(atsLastBuckets), dashSet);
+      var keep =
+        tempCat === "전체"
+          ? null
+          : function (x) {
+              return atsOvTempCat(x) === tempCat;
+            };
+      var rows = atsOverviewListRows(collectAtsOverviewGroups(atsLastBuckets), keep);
       if (!rows.length) {
         flash("복사할 내용 없음");
         return;
@@ -6585,7 +6633,7 @@
       var now = new Date();
       var hm = String(now.getHours()).padStart(2, "0") + ":" + String(now.getMinutes()).padStart(2, "0");
       var title =
-        "CT 현황판 · " + (dashboards ? restLabel : "전체") + " (" + hm + " 기준) · CT " + ctN + "개 · " +
+        "CT 현황판 · " + restLabel + " (" + hm + " 기준) · CT " + ctN + "개 · " +
         rows.length + "건 · 보충 " + (formatObQtyNumber(unit) || "0") + "unit";
       var tsv = [title, ATS_OV_LIST_HEAD.join("\t")]
         .concat(
@@ -6616,6 +6664,7 @@
         return;
       }
       var groups = collectAtsOverviewGroups(atsLastBuckets);
+      refreshAtsOvTempButtons(groups);
       var totalOb = 0, overdue = 0, soon = 0, totalRows = 0;
       groups.forEach(function (g) {
         totalOb += g.obSum;
@@ -7427,11 +7476,15 @@
         void runAtsGlocLookupForRowEl(rowEl);
         return;
       }
-      var ovAllBtn = t.closest("button[data-ats-ov-all]");
-      if (ovAllBtn && ovAllBtn.closest(".yna4-ats-teams-btn-group")) {
+      var ovTempBtn = t.closest("button[data-ats-ov-temp]");
+      if (ovTempBtn) {
         ev.preventDefault();
         ev.stopPropagation();
-        copyAtsOverviewList(ovAllBtn, "전체", null, loadAtsZoneMode() === "image");
+        copyAtsOverviewList(
+          ovTempBtn,
+          ovTempBtn.getAttribute("data-ats-ov-temp"),
+          loadAtsZoneMode() === "image"
+        );
         return;
       }
       var zoneBtn = t.closest("button[data-zone-key]");
@@ -7442,10 +7495,6 @@
         var zspec = findAtsZoneSpecByLabel(zlbl);
         if (!zspec) return;
         var zMode = loadAtsZoneMode();
-        if (zMode !== "pdf" && atsViewTab === "overview") {
-          copyAtsOverviewList(zoneBtn, zspec.label, zspec.dashboards, zMode === "image");
-          return;
-        }
         if (zMode === "pdf") {
           var zcur = loadAtsPrintDashChipStateMap();
           zcur[zlbl] = zcur[zlbl] === false;
