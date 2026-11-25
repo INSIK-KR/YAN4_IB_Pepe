@@ -249,7 +249,7 @@
           var go = parseInt(ev.currentTarget.dataset.page || "", 10);
           var url = ev.currentTarget.dataset.url || "";
           if (!go && /^https?:/i.test(url)) {
-            /* WMS · 위키 등 바깥 주소 — 앱 로그인 그대로 쓰는 새 창으로 */
+            /* WMS · 위키 등 바깥 주소 — 크롬 새 탭으로 (main 이 가로챔) */
             window.open(url, "_blank");
             return;
           }
