@@ -6405,10 +6405,15 @@
     }
   }
 
-  function slaCopyHtmlPlainToClipboard(innerBodyHtml, plainText) {
+  function slaCopyHtmlPlainToClipboard(innerBodyHtml, plainText, asImage) {
     var plain = String(plainText || "");
     var inner = String(innerBodyHtml || "");
     if (!inner && !plain) return Promise.resolve(false);
+    if (asImage) {
+      return typeof yan4CopyHtmlAsImage === "function" && inner
+        ? yan4CopyHtmlAsImage(inner)
+        : Promise.resolve(false);
+    }
     var fullHtml =
       "<!DOCTYPE html><html><head><meta charset=\"utf-8\"></head><body>" +
       inner +
@@ -6596,9 +6601,15 @@
     return parts.join("");
   }
 
-  function copySlaDrillTableForTeams(btn, table, title, copyMode) {
+  function copySlaDrillTableForTeams(btn, table, title, copyMode, asImage) {
     var mode = copyMode === "sr" || copyMode === "egg" ? copyMode : "";
-    var labelRest = mode === "sr" ? "SR" : mode === "egg" ? "계란" : "팀즈";
+    var labelRest = asImage
+      ? "이미지"
+      : mode === "sr"
+      ? "SR"
+      : mode === "egg"
+      ? "계란"
+      : "팀즈";
     function flash(ok, empty) {
       if (!btn) return;
       btn.textContent = empty
@@ -6632,7 +6643,7 @@
       flash(false, true);
       return;
     }
-    slaCopyHtmlPlainToClipboard(html, plain).then(function (ok) {
+    slaCopyHtmlPlainToClipboard(html, plain, asImage).then(function (ok) {
       flash(ok, false);
     });
   }
@@ -6658,7 +6669,7 @@
         ? String(titleEl.textContent || "").trim()
         : slaDrillCellPlainText(head);
     }
-    function mkBtn(label, titleAttr, copyMode, btnMod) {
+    function mkBtn(label, titleAttr, copyMode, btnMod, asImage) {
       var b = document.createElement("button");
       b.type = "button";
       b.className =
@@ -6673,13 +6684,21 @@
           b,
           wrap.querySelector(".yna4-sla-pivot-drill-table"),
           drillTitle(),
-          copyMode
+          copyMode,
+          !!asImage
         );
       });
       head.appendChild(b);
       return b;
     }
     var btn = mkBtn("팀즈", "현재 드릴다운 표를 팀즈에 붙여넣기", "", "");
+    mkBtn(
+      "이미지",
+      "현재 드릴다운 표를 이미지로 복사 (팀즈에 붙이면 크기 그대로)",
+      "",
+      "img",
+      true
+    );
     mkBtn("SR", "상품명에 SR이 붙은 음영 행만 팀즈에 붙여넣기", "sr", "sr");
     if (showEgg) {
       mkBtn(

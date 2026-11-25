@@ -628,6 +628,10 @@
         unloadPlanCopyTeams();
         return;
       }
+      if (t && t.closest && t.closest("[data-role='plan-copy-img']")) {
+        unloadPlanCopyTeams(true);
+        return;
+      }
       var planRow = t && t.closest ? t.closest("[data-plan-key]") : null;
       if (planRow) {
         var pk = planRow.getAttribute("data-plan-key");
@@ -1533,6 +1537,9 @@
       "-gap-api-copy'>팀즈용 표 복사</button>" +
       "<button type='button' class='yna4-pane-btn' id='" +
       ROOT_ID +
+      "-gap-api-copy-img' title='표를 이미지로 복사 (팀즈에 붙이면 크기 그대로)'>이미지 복사</button>" +
+      "<button type='button' class='yna4-pane-btn' id='" +
+      ROOT_ID +
       "-gap-api-close'>닫기</button></div></div>" +
       "<div class='yna4-gap-api-status' id='" +
       ROOT_ID +
@@ -1557,6 +1564,20 @@
     if (cp) {
       cp.addEventListener("click", function () {
         unloadGapCopyTeamsTable(unloadGapLastRows || []);
+      });
+    }
+    var cpImg = document.getElementById(ROOT_ID + "-gap-api-copy-img");
+    if (cpImg) {
+      cpImg.addEventListener("click", function () {
+        var rowsImg = unloadGapLastRows || [];
+        if (!rowsImg.length) {
+          unloadGapSetModalStatus("복사할 행이 없습니다.");
+          return;
+        }
+        unloadGapSetModalStatus("이미지 만드는 중…");
+        yan4CopyHtmlAsImage(unloadGapBuildTeamsClipboard(rowsImg).html).then(function (ok) {
+          unloadGapSetModalStatus(ok ? "이미지 복사 완료" : "이미지 복사 실패");
+        });
       });
     }
     return el;
@@ -3243,7 +3264,8 @@
     var html =
       "<div class='yna4-unload-plan-bar'><span class='yna4-unload-plan-sum'>" +
       esc(unloadPlanSummary(plan)) +
-      "</span><button type='button' class='yna4-pane-btn' data-role='plan-copy'>팀즈 복사</button></div>";
+      "</span><button type='button' class='yna4-pane-btn' data-role='plan-copy'>팀즈 복사</button>" +
+      "<button type='button' class='yna4-pane-btn' data-role='plan-copy-img' title='표를 이미지로 복사 (팀즈에 붙이면 크기 그대로)'>이미지</button></div>";
     /* 온도 비중 막대 */
     html += "<div class='yp-share' role='img' aria-label='온도별 예상 unit 비중'>";
     secs.forEach(function (sec) {
@@ -3295,7 +3317,7 @@
   }
 
   /** 당일 예상 → 팀즈 표 (온도 → 업체, 예상 unit 많은 순) */
-  function unloadPlanCopyTeams() {
+  function unloadPlanCopyTeams(asImage) {
     var j = unloadShipJoin;
     if (!j || !j.plan || !j.plan.groups.length) return;
     var cols = ["온도대", "업체명", "예약시간", "SKU", "예상 unit"];
@@ -3334,6 +3356,12 @@
     var done = function (msg) {
       unloadShipSetLine(unloadShipSummaryText() + "  · " + msg);
     };
+    if (asImage) {
+      yan4CopyHtmlAsImage(html).then(function (ok) {
+        done(ok ? "이미지 복사 완료 · " + rows.length + "줄" : "이미지 복사 실패");
+      });
+      return;
+    }
     if (typeof ClipboardItem !== "undefined" && navigator.clipboard && navigator.clipboard.write) {
       navigator.clipboard
         .write([
@@ -8407,6 +8435,9 @@
         "<button type='button' class='yna4-pane-btn' id='" +
         ROOT_ID +
         "-po-pipeline-copy'>팀즈용 표 복사</button>" +
+        "<button type='button' class='yna4-pane-btn' id='" +
+        ROOT_ID +
+        "-po-pipeline-copy-img' title='전체 표를 이미지로 복사 (팀즈에 붙이면 크기 그대로)'>이미지 복사</button>" +
         "<button type='button' class='yna4-pane-btn yna4-pane-btn--compact' id='" +
         ROOT_ID +
         "-po-pipeline-copy-mimaeip'>미매입확정 복사</button>" +
@@ -8748,6 +8779,20 @@
             return;
           }
           poPipelineWriteClipboard(buildPoPipelineTeamsClipboard(rows));
+        });
+      }
+      var btnImgCopy = document.getElementById(ROOT_ID + "-po-pipeline-copy-img");
+      if (btnImgCopy) {
+        btnImgCopy.addEventListener("click", function () {
+          if (!rows.length) {
+            alert("복사할 결과 행이 없습니다.");
+            return;
+          }
+          btnImgCopy.disabled = true;
+          yan4CopyHtmlAsImage(buildPoPipelineTeamsClipboard(rows).html).then(function (ok) {
+            btnImgCopy.disabled = false;
+            alert(ok ? "이미지 복사 완료 (" + rows.length + "행)" : "이미지 복사 실패");
+          });
         });
       }
       bindPoPipelineSubsetCopy(
@@ -15677,6 +15722,7 @@
         "<div class='yna4-prepack-actions'>" +
         "<span class='yna4-prepack-msg' data-role='msg'></span>" +
         "<button type='button' class='yna4-pane-btn yna4-pane-btn--primary' data-act='teams'>팀즈용 표 복사</button>" +
+        "<button type='button' class='yna4-pane-btn' data-act='teams-img' title='현재 탭 표를 이미지로 복사 (팀즈에 붙이면 크기 그대로)'>이미지 복사</button>" +
         "<button type='button' class='yna4-pane-btn' data-act='pdf'>PDF 출력</button>" +
         "<button type='button' class='yna4-pane-btn' data-act='close'>닫기</button>" +
         "</div></div>" +
@@ -15700,6 +15746,12 @@
           if (prepackLast) prepackPaintResultBody(modal, prepackLast);
         } else if (act === "teams" && prepackLast) {
           prepackCopyTeams(prepackResForActiveTab(prepackLast), setMsg);
+        } else if (act === "teams-img" && prepackLast) {
+          setMsg("이미지 만드는 중…");
+          var imgRes = prepackResForActiveTab(prepackLast);
+          yan4CopyHtmlAsImage(prepackBuildTeamsClipboard(imgRes).html).then(function (ok) {
+            setMsg(ok ? "이미지 복사 완료 (" + prepackTotalFilteredRows(imgRes) + "행)" : "이미지 복사 실패");
+          });
         } else if (act === "pdf" && prepackLast) {
           prepackPrintPdf(prepackResForActiveTab(prepackLast), setMsg);
         }

@@ -150,4 +150,50 @@
       } catch (eLegacy) {}
     }
   };
+
+  /**
+   * 팀즈 복사용 HTML 표를 그림(PNG)으로 바꿔 클립보드에 넣음.
+   * 팀즈가 붙여넣은 HTML 표를 크게 바꿔도 그림은 보이는 크기 그대로 붙음. 성공하면 true.
+   */
+  globalThis.yan4CopyHtmlAsImage = async function (html) {
+    var host = null;
+    try {
+      if (typeof html2canvas !== "function") throw new Error("html2canvas 없음");
+      var inner = String(html || "");
+      var mb = /<body[^>]*>([\s\S]*)<\/body>/i.exec(inner);
+      if (mb) inner = mb[1];
+      inner = inner.replace(/<!--(Start|End)Fragment-->/g, "");
+      if (!inner.trim()) return false;
+      host = document.createElement("div");
+      host.setAttribute("data-yan4-image-copy", "1");
+      host.style.cssText =
+        "position:fixed;left:-100000px;top:0;z-index:-1;display:inline-block;width:max-content;max-width:none;" +
+        "padding:10px;margin:0;background:#ffffff;color:#0f172a;text-align:left;" +
+        "font-family:'Segoe UI','Malgun Gothic',sans-serif;font-size:12px;line-height:1.35;";
+      host.innerHTML = inner;
+      document.body.appendChild(host);
+      var canvas = await html2canvas(host, {
+        backgroundColor: "#ffffff",
+        scale: Math.max(1, window.devicePixelRatio || 1),
+        logging: false,
+        useCORS: true,
+      });
+      var dataUrl = canvas.toDataURL("image/png");
+      var desk = window.yan4ShellDesktop;
+      if (desk && typeof desk.clipboardWritePng === "function") {
+        var resp = await desk.clipboardWritePng(dataUrl);
+        if (resp && resp.ok) return true;
+      }
+      var blob = await new Promise(function (resolve) {
+        canvas.toBlob(resolve, "image/png");
+      });
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      return true;
+    } catch (eImg) {
+      console.warn("[YAN4] 표 이미지 복사 실패", eImg);
+      return false;
+    } finally {
+      if (host && host.parentNode) host.parentNode.removeChild(host);
+    }
+  };
 })();
