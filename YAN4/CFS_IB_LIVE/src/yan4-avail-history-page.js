@@ -925,6 +925,24 @@
     );
   }
 
+  /** 팀즈 복사와 같은 표를 이미지로 */
+  function copyTeamsImage(btn) {
+    function flash(text) {
+      if (!btn) return;
+      btn.textContent = text;
+      setTimeout(function () {
+        btn.textContent = "이미지";
+      }, 1400);
+    }
+    if (!lastRows || !lastRows.length) {
+      flash("복사할 내용 없음");
+      return;
+    }
+    yan4CopyHtmlAsImage(rowsToTeamsHtml(lastRows, buildTeamsTitle())).then(function (ok) {
+      flash(ok ? "복사됨" : "복사 실패");
+    });
+  }
+
   function copyTeamsTable(btn) {
     if (!lastRows || !lastRows.length) {
       if (btn) {
@@ -1026,6 +1044,7 @@
       '<div class="yna4-avail-inner">' +
       '<div class="yna4-avail-toolbar">' +
       '<button type="button" class="yna4-avail-btn" data-act="copy">팀즈 복사</button>' +
+      '<button type="button" class="yna4-avail-btn" data-act="copy-img" title="표를 이미지로 복사 (팀즈에 붙이면 크기 그대로)">이미지</button>' +
       '<button type="button" class="yna4-avail-btn" data-act="close">닫기</button>' +
       '<div class="yna4-avail-meta" id="' +
       MODAL_ID +
@@ -1150,6 +1169,7 @@
         var act = btn.getAttribute("data-act");
         if (act === "close") closeModal();
         if (act === "copy") copyTeamsTable(btn);
+        if (act === "copy-img") copyTeamsImage(btn);
       }
     });
     document.addEventListener("keydown", function (e) {

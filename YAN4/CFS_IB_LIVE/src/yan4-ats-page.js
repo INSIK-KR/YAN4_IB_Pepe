@@ -4232,7 +4232,8 @@
 
   function loadAtsZoneMode() {
     try {
-      if (localStorage.getItem(ATS_ZONE_MODE_STORAGE_KEY) === "pdf") return "pdf";
+      var zmSaved = localStorage.getItem(ATS_ZONE_MODE_STORAGE_KEY);
+      if (zmSaved === "pdf" || zmSaved === "image") return zmSaved;
     } catch (eZm) {}
     return "teams";
   }
@@ -4241,26 +4242,37 @@
     try {
       localStorage.setItem(
         ATS_ZONE_MODE_STORAGE_KEY,
-        mode === "pdf" ? "pdf" : "teams"
+        mode === "pdf" || mode === "image" ? mode : "teams"
       );
     } catch (eSvZm) {}
   }
 
   function applyAtsZoneModeChrome(modeSwitch, teamsBtnGroup, mode) {
-    var isTeams = mode !== "pdf";
+    var isPdf = mode === "pdf";
+    var isImage = mode === "image";
+    var isTeams = !isPdf && !isImage;
     if (modeSwitch) {
       var btnT = modeSwitch.querySelector("[data-yna4-ats-zone-mode-teams]");
+      var btnI = modeSwitch.querySelector("[data-yna4-ats-zone-mode-image]");
       var btnP = modeSwitch.querySelector("[data-yna4-ats-zone-mode-pdf]");
       if (btnT) {
         btnT.classList.toggle("yna4-ats-zone-mode-btn--on", isTeams);
         btnT.classList.toggle("yna4-ats-zone-mode-btn--teams-on", isTeams);
       }
-      if (btnP) {
-        btnP.classList.toggle("yna4-ats-zone-mode-btn--on", !isTeams);
-        btnP.classList.toggle("yna4-ats-zone-mode-btn--pdf-on", !isTeams);
+      if (btnI) {
+        btnI.classList.toggle("yna4-ats-zone-mode-btn--on", isImage);
+        btnI.classList.toggle("yna4-ats-zone-mode-btn--image-on", isImage);
       }
-      modeSwitch.setAttribute("data-ats-zone-mode", isTeams ? "teams" : "pdf");
+      if (btnP) {
+        btnP.classList.toggle("yna4-ats-zone-mode-btn--on", isPdf);
+        btnP.classList.toggle("yna4-ats-zone-mode-btn--pdf-on", isPdf);
+      }
+      modeSwitch.setAttribute(
+        "data-ats-zone-mode",
+        isPdf ? "pdf" : isImage ? "image" : "teams"
+      );
     }
+    isTeams = !isPdf;
     if (teamsBtnGroup) {
       teamsBtnGroup.setAttribute("data-ats-zone-mode", isTeams ? "teams" : "pdf");
     }
@@ -4326,7 +4338,9 @@
         btn.removeAttribute("aria-pressed");
         btn.title =
           (spec.title || spec.label) +
-          " · 팀즈 HTML+TSV 복사 · 초록·주황 제외";
+          (mode === "image"
+            ? " · 이미지로 복사 (팀즈에 붙여넣기) · 초록·주황 제외"
+            : " · 팀즈 HTML+TSV 복사 · 초록·주황 제외");
       }
     }
     applyAtsZoneModeChrome(
@@ -4688,10 +4702,15 @@
     }
   }
 
-  function copyHtmlPlainToClipboardAts(innerBodyHtml, plainText) {
+  function copyHtmlPlainToClipboardAts(innerBodyHtml, plainText, asImage) {
     var plain = String(plainText || "");
     var inner = String(innerBodyHtml || "");
     if (!inner && !plain) return Promise.resolve(false);
+    if (asImage) {
+      return typeof yan4CopyHtmlAsImage === "function" && inner
+        ? yan4CopyHtmlAsImage(inner)
+        : Promise.resolve(false);
+    }
     var fullHtml =
       "<!DOCTYPE html><html><head><meta charset=\"utf-8\"></head><body>" +
       inner +
@@ -4724,7 +4743,8 @@
     labelRest,
     dashboardIds,
     tablesByDash,
-    deadlineChipHost
+    deadlineChipHost,
+    asImage
   ) {
     function flashButton(ok, empty) {
       if (!btn) return;
@@ -4754,7 +4774,7 @@
       flashButton(false, true);
       return;
     }
-    copyHtmlPlainToClipboardAts(innerHtml, plainTsv).then(function (ok) {
+    copyHtmlPlainToClipboardAts(innerHtml, plainTsv, asImage).then(function (ok) {
       flashButton(ok, false);
     });
   }
@@ -5557,6 +5577,8 @@
       ".yna4-ats-zone-mode-switch[data-ats-zone-mode=pdf]{border-color:#c4b5fd;background:#f5f3ff}" +
       ".yna4-shell-page-ats-inner button.yna4-ats-zone-mode-btn{display:inline-flex!important;align-items:center;justify-content:center;min-height:20px!important;padding:2px 8px!important;border:1px solid transparent!important;border-radius:8px!important;font-size:10px!important;font-weight:600;cursor:pointer;background:transparent!important;color:#64748b!important;-webkit-text-fill-color:#64748b!important}" +
       "button.yna4-ats-zone-mode-btn.yna4-ats-zone-mode-btn--teams-on{background:#2563eb!important;border-color:#1d4ed8!important;color:#fff!important;-webkit-text-fill-color:#fff!important;font-weight:700!important}" +
+      ".yna4-ats-zone-mode-switch[data-ats-zone-mode=image]{border-color:#86efac;background:#f0fdf4}" +
+      "button.yna4-ats-zone-mode-btn.yna4-ats-zone-mode-btn--image-on{background:#16a34a!important;border-color:#15803d!important;color:#fff!important;-webkit-text-fill-color:#fff!important;font-weight:700!important}" +
       "button.yna4-ats-zone-mode-btn.yna4-ats-zone-mode-btn--pdf-on{background:#7c3aed!important;border-color:#6d28d9!important;color:#fff!important;-webkit-text-fill-color:#fff!important;font-weight:700!important}" +
       ".yna4-ats-toolbar-row--deadline{flex:1 1 100%!important;flex-wrap:nowrap!important;align-items:stretch;width:100%;min-width:0}" +
       ".yna4-ats-deadline-chips{display:flex!important;flex-flow:row nowrap!important;align-items:center;gap:4px;flex:1 1 auto;min-width:0;width:100%;max-width:100%;padding:2px 0;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:thin;background:transparent;border:none}" +
@@ -5794,7 +5816,7 @@
     var zoneModeSwitch = document.createElement("span");
     zoneModeSwitch.className = "yna4-ats-zone-mode-switch";
     zoneModeSwitch.setAttribute("role", "group");
-    zoneModeSwitch.setAttribute("aria-label", "팀즈 복사 / PDF 온도대 모드");
+    zoneModeSwitch.setAttribute("aria-label", "팀즈 복사 / 이미지 복사 / PDF 온도대 모드");
     var btnZoneModeTeams = document.createElement("button");
     btnZoneModeTeams.type = "button";
     btnZoneModeTeams.className =
@@ -5808,7 +5830,15 @@
     btnZoneModePdf.setAttribute("data-yna4-ats-zone-mode-pdf", "1");
     btnZoneModePdf.textContent = "PDF";
     btnZoneModePdf.title = "구간 버튼 클릭 → PDF 포함 ON/OFF";
+    var btnZoneModeImage = document.createElement("button");
+    btnZoneModeImage.type = "button";
+    btnZoneModeImage.className = "yna4-ats-zone-mode-btn";
+    btnZoneModeImage.setAttribute("data-yna4-ats-zone-mode-image", "1");
+    btnZoneModeImage.textContent = "이미지";
+    btnZoneModeImage.title =
+      "구간 버튼 클릭 → 표를 이미지로 복사 (팀즈에 붙이면 크기 그대로)";
     zoneModeSwitch.appendChild(btnZoneModeTeams);
+    zoneModeSwitch.appendChild(btnZoneModeImage);
     zoneModeSwitch.appendChild(btnZoneModePdf);
     zoneModeSwitch.setAttribute("data-ats-zone-mode", "teams");
 
@@ -6335,7 +6365,7 @@
     }
 
     /** CT 현황판 요약 → 팀즈 표 (펼침 상세 제외) */
-    function copyAtsOverviewToTeams(groups, summaryText) {
+    function copyAtsOverviewToTeams(groups, summaryText, asImage) {
       var now = new Date();
       var hm = String(now.getHours()).padStart(2, "0") + ":" + String(now.getMinutes()).padStart(2, "0");
       var header = ["우선순위", "CT", "온도대", "FROM FC", "차량번호", "하차시간", "건수", "보충수량", "보충기한", "남은 시간"];
@@ -6360,11 +6390,13 @@
           dataRows: rows,
         },
       ];
+      var what = asImage ? "이미지 복사" : "팀즈 복사";
       copyHtmlPlainToClipboardAts(
         buildAtsTeamsHtmlFromSections(sections),
-        buildAtsTeamsCopyTsvLines(sections).join("\n")
+        buildAtsTeamsCopyTsvLines(sections).join("\n"),
+        asImage
       ).then(function (ok) {
-        setStatus(ok ? "팀즈 복사 완료 · CT " + rows.length + "줄" : "팀즈 복사 실패", ok ? "ok" : "err");
+        setStatus(ok ? what + " 완료 · CT " + rows.length + "줄" : what + " 실패", ok ? "ok" : "err");
       });
     }
 
@@ -6408,6 +6440,16 @@
           copyAtsOverviewToTeams(groups, sum.textContent.split(" · 진열완료")[0]);
         });
         sumBar.appendChild(btnOvTeams);
+        var btnOvImage = document.createElement("button");
+        btnOvImage.type = "button";
+        btnOvImage.className = "yna4-ats-ov-teams-btn";
+        btnOvImage.textContent = "이미지";
+        btnOvImage.title = "CT별 요약 표를 이미지로 복사 (팀즈에 붙이면 크기 그대로)";
+        btnOvImage.addEventListener("click", function (ev) {
+          ev.stopPropagation();
+          copyAtsOverviewToTeams(groups, sum.textContent.split(" · 진열완료")[0], true);
+        });
+        sumBar.appendChild(btnOvImage);
       }
       overviewHost.appendChild(sumBar);
       if (!groups.length) {
@@ -7156,6 +7198,12 @@
         setAtsZoneModeLocal("pdf");
         return;
       }
+      if (t.closest("[data-yna4-ats-zone-mode-image]")) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        setAtsZoneModeLocal("image");
+        return;
+      }
       if (t.closest("[data-yna4-ats-gloc]")) {
         ev.preventDefault();
         ev.stopPropagation();
@@ -7176,7 +7224,8 @@
         var zlbl = zoneBtn.getAttribute("data-zone-key") || "";
         var zspec = findAtsZoneSpecByLabel(zlbl);
         if (!zspec) return;
-        if (loadAtsZoneMode() === "pdf") {
+        var zMode = loadAtsZoneMode();
+        if (zMode === "pdf") {
           var zcur = loadAtsPrintDashChipStateMap();
           zcur[zlbl] = zcur[zlbl] === false;
           saveAtsPrintDashChipStateMap(zcur);
@@ -7187,7 +7236,8 @@
             zlbl,
             zspec.dashboards,
             dashPanelTables,
-            deadlineChipsHost
+            deadlineChipsHost,
+            zMode === "image"
           );
         }
         return;
@@ -7278,6 +7328,10 @@
     btnZoneModePdf.addEventListener("click", function (ev) {
       ev.preventDefault();
       setAtsZoneModeLocal("pdf");
+    });
+    btnZoneModeImage.addEventListener("click", function (ev) {
+      ev.preventDefault();
+      setAtsZoneModeLocal("image");
     });
     btnGloc.addEventListener("click", function (ev) {
       ev.preventDefault();
