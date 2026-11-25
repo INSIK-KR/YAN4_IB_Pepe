@@ -5012,7 +5012,6 @@
   /** CT 현황판 탭 온도대 복사 버튼 */
   var ATS_OV_TEMP_CATS = ["냉장", "상온", "냉동", "기타"];
   var atsLastBuckets = null;
-  var atsOverviewOpen = Object.create(null);
 
   function atsCtViewState(dashId) {
     var st = atsCtViewByDash[dashId];
@@ -6393,22 +6392,7 @@
       return arr.length > 1 ? arr[0] + " 외 " + (arr.length - 1) : arr[0];
     }
 
-    /** CT 현황판 보기: "summary"(CT 한 줄 요약) | "list"(상품 한 줄씩, CT별 색) */
-    var ATS_OV_MODE_STORAGE_KEY = "yna4_ats_ov_mode_v1";
-    function loadAtsOvMode() {
-      try {
-        return localStorage.getItem(ATS_OV_MODE_STORAGE_KEY) === "list" ? "list" : "summary";
-      } catch (eOm) {
-        return "summary";
-      }
-    }
-    function saveAtsOvMode(m) {
-      try {
-        localStorage.setItem(ATS_OV_MODE_STORAGE_KEY, m === "list" ? "list" : "summary");
-      } catch (eOs) {}
-    }
-
-    /** 목록 보기 열 — 현황판 요약 · 펼침 열을 상품 한 줄에 */
+    /** CT 현황판 목록 열 — 상품 한 줄에 CT · 차량 · 기한까지 */
     var ATS_OV_LIST_HEAD = [
       "로케이션",
       "보충",
@@ -6681,31 +6665,8 @@
         (formatObQtyNumber(totalOb) || "0") + "unit" +
         (overdue ? " · 기한 지남 " + overdue : "") +
         (soon ? " · 30분 이내 " + soon : "") +
-        " · 진열완료(초록)·부분진열(주황) 제외" +
-        (loadAtsOvMode() === "list" ? "" : " · 줄을 누르면 펼침");
+        " · 진열완료(초록)·부분진열(주황) 제외 · CT마다 색으로 구분";
       sumBar.appendChild(sum);
-      var ovMode = loadAtsOvMode();
-      var ovSwitch = document.createElement("span");
-      ovSwitch.className = "yna4-ats-ov-mode";
-      ovSwitch.setAttribute("role", "group");
-      ovSwitch.setAttribute("aria-label", "CT 현황판 보기");
-      [
-        ["summary", "요약", "CT 한 줄씩 · 줄을 누르면 펼침"],
-        ["list", "목록", "상품 한 줄씩 · CT마다 색으로 구분"],
-      ].forEach(function (o) {
-        var b = document.createElement("button");
-        b.type = "button";
-        b.textContent = o[1];
-        b.title = o[2];
-        if (ovMode === o[0]) b.className = "is-on";
-        b.addEventListener("click", function (ev) {
-          ev.stopPropagation();
-          saveAtsOvMode(o[0]);
-          renderAtsOverview();
-        });
-        ovSwitch.appendChild(b);
-      });
-      sumBar.appendChild(ovSwitch);
       overviewHost.appendChild(sumBar);
       if (!groups.length) {
         var p1 = document.createElement("p");
@@ -6714,95 +6675,7 @@
         overviewHost.appendChild(p1);
         return;
       }
-      if (ovMode === "list") {
-        overviewHost.appendChild(renderAtsOverviewListTable(atsOverviewListRows(groups, null)));
-        return;
-      }
-      var table = document.createElement("table");
-      table.className = "yna4-ats-ov-table";
-      var thead = document.createElement("thead");
-      var hr = document.createElement("tr");
-      ["", "우선순위", "CT", "온도대", "FROM FC", "차량번호", "하차시간", "건수", "보충수량", "보충기한", "남은 시간"].forEach(function (h) {
-        var th = document.createElement("th");
-        th.textContent = h;
-        hr.appendChild(th);
-      });
-      thead.appendChild(hr);
-      table.appendChild(thead);
-      var tbody = document.createElement("tbody");
-      groups.forEach(function (g) {
-        var open = !!atsOverviewOpen[g.key];
-        var tr = document.createElement("tr");
-        tr.className = "yna4-ats-ov-ct";
-        if (g.remain < 0) tr.classList.add("is-overdue");
-        else if (g.remain <= 30) tr.classList.add("is-soon");
-        if (open) tr.classList.add("is-open");
-        var cells = [
-          open ? "▾" : "▸",
-          atsJoinShort(g.prio),
-          g.key,
-          g.temps.join(" · "),
-          atsJoinShort(g.from),
-          atsJoinShort(g.vehicle),
-          formatAtsDateTimeCompact(g.unload || ""),
-          String(g.rows.length) + (g.moving ? " (이동중 " + g.moving + ")" : ""),
-          formatObQtyNumber(g.obSum) || "0",
-          g.deadline || "",
-          atsFormatRemain(g.remain),
-        ];
-        cells.forEach(function (c, ci) {
-          var td = document.createElement("td");
-          td.textContent = c;
-          if (ci === 10) td.className = "yna4-ats-ov-remain";
-          if (ci === 2) td.className = "yna4-ats-ov-ctcell";
-          tr.appendChild(td);
-        });
-        tr.addEventListener("click", function () {
-          if (atsOverviewOpen[g.key]) delete atsOverviewOpen[g.key];
-          else atsOverviewOpen[g.key] = 1;
-          renderAtsOverview();
-        });
-        tbody.appendChild(tr);
-        if (!open) return;
-        var dtr = document.createElement("tr");
-        dtr.className = "yna4-ats-ov-detail";
-        var dtd = document.createElement("td");
-        dtd.colSpan = 11;
-        var dt = document.createElement("table");
-        dt.className = "yna4-ats-ov-detail-table";
-        var dh = document.createElement("tr");
-        ["온도대", "SKU ID", "상품명", "보충", "재고", "로케이션", "상태", "보충기한"].forEach(function (h) {
-          var th = document.createElement("th");
-          th.textContent = h;
-          dh.appendChild(th);
-        });
-        dt.appendChild(dh);
-        g.rows.forEach(function (x) {
-          var r = x.row;
-          var rr = document.createElement("tr");
-          [
-            atsOverviewTemp(r, x.dash),
-            r.skuId || "",
-            r.name || "",
-            r.obQty || "",
-            r.qty || "",
-            r.location || "",
-            r.status || "",
-            r.atsDeadline || "",
-          ].forEach(function (c) {
-            var td = document.createElement("td");
-            td.textContent = c;
-            td.title = c;
-            rr.appendChild(td);
-          });
-          dt.appendChild(rr);
-        });
-        dtd.appendChild(dt);
-        dtr.appendChild(dtd);
-        tbody.appendChild(dtr);
-      });
-      table.appendChild(tbody);
-      overviewHost.appendChild(table);
+      overviewHost.appendChild(renderAtsOverviewListTable(atsOverviewListRows(groups, null)));
     }
 
     function renderAllDashboardPanels(resetDeadlineChipsAllOn) {

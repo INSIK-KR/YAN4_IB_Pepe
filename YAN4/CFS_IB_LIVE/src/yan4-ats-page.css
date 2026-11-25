@@ -1064,31 +1064,6 @@ background-color: #fdba74 !important;
   cursor: pointer;
 }
 .yna4-ats-ov-teams-btn:hover { background: #e0e7ff; }
-/* 현황판 요약 / 목록 전환 */
-.yna4-ats-ov-mode {
-  margin-left: auto;
-  flex-shrink: 0;
-  display: inline-flex;
-  gap: 2px;
-  padding: 2px;
-  border: 1px solid #c7d2fe;
-  border-radius: 10px;
-  background: #eef2ff;
-}
-.yna4-ats-ov-mode button {
-  padding: 2px 10px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: transparent;
-  color: #4338ca;
-  font: 700 11px "Segoe UI", "Malgun Gothic", sans-serif;
-  cursor: pointer;
-}
-.yna4-ats-ov-mode button.is-on {
-  background: #4f46e5;
-  border-color: #4338ca;
-  color: #fff;
-}
 /* 현황판 목록 (상품 한 줄씩, CT 칸 색) */
 .yna4-ats-ov-list td {
   padding: 4px 8px;
