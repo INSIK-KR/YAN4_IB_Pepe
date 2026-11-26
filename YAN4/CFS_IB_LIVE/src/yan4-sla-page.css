@@ -1800,7 +1800,8 @@
 }
 
 .yna4-sla-progress-plan-panel {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
+  width: fit-content;
   min-width: 360px;
   max-width: 760px;
   display: flex;
@@ -1849,8 +1850,24 @@
 }
 
 .yna4-sla-progress-plan-body.yna4-unload-plan-embed .yp-row {
-  grid-template-columns: minmax(70px, 170px) minmax(40px, 1fr) 52px 48px minmax(64px, 96px);
+  grid-template-columns: minmax(70px, 170px) minmax(120px, 220px) 52px 48px max-content;
   gap: 6px;
+}
+
+/* 표 폭은 업체 줄이 정하고, 긴 요약 · 안내 문장은 그 폭 안에서 줄바꿈 (오른쪽 빈 여백 없앰) */
+.yna4-sla-progress-plan-body .yna4-unload-plan-bar,
+.yna4-sla-progress-plan-body .yp-legend,
+.yna4-sla-progress-plan-body .yp-share,
+.yna4-sla-progress-plan-body .yna4-pane-sla-hint {
+  width: 0;
+  min-width: 100%;
+  box-sizing: border-box;
+}
+
+/* SLA 화면에서는 팀즈 복사 · 이미지 대신 제목 줄 「캡처」 */
+.yna4-sla-progress-plan-body [data-role="plan-copy"],
+.yna4-sla-progress-plan-body [data-role="plan-copy-img"] {
+  display: none;
 }
 
 .yna4-sla-progress-plan-body .yna4-pane-btn {

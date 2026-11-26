@@ -9634,7 +9634,13 @@
       planPanel.className = "yna4-sla-progress-plan-panel";
       var planHdr = document.createElement("div");
       planHdr.className = "yna4-sla-progress-vendor-group-hdr";
-      planHdr.textContent = "당일 예상 · Direct SLA";
+      planHdr.textContent = "당일 예상";
+      var planCapBtn = makeSlaCaptureCopyButton("당일 예상", function () {
+        return planPanel;
+      });
+      planCapBtn.style.marginLeft = "8px";
+      planCapBtn.style.verticalAlign = "middle";
+      planHdr.appendChild(planCapBtn);
       planPanel.appendChild(planHdr);
       var planBody = document.createElement("div");
       planBody.className = "yna4-sla-progress-plan-body";
@@ -13495,6 +13501,14 @@
           return;
         }
         renderProgressPanel(progressHost, progressBundle);
+        /* 당일 예상: 1페이지 Direct SLA 조회 없이도 SLA 조회 때 같이 (PO · 쉽먼트) — 기다리지 않고 뒤에서 */
+        if (typeof window.yan4UnloadPlanFetchLight === "function") {
+          try {
+            window.yan4UnloadPlanFetchLight();
+          } catch (ePlanLight) {
+            console.warn("[YAN4 SLA 당일 예상]", ePlanLight);
+          }
+        }
       } else if (progressHost) {
         progressHost.textContent = "";
         progressHost.style.height = "";

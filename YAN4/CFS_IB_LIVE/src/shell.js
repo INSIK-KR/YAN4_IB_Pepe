@@ -546,6 +546,9 @@
   var unloadShipJoin = null;
   /** SLA 화면 등 다른 곳에 붙인 「당일 예상」 칸 — 통합 결과가 바뀌면 같이 다시 그림 */
   var unloadPlanEmbedHosts = [];
+  /** SLA 화면 조회 때 따로 받은 당일 예상 (PO Management + 쉽먼트만 · 하차 수집 없이) */
+  var unloadPlanLight = null;
+  var unloadPlanLightBusy = null;
   var unloadShipBusy = false;
   var unloadShipPending = null;
   var UNLOAD_SLA_DEADLINE_HOURS = 12;
@@ -3263,17 +3266,26 @@
     });
   }
 
+  /** 당일 예상 원본: 1페이지 통합 결과 · SLA 화면 조회분 중 나중에 받은 것 */
+  function unloadPlanSource() {
+    var j = unloadShipJoin && unloadShipJoin.plan ? unloadShipJoin : null;
+    var l = unloadPlanLight && unloadPlanLight.plan ? unloadPlanLight : null;
+    if (j && l) return (l.at || 0) > (j.at || 0) ? l : j;
+    return j || l;
+  }
+
   function unloadPlanHtml() {
-    var j = unloadShipJoin;
-    if (!j || !j.plan) {
-      var hint = unloadShipBusy
-        ? "통합 결과 조회 중… 끝나면 표시됩니다."
-        : j && j.error
-        ? unloadSlaEscapeHtml(j.error)
-        : "통합 결과 조회 후 온도 · 업체별 당일 입고 예상 물량이 표시됩니다. (1페이지 Direct SLA 「작업 시작」)";
+    var src = unloadPlanSource();
+    if (!src) {
+      var err = (unloadShipJoin && unloadShipJoin.error) || (unloadPlanLight && unloadPlanLight.error) || "";
+      var hint = unloadShipBusy || unloadPlanLightBusy
+        ? "당일 예상 조회 중… 끝나면 표시됩니다."
+        : err
+        ? unloadSlaEscapeHtml(err)
+        : "SLA 전체 조회 또는 1페이지 Direct SLA 통합 결과 조회 때 온도 · 업체별 당일 입고 예상 물량이 표시됩니다.";
       return "<p class='yna4-pane-sla-hint'>" + hint + "</p>";
     }
-    var plan = j.plan;
+    var plan = src.plan;
     var esc = unloadSlaEscapeHtml;
     var secs = unloadPlanSections(plan);
     var total = plan.units || 1;
@@ -3352,6 +3364,52 @@
     }
   }
 
+  /** SLA 전체 조회 때: 하차 수집 없이 쉽먼트 예약 + PO Management 하루치로 당일 예상만 */
+  window.yan4UnloadPlanFetchLight = function () {
+    if (unloadPlanLightBusy) return unloadPlanLightBusy;
+    var ymd = unloadTodayYmd();
+    unloadPlanLightBusy = (async function () {
+      var stat = {
+        ibc: 0, byPo: 0, noPo: 0, noLink: 0, failed: 0, trucks: 0,
+        poRows: 0, poMissing: 0, blankSku: 0, rcrtFailed: 0, qtyIbc: 0,
+      };
+      var book = null;
+      try {
+        book = await unloadShipLoadBookings(ymd, stat);
+      } catch (eBook) {
+        console.warn("[YAN4 당일 예상 쉽먼트]", eBook);
+      }
+      var po = await unloadPoFetchDay(ymd);
+      return {
+        ymd: ymd,
+        plan: unloadPlanBuild(po, book, Object.create(null), Object.create(null)),
+        at: Date.now(),
+        light: true,
+      };
+    })()
+      .then(
+        function (p) {
+          unloadPlanLight = p;
+        },
+        function (e) {
+          console.warn("[YAN4 당일 예상]", e);
+          if (!(unloadPlanLight && unloadPlanLight.plan)) {
+            unloadPlanLight = { ymd: ymd, error: unloadShipLoginText(e), at: Date.now() };
+          }
+        }
+      )
+      .then(function () {
+        unloadPlanLightBusy = null;
+        try {
+          unloadShipSetLine(unloadShipJoin && !unloadShipBusy ? unloadShipSummaryText() : "");
+        } catch (eLine) {}
+        unloadPlanRender();
+        return unloadPlanLight;
+      });
+    unloadPlanRender();
+    return unloadPlanLightBusy;
+  };
+
   window.yan4UnloadPlanMount = function (host) {
     if (!host) return;
     host.classList.add("yna4-unload-plan-embed");
@@ -3365,7 +3423,7 @@
 
   /** 당일 예상 → 팀즈 표 (온도 → 업체, 예상 unit 많은 순) */
   function unloadPlanCopyTeams(asImage) {
-    var j = unloadShipJoin;
+    var j = unloadPlanSource();
     if (!j || !j.plan || !j.plan.groups.length) return;
     var cols = ["온도대", "업체명", "예약시간", "SKU", "예상 unit"];
     var rows = [];
@@ -3447,6 +3505,7 @@
     unloadShipPending = unloadShipCollect(ymd, unloadSlaAllParsed.slice())
       .then(function (j) {
         j.key = key;
+        j.at = Date.now();
         unloadShipJoin = j;
       })
       .catch(function (e) {
