@@ -13056,12 +13056,15 @@
         var dispName0 =
           String(nameByWorkerId[wid0] || "").trim() || "?";
         var met0 = nhWorkerLastSlotMetrics(agg0);
+        var htp0 = nhHtpOf(agg0);
         rows.push({
           wid: wid0,
           dispName: dispName0,
           agg: agg0,
-          sortKey: met0.uphNum,
+          sortKey: htp0.htp == null ? Infinity : htp0.htp,
           met: met0,
+          htp: htp0,
+          frozen: !!(agg0 && agg0.lastTemp === "냉동"),
         });
       }
       rows.sort(function (a, b) {
@@ -13074,7 +13077,7 @@
       sumTbl.className = "yna4-pane-sla-table yna4-nh-sum-table";
       var sumThead = document.createElement("thead");
       var sumHr = document.createElement("tr");
-      ["이름", "시간대", "진열량", "누적진열량", "호출"].forEach(function (
+      ["이름", "시간대", "누적진열량", "HTP", "EACH HTP", "호출"].forEach(function (
         hText
       ) {
         var th = document.createElement("th");
@@ -13135,7 +13138,7 @@
             detailTr.className = "nh-inline-detail";
             detailTr.setAttribute("data-for-wid", w);
             var tdCell = document.createElement("td");
-            tdCell.colSpan = 5;
+            tdCell.colSpan = 6;
             tdCell.className = "yna4-nh-inline-detail-cell";
             var j;
             for (j = 0; j < rows.length; j++) {
@@ -13155,6 +13158,13 @@
             trSum.parentNode.insertBefore(detailTr, trSum.nextSibling);
           });
           tdNm.appendChild(btn);
+          if (row.frozen) {
+            var snow = document.createElement("span");
+            snow.className = "yna4-nh-frozen";
+            snow.textContent = " ❄";
+            snow.title = "마지막 진열이 냉동";
+            tdNm.appendChild(snow);
+          }
           var sub = document.createElement("div");
           sub.className = "yna4-nh-id-sub";
           sub.textContent = row.wid;
@@ -13162,8 +13172,12 @@
 
           var tdSlot = document.createElement("td");
           tdSlot.textContent = row.met.slotLabel;
-          var tdUph = document.createElement("td");
-          tdUph.textContent = row.met.uphDisplay;
+          var tdHtp = document.createElement("td");
+          tdHtp.textContent = row.htp.htpText;
+          tdHtp.title = "CFS HTP 기준 · 진열량 ÷ (HTP 시간 × 8/9)";
+          var tdEach = document.createElement("td");
+          tdEach.textContent = row.htp.eachText;
+          tdEach.title = "EACH 진열량 ÷ EACH MH (EACH MH 1시간 이상일 때만)";
           var tdCum = document.createElement("td");
           tdCum.textContent =
             row.met.lastH >= 0 ? String(row.met.cumAtLast) : "—";
@@ -13204,8 +13218,9 @@
 
           tr.appendChild(tdNm);
           tr.appendChild(tdSlot);
-          tr.appendChild(tdUph);
           tr.appendChild(tdCum);
+          tr.appendChild(tdHtp);
+          tr.appendChild(tdEach);
           tr.appendChild(tdCall);
           sumTb.appendChild(tr);
         })();
@@ -13235,6 +13250,36 @@
       ).trim();
     }
 
+    /** 진열 로케이션 → 온도 (CFS HTP pivot 의 ZONE_BY_LOC 과 같음). 없으면 Sku Temperatures 로 */
+    var NH_TEMP_BY_LOC = {
+      "1A": "상온", "1AP": "상온", "1APR": "로켓마트", "1AR": "로켓마트",
+      "1PC": "냉장", "1C": "냉장", "1CE": "냉장", "1CM": "냉장", "1CP": "냉장", "1CPE": "냉장", "1CPM": "냉장",
+      "1F": "냉동", "1FM": "냉동", "1FP": "냉동", "1FPM": "냉동", "1FPZ": "냉동",
+      "1CEZ": "냉장", "1CPZ": "냉장", "2C": "냉장", "2CM": "냉장", "1CT": "냉장", "1CPT": "냉장", "2CP": "냉장", "2CPZ": "냉장",
+    };
+
+    function nhRowTemp(row) {
+      var loc = String(nhCellByAliases(row, ["Location", "location"]) || "").trim().toUpperCase();
+      if (NH_TEMP_BY_LOC[loc]) return NH_TEMP_BY_LOC[loc];
+      var st = String(nhCellByAliases(row, ["Sku Temperatures", "skuTemperatures", "skuTemp"]) || "").toUpperCase();
+      if (/FROZEN|냉동/.test(st)) return "냉동";
+      if (/CHILL|냉장/.test(st)) return "냉장";
+      if (/AMBIENT|ROOM|상온/.test(st)) return "상온";
+      return "";
+    }
+
+    function nhHtpOf(agg) {
+      var htp = agg && agg.stowMh > 0 ? agg.stowQty / agg.stowMh : null;
+      /* CFS HTP 와 같이 EACH MH 1시간 이상일 때만 EACH HTP */
+      var each = agg && agg.eachMh >= 1 ? agg.eachQty / agg.eachMh : null;
+      return {
+        htp: htp,
+        each: each,
+        htpText: htp == null ? "—" : String(Math.round(htp)),
+        eachText: each == null ? "—" : String(Math.round(each)),
+      };
+    }
+
     function nhAccumulateRowsForWorkers(dayY, workerIds, mergedObjs) {
       var dayStart = nhDayStartMs(dayY);
       if (isNaN(dayStart)) return {};
@@ -13249,6 +13294,13 @@
           totalQty: 0,
           totalHtpMin: 0,
           rowHits: 0,
+          /* CFS HTP 「진열 생산성」 기준: MH = HTP 시간 × 8/9 */
+          stowQty: 0,
+          stowMh: 0,
+          eachQty: 0,
+          eachMh: 0,
+          lastStowT: -Infinity,
+          lastTemp: "",
         };
         var h;
         for (h = 0; h < 24; h++) {
@@ -13314,6 +13366,26 @@
         }
         var dur = t1 - t0;
         if (dur <= 0) continue;
+
+        var rowMh = (dur / 3600000) * 8 / 9;
+        var pickT = String(
+          nhCellByAliases(row, ["Pick/Receive Type", "pickReceiveType", "pickType", "PickType"]) || ""
+        ).toUpperCase();
+        var tempT = nhRowTemp(row);
+        for (wi = 0; wi < matched.length; wi++) {
+          var hw = by[matched[wi]];
+          if (!hw) continue;
+          hw.stowQty += qty;
+          hw.stowMh += rowMh;
+          if (pickT === "EACH") {
+            hw.eachQty += qty;
+            hw.eachMh += rowMh;
+          }
+          if (t0 >= hw.lastStowT) {
+            hw.lastStowT = t0;
+            hw.lastTemp = tempT;
+          }
+        }
         if (qty <= 0) continue;
 
         var clip0 = Math.max(t0, dayStart);
