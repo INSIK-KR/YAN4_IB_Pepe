@@ -14158,101 +14158,153 @@
       });
   }
 
+  /** 작업일 다음 날 (yyyymmdd 정수) — 야간 근무가 다음 날 07시까지 걸쳐서 */
+  function recvNextDayInt(ymd) {
+    var m = String(ymd || "").match(/(\d{4})\D?(\d{2})\D?(\d{2})/);
+    if (!m) return recvYmdToDayInt(ymd);
+    var d = new Date(+m[1], +m[2] - 1, +m[3] + 1);
+    return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+  }
+
+  /**
+   * Stow 생산성 — PDA 진열 스캔(stow_work_logs) 기준. 구역(RCRT)별로 이어진 진열을 한 구간으로 보고
+   *  시작: 조건1·4 직전 다른 토트 마지막 스캔 / 조건2 식사 끝(13 · 20시) / 조건3 근무 시작(8 · 13 · 17 · 21시)
+   *  끝: 그 구간 마지막 스캔 · 식사(12~13 · 19~20시)와 겹친 만큼 실제로 뺌
+   */
   function recvBuildProductivitySql(ymd, workers, centerId, prefixes) {
     var day = recvYmdToDayInt(ymd);
-    var year = parseInt(String(ymd || "").slice(0, 4), 10) || new Date().getFullYear();
+    var nextDay = recvNextDayInt(ymd);
+    var ymdDash = String(day).replace(/^(\d{4})(\d{2})(\d{2})$/, "$1-$2-$3");
     var cid =
       String(centerId || cfsActiveCenterId("1007")).replace(/\D/g, "") || "1007";
     var sqlStr = function (v) {
       return "'" + String(v).replace(/'/g, "''") + "'";
     };
-    /* 1007-RCRT22 → fullname 이 1007-rcrt22 이거나 1007-rcrt22- 로 시작 (RCRT1 이 RCRT10 에 걸리지 않게) */
+    /* 1007-RCRT22 → 카트 바코드가 1007-rcrt22 이거나 1007-rcrt22- 로 시작 (RCRT2 가 RCRT22 에 걸리지 않게) */
     var areaCases = (prefixes || []).map(function (p) {
       var low = String(p).toLowerCase();
       return (
-        "            WHEN LOWER(s.fullname) = " +
+        "            WHEN LOWER(sw.cartbarcode) = " +
         sqlStr(low) +
-        " OR LOWER(s.fullname) LIKE " +
+        " OR LOWER(sw.cartbarcode) LIKE " +
         sqlStr(low + "-%") +
         " THEN " +
         sqlStr(recvAreaLabel(p))
       );
     });
-    var areaList = (prefixes || [])
-      .map(function (p) {
-        return sqlStr(recvAreaLabel(p));
-      })
-      .join(", ");
     var ids = (workers || [])
       .map(function (w) {
-        return "'" + String(w).replace(/'/g, "''") + "'";
+        return sqlStr(w);
       })
       .join(",\n        ");
     return [
-      "WITH workers AS (",
+      "WITH params AS (",
+      "    SELECT CAST(DATE " + sqlStr(ymdDash) + " AS timestamp) AS d0",
+      "),",
+      "workers AS (",
       "    SELECT * FROM (VALUES",
       "        " + ids,
-      "    ) AS t (workerloginid)",
+      "    ) AS t (userid)",
       "),",
-      "logs AS (",
-      "    SELECT lg.workerloginid, lg.createdat, lg.adjustquantity, lg.sourceinventoryid",
-      "    FROM hive.ods.inventory_expanded_logs lg",
-      "    JOIN workers w ON w.workerloginid = lg.workerloginid",
-      "    WHERE lg.createdat_day = " + day,
-      "      AND lg.centerid = " + cid,
-      "      AND lg.jobtype = 'STOWING'",
+      "bounds AS (   -- 근무 시작 : Day 08 · 식후 지원 13 · Swing 17 · Night 21",
+      "    SELECT p.d0 + h * INTERVAL '1' HOUR AS bt",
+      "    FROM params p CROSS JOIN (VALUES 8, 13, 17, 21) AS t (h)",
       "),",
-      "src AS (",
-      "    SELECT i.id, l2.fullname",
-      "    FROM hive.ods.inventories i",
-      "    JOIN (SELECT DISTINCT sourceinventoryid FROM logs) k",
-      "      ON i.id = k.sourceinventoryid",
-      "    JOIN hive.ods.lots l2",
-      "      ON l2.id = i.lotid",
-      "    WHERE i.createdat_year = " + year,
+      "meals AS (    -- 식사 : Day 12~13 · Swing 19~20",
+      "    SELECT p.d0 + s * INTERVAL '1' HOUR AS ms,",
+      "           p.d0 + e * INTERVAL '1' HOUR AS me",
+      "    FROM params p CROSS JOIN (VALUES (12, 13), (19, 20)) AS t (s, e)",
       "),",
       "ev AS (",
       "    SELECT",
-      "        lg.workerloginid,",
-      "        lg.createdat,",
-      "        lg.adjustquantity,",
+      "        u.userid,",
+      "        CAST(sw.createdat AS timestamp(3)) AS ts,",
+      "        sw.eventtype,",
+      "        COALESCE(sw.quantity, 0) AS qty,",
       "        CASE",
     ]
       .concat(areaCases)
       .concat([
-      "            ELSE 'OTHER'",
-      "        END AS area",
-      "    FROM logs lg",
-      "    JOIN src s ON s.id = lg.sourceinventoryid",
-      "),",
-      "seq AS (",
-      "    SELECT",
-      "        *,",
-      "        ROW_NUMBER() OVER (PARTITION BY workerloginid ORDER BY createdat, area)",
-      "      - ROW_NUMBER() OVER (PARTITION BY workerloginid, area ORDER BY createdat) AS grp",
-      "    FROM ev",
-      "),",
-      "runs AS (",
-      "    SELECT",
-      "        workerloginid, area, grp,",
-      "        COUNT(*) AS scans,",
-      "        SUM(adjustquantity) AS units,",
-      "        DATE_DIFF('second', MIN(createdat), MAX(createdat)) AS span_sec",
-      "    FROM seq",
-      "    WHERE area IN (" + areaList + ")",
-      "    GROUP BY workerloginid, area, grp",
-      ")",
-      "SELECT",
-      "    COALESCE(workerloginid, '합계') AS worker,",
-      "    area,",
-      "    SUM(scans) AS stow_cnt,",
-      "    ROUND(SUM(span_sec) / 3600.0 * 8 / 9, 2) AS mh,",
-      "    SUM(units) AS units,",
-      "    ROUND(SUM(units) / NULLIF(SUM(span_sec) / 3600.0 * 8 / 9, 0), 2) AS productivity",
-      "FROM runs",
-      "GROUP BY GROUPING SETS ((area, workerloginid), (area))",
-      "ORDER BY area, GROUPING(workerloginid), workerloginid",
-    ]).join("\n");
+        "            ELSE 'OTHER'",
+        "        END AS area",
+        "    FROM hive.ods.stow_work_logs sw",
+        "    JOIN (SELECT id, userid FROM hive.ods.wms_users) u ON sw.workeruserid = u.id",
+        "    JOIN workers w ON w.userid = u.userid",
+        "    CROSS JOIN params p",
+        "    WHERE sw.centerid = " + cid,
+        "      AND sw.createdat_day BETWEEN " + day + " AND " + nextDay,
+        "      AND sw.createdat >= p.d0 + INTERVAL '7' HOUR",
+        "      AND sw.createdat <  p.d0 + INTERVAL '31' HOUR",
+        "      AND sw.cartbarcode IS NOT NULL AND sw.cartbarcode <> ''",
+        "),",
+        "seq AS (",
+        "    SELECT ev.*,",
+        "        LAG(ts)   OVER (PARTITION BY userid ORDER BY ts) AS prev_ts,",
+        "        LAG(area) OVER (PARTITION BY userid ORDER BY ts) AS prev_area",
+        "    FROM ev",
+        "),",
+        "isl AS (",
+        "    SELECT seq.*,",
+        "        (area <> 'OTHER' AND COALESCE(prev_area, '') <> area) AS is_first,",
+        "        SUM(CASE WHEN area <> 'OTHER' AND COALESCE(prev_area, '') <> area THEN 1 ELSE 0 END)",
+        "            OVER (PARTITION BY userid ORDER BY ts ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS sess_no",
+        "    FROM seq",
+        "),",
+        "sess AS (",
+        "    SELECT",
+        "        userid, area, sess_no,",
+        "        MIN(ts) AS first_ts,",
+        "        MAX(ts) AS last_ts,",
+        "        MAX(CASE WHEN is_first THEN prev_ts END) AS prev_ts,",
+        "        SUM(CASE WHEN eventtype IN ('STOW', 'STOW_COMPLETED') THEN 1 ELSE 0 END) AS scans,",
+        "        SUM(CASE WHEN eventtype IN ('STOW', 'STOW_COMPLETED') THEN qty ELSE 0 END) AS units",
+        "    FROM isl",
+        "    WHERE area <> 'OTHER'",
+        "    GROUP BY userid, area, sess_no",
+        "),",
+        "sess2 AS (",
+        "    SELECT s.userid, s.area, s.sess_no, s.first_ts, s.last_ts, s.prev_ts, s.scans, s.units,",
+        "        MAX(b.bt) AS shift_bt,",
+        "        MAX(m.me) AS meal_bt",
+        "    FROM sess s",
+        "    LEFT JOIN bounds b ON b.bt <= s.first_ts",
+        "    LEFT JOIN meals  m ON s.prev_ts < m.me AND m.me <= s.first_ts",
+        "    GROUP BY s.userid, s.area, s.sess_no, s.first_ts, s.last_ts, s.prev_ts, s.scans, s.units",
+        "),",
+        "st AS (",
+        "    SELECT s.*,",
+        "        CASE WHEN s.prev_ts IS NULL       THEN COALESCE(s.shift_bt, s.first_ts)",
+        "             WHEN s.meal_bt IS NOT NULL   THEN s.meal_bt",
+        "             ELSE s.prev_ts END AS start_ts",
+        "    FROM sess2 s",
+        "),",
+        "ov AS (",
+        "    SELECT st.userid, st.sess_no,",
+        "        SUM(CASE WHEN m.ms IS NULL THEN 0",
+        "                 ELSE DATE_DIFF('millisecond', GREATEST(st.start_ts, m.ms), LEAST(st.last_ts, m.me)) END",
+        "           ) / 3600000.0 AS meal_h",
+        "    FROM st",
+        "    LEFT JOIN meals m ON m.ms < st.last_ts AND m.me > st.start_ts",
+        "    GROUP BY st.userid, st.sess_no",
+        "),",
+        "res AS (",
+        "    SELECT st.userid, st.area, st.scans, st.units,",
+        "        DATE_DIFF('millisecond', st.start_ts, st.last_ts) / 3600000.0 - ov.meal_h AS mh",
+        "    FROM st",
+        "    JOIN ov ON ov.userid = st.userid AND ov.sess_no = st.sess_no",
+        ")",
+        "SELECT",
+        "    COALESCE(userid, '합계') AS worker,",
+        "    area,",
+        "    SUM(scans) AS stow_cnt,",
+        "    ROUND(SUM(mh), 2) AS mh,",
+        "    SUM(units) AS units,",
+        "    ROUND(SUM(units) / NULLIF(SUM(mh), 0), 2) AS productivity",
+        "FROM res",
+        "GROUP BY GROUPING SETS ((area, userid), (area))",
+        "ORDER BY area, GROUPING(userid), userid",
+      ])
+      .join("\n");
   }
 
   function recvMapPrestoProductivityRows(result) {
