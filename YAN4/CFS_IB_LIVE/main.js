@@ -262,6 +262,183 @@ async function shipmentsSessionWorks(center) {
   }
 }
 
+/* ── 로그인 진단 기록 ───────────────────────────────────────────
+ * 로그인 창이 거친 주소 · 응답 코드 · 쿠키 이름/설정 · 화면 문구만 메모리에 모아 둠.
+ * 비밀번호(요청 본문)와 쿠키 값은 남기지 않음 — 쿠키 값은 같은지 비교용 6자리 해시.
+ * 아무 창에서나 Ctrl+Alt+Shift+L → 다운로드 폴더에 txt 저장 */
+const LOGIN_DIAG_MAX = 4000;
+const loginDiagLines = [];
+const loginDiagT0 = Date.now();
+const loginDiagWcIds = new Set();
+
+function loginDiagHash(v) {
+  return require("crypto").createHash("sha256").update(String(v)).digest("hex").slice(0, 6);
+}
+
+function loginDiagLog(line) {
+  const d = new Date();
+  const ts =
+    String(d.getHours()).padStart(2, "0") + ":" +
+    String(d.getMinutes()).padStart(2, "0") + ":" +
+    String(d.getSeconds()).padStart(2, "0") + "." +
+    String(d.getMilliseconds()).padStart(3, "0");
+  loginDiagLines.push(ts + " " + line);
+  if (loginDiagLines.length > LOGIN_DIAG_MAX) loginDiagLines.splice(0, loginDiagLines.length - LOGIN_DIAG_MAX);
+}
+
+/** 쿼리 값은 숨기고 이름 + 해시만 (일회용 코드 등) */
+function loginDiagUrl(u) {
+  try {
+    const x = new URL(u);
+    const q = Array.from(x.searchParams.keys())
+      .map(function (k) { return k + "=" + loginDiagHash(x.searchParams.get(k)); })
+      .join("&");
+    const p = x.pathname.length > 160 ? x.pathname.slice(0, 160) + "…" : x.pathname;
+    return x.host + p + (q ? "?" + q : "");
+  } catch (e) {
+    return String(u).slice(0, 120);
+  }
+}
+
+function loginDiagWho(id) {
+  if (id != null && loginDiagWcIds.has(id)) return "LOGIN#" + id;
+  if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents.id === id) return "MAIN";
+  return id == null ? "BG" : "W#" + id;
+}
+
+/** 로그인 창 요청은 전부, 나머지는 리다이렉트 · 쿠키 설정 · 로그인 주소만 */
+function loginDiagWanted(d, isResp) {
+  const u = String(d.url || "");
+  if (!/^https?:/i.test(u)) return false;
+  if (/^(script|stylesheet|image|font|media|object)$/.test(String(d.resourceType || ""))) return false;
+  if (/\.(png|jpe?g|gif|svg|woff2?|ttf|ico|css|map|js)(\?|$)/i.test(u)) return false;
+  if (d.webContentsId != null && loginDiagWcIds.has(d.webContentsId)) return true;
+  if (/login|signin|sso|auth|realms|idp|oauth/i.test(u)) return true;
+  if (isResp) {
+    const h = d.responseHeaders || {};
+    const keys = Object.keys(h).map(function (k) { return k.toLowerCase(); });
+    if (d.statusCode >= 300 && d.statusCode < 400) return true;
+    if (keys.indexOf("set-cookie") >= 0 && /coupang/i.test(u)) return true;
+  }
+  return false;
+}
+
+function attachLoginDiag() {
+  const ses = getSes();
+  loginDiagLog("앱 시작 " + app.getVersion() + " · " + new Date().toISOString());
+  ses.webRequest.onBeforeSendHeaders(function (d, cb) {
+    try {
+      if (loginDiagWanted(d, false)) {
+        const rh = d.requestHeaders || {};
+        const ck = rh.Cookie || rh.cookie || "";
+        const names = ck
+          ? ck.split(/;\s*/).map(function (p) {
+              const i = p.indexOf("=");
+              return p.slice(0, i) + ":" + loginDiagHash(p.slice(i + 1));
+            }).join(" ")
+          : "(없음)";
+        loginDiagLog(loginDiagWho(d.webContentsId) + " " + d.method + " " + d.resourceType + " " + loginDiagUrl(d.url) + "\n      cookie: " + names);
+      }
+    } catch (e) {}
+    cb({ requestHeaders: d.requestHeaders });
+  });
+  ses.webRequest.onHeadersReceived(function (d, cb) {
+    try {
+      if (loginDiagWanted(d, true)) {
+        const hd = d.responseHeaders || {};
+        let line = loginDiagWho(d.webContentsId) + " <- " + d.statusCode + " " + loginDiagUrl(d.url);
+        Object.keys(hd).forEach(function (k) {
+          const lk = k.toLowerCase();
+          if (lk === "location") line += "\n      location: " + loginDiagUrl(hd[k][0]);
+          if (lk === "set-cookie") {
+            hd[k].forEach(function (c) {
+              const parts = String(c).split(/;\s*/);
+              const i = parts[0].indexOf("=");
+              const val = parts[0].slice(i + 1);
+              line += "\n      set-cookie: " + parts[0].slice(0, i) + ":" + (val ? loginDiagHash(val) : "(빈값)") + " ; " + parts.slice(1).join("; ");
+            });
+          }
+        });
+        loginDiagLog(line);
+      }
+    } catch (e) {}
+    cb({ responseHeaders: d.responseHeaders });
+  });
+  ses.cookies.on("changed", function (_e, c, cause, removed) {
+    try {
+      if (!/coupang/i.test(c.domain || "")) return;
+      loginDiagLog(
+        "   COOKIE " + (removed ? "삭제(" + cause + ")" : "저장") + " " + c.domain + c.path + " " + c.name + ":" + loginDiagHash(c.value) +
+          (c.session ? " session" : " exp=" + new Date(c.expirationDate * 1000).toISOString()) +
+          " sameSite=" + c.sameSite + (c.secure ? " secure" : "") + (c.httpOnly ? " httpOnly" : "")
+      );
+    } catch (e) {}
+  });
+}
+
+/** 로그인 창: 이동 · 화면 제목과 오류 문구 */
+function watchLoginDiagWindow(win, kind) {
+  const wc = win.webContents;
+  const id = wc.id;
+  loginDiagWcIds.add(id);
+  loginDiagLog("LOGIN#" + id + " 창 열림 (" + kind + ")");
+  wc.on("did-navigate", function (_ev, url, code) {
+    loginDiagLog("LOGIN#" + id + " NAV " + code + " " + loginDiagUrl(url));
+  });
+  wc.on("did-fail-load", function (_ev, code, desc, url) {
+    loginDiagLog("LOGIN#" + id + " FAIL " + code + " " + desc + " " + loginDiagUrl(url));
+  });
+  wc.on("did-finish-load", function () {
+    wc.executeJavaScript(
+      '(function(){ var e=document.querySelector("#input-error,.alert-error,.kc-feedback-text,.pf-c-alert__title,#kc-error-message,.alert,.error"); var t=e?e.textContent:(document.body?document.body.innerText:""); return { title: document.title, msg: String(t||"").replace(/\\s+/g," ").trim().slice(0,200), cookieOn: navigator.cookieEnabled }; })()'
+    ).then(function (r) {
+      loginDiagLog("LOGIN#" + id + " PAGE title=" + JSON.stringify(r.title) + " text=" + JSON.stringify(r.msg) + " cookieEnabled=" + r.cookieOn);
+    }).catch(function () {});
+  });
+  win.on("closed", function () {
+    loginDiagLog("LOGIN#" + id + " 창 닫힘");
+    loginDiagWcIds.delete(id);
+  });
+}
+
+async function saveLoginDiag(fromWin) {
+  try {
+    const d = new Date();
+    const stamp =
+      d.getFullYear() + String(d.getMonth() + 1).padStart(2, "0") + String(d.getDate()).padStart(2, "0") + "-" +
+      String(d.getHours()).padStart(2, "0") + String(d.getMinutes()).padStart(2, "0") + String(d.getSeconds()).padStart(2, "0");
+    const out = path.join(app.getPath("downloads"), "CFS-로그인진단-" + stamp + ".txt");
+    const head = [
+      "CFS IB LIVE 로그인 진단 " + app.getVersion() + " · 저장 " + d.toString(),
+      "비밀번호와 쿠키 값은 들어 있지 않음 (쿠키는 6자리 해시)",
+      "UA: " + CHROME_UA,
+      "",
+    ];
+    fs.writeFileSync(out, "\ufeff" + head.concat(loginDiagLines).join("\r\n"), "utf8");
+    await dialog.showMessageBox(fromWin && !fromWin.isDestroyed() ? fromWin : undefined, {
+      type: "info",
+      title: CFS_APP_LABEL,
+      message: "로그인 진단 기록을 저장했습니다.",
+      detail: out,
+      buttons: ["확인"],
+      noLink: true,
+    });
+    shell.showItemInFolder(out);
+  } catch (e) {
+    dialog.showErrorBox(CFS_APP_LABEL, "진단 기록 저장 실패: " + (e && e.message ? e.message : e));
+  }
+}
+
+/** 숨은 단축키 Ctrl+Alt+Shift+L */
+function attachLoginDiagHotkey(win) {
+  win.webContents.on("before-input-event", function (ev, input) {
+    if (input.type === "keyDown" && input.control && input.alt && input.shift && String(input.key).toLowerCase() === "l") {
+      ev.preventDefault();
+      void saveLoginDiag(win);
+    }
+  });
+}
+
 function restoreMainAfterLoginClose() {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   try {
@@ -303,6 +480,8 @@ function openLoginWindow(kind, center) {
   try {
     win.webContents.setUserAgent(CHROME_UA);
   } catch (eUa) {}
+  watchLoginDiagWindow(win, key);
+  attachLoginDiagHotkey(win);
   win.loadURL(target.url);
 
   let closedOnce = false;
@@ -1357,6 +1536,7 @@ function createWindow() {
     },
   });
   guardAppWindow(mainWindow, { openLinks: true });
+  attachLoginDiagHotkey(mainWindow);
   attachUiZoom(mainWindow);
   let splashHoldArmed = false;
   const revealMain = function () {
@@ -1891,6 +2071,9 @@ app.whenReady().then(async function () {
   Menu.setApplicationMenu(null);
   createSplash();
   applyChromeUserAgent();
+  try {
+    attachLoginDiag();
+  } catch (eDiag) {}
   if (await isAppExpired()) {
     closeSplash();
     await showExpiredAndQuit();
