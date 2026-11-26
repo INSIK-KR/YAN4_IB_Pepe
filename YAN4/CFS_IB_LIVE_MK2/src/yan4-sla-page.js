@@ -9860,12 +9860,18 @@
       var planCapBtn = makeSlaCaptureCopyButton("당일 예상", function () {
         return planPanel;
       });
-      planCapBtn.style.marginLeft = "8px";
+      planCapBtn.style.marginRight = "8px";
       planCapBtn.style.verticalAlign = "middle";
-      planHdr.appendChild(planCapBtn);
+      planCapBtn.style.flex = "0 0 auto";
       planPanel.appendChild(planHdr);
       var planBody = document.createElement("div");
       planBody.className = "yna4-sla-progress-plan-body";
+      /* 캡처 버튼은 「예상 업체 …」 요약 줄 왼쪽 끝 (진척율 캡처처럼 작게) */
+      planBody.__yan4AfterPlanRender = function (h) {
+        var bar = h.querySelector(".yna4-unload-plan-bar");
+        if (bar) bar.insertBefore(planCapBtn, bar.firstChild);
+        else if (planCapBtn.parentNode) planCapBtn.parentNode.removeChild(planCapBtn);
+      };
       planPanel.appendChild(planBody);
       /* MK2: 진척율 칸이 화면 폭을 다 써서, 입고예약 옆 세 번째 열로 */
       grid.appendChild(planPanel);

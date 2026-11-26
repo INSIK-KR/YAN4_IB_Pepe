@@ -3267,6 +3267,12 @@
     });
     unloadPlanEmbedHosts.forEach(function (h) {
       h.innerHTML = html;
+      /* 붙인 쪽이 버튼 등을 다시 끼울 수 있게 */
+      if (typeof h.__yan4AfterPlanRender === "function") {
+        try {
+          h.__yan4AfterPlanRender(h);
+        } catch (eAfter) {}
+      }
     });
   }
 
