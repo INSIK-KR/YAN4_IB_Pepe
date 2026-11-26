@@ -9601,9 +9601,9 @@
     var progressCapBtn = makeSlaCaptureCopyButton("진척율", function () {
       return host.querySelector(".yna4-sla-progress-left");
     });
-    progressCapBtn.style.marginLeft = "8px";
+    progressCapBtn.style.marginRight = "8px";
     progressCapBtn.style.verticalAlign = "middle";
-    head.appendChild(progressCapBtn);
+    head.insertBefore(progressCapBtn, head.firstChild);
     wrap.appendChild(head);
 
     var grid = document.createElement("div");
@@ -12377,20 +12377,20 @@
       teamsBtn.textContent = "팀즈";
       teamsBtn.title = "이동중 표를 팀즈에 붙여넣기";
       teamsBtn.setAttribute("data-html2canvas-ignore", "true");
-      teamsBtn.style.marginLeft = "8px";
+      teamsBtn.style.marginRight = "4px";
       teamsBtn.style.verticalAlign = "middle";
       teamsBtn.addEventListener("click", function (ev) {
         ev.preventDefault();
         ev.stopPropagation();
         copyMovingPanelForTeams(teamsBtn, titleText, rows);
       });
-      head.appendChild(teamsBtn);
       var movingCapBtn = makeSlaCaptureCopyButton("이동중", function () {
         return resolveSlaMovingCaptureTarget(host);
       });
-      movingCapBtn.style.marginLeft = "4px";
+      movingCapBtn.style.marginRight = "8px";
       movingCapBtn.style.verticalAlign = "middle";
-      head.appendChild(movingCapBtn);
+      head.insertBefore(movingCapBtn, head.firstChild);
+      head.insertBefore(teamsBtn, head.firstChild);
     }
     wrap.appendChild(head);
 
