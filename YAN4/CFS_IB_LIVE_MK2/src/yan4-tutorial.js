@@ -303,9 +303,9 @@
       {
         tab: "개요",
         t: inPage("sla", ".yna4-sla-progress-plan-panel"),
-        title: "당일 예상 (Direct SLA)",
+        title: "당일 예상",
         text:
-          "1페이지 Direct SLA 통합 결과의 「당일 예상」과 같은 표입니다. 온도 · 업체별로 오늘 들어올 예상 unit · SKU · 예약시간을 봅니다.<br>Direct SLA 「작업 시작」으로 하차 수집이 끝나야 채워지고, 다시 조회하면 여기도 같이 바뀝니다. 「팀즈 복사」 · 「이미지」도 그대로 씁니다.",
+          "온도 · 업체별로 오늘 들어올 예상 unit · SKU · 예약시간입니다. 1페이지 Direct SLA 통합 결과의 「당일 예상」과 같은 표입니다.<br>「SLA 전체」로 조회하면 PO Management · 쉽먼트에서 같이 불러옵니다. 제목 줄 「캡처」로 이미지를 복사합니다.",
       },
       {
         tab: "피벗 표",
