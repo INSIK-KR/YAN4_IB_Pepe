@@ -301,6 +301,13 @@
           "금일(07:00 ~ 익일 06:59) 하차 · 입고 진행입니다.<br><b>하차 진척율</b> = 도착 대비 하차 · <b>매입 진척율</b> = 하차 대비 입고<br><b>Shrink</b> = 직납 · 이관 Shrink 품목<br>오른쪽은 업체별 입고예약 · 하차시간입니다.",
       },
       {
+        tab: "개요",
+        t: inPage("sla", ".yna4-sla-progress-plan-panel"),
+        title: "당일 예상 (Direct SLA)",
+        text:
+          "1페이지 Direct SLA 통합 결과의 「당일 예상」과 같은 표입니다. 온도 · 업체별로 오늘 들어올 예상 unit · SKU · 예약시간을 봅니다.<br>Direct SLA 「작업 시작」으로 하차 수집이 끝나야 채워지고, 다시 조회하면 여기도 같이 바뀝니다. 「팀즈 복사」 · 「이미지」도 그대로 씁니다.",
+      },
+      {
         tab: "피벗 표",
         t: function () {
           var h = q(".yna4-sla-pivot-host", slaP());
