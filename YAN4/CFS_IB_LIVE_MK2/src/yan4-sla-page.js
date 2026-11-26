@@ -9778,6 +9778,25 @@
         }
       }
     }
+    /* 당일 예상 캡처 버튼: 당일 예상 칸 바로 위 왼쪽 (진척율 「캡처」와 같은 크기 · 줄) */
+    var applyBase = apply;
+    apply = function () {
+      applyBase();
+      var capRow = host.querySelector(".yna4-sla-progress-plan-cap");
+      var pp = host.querySelector(".yna4-sla-progress-plan-panel");
+      if (!capRow || !pp) return;
+      var pr = pp.getBoundingClientRect();
+      if (!(pr.width > 0)) return;
+      var hr = host.getBoundingClientRect();
+      if (wrap) {
+        var z = parseFloat(getComputedStyle(wrap).zoom) || 1;
+        capRow.style.zoom = String(z);
+      }
+      var cz = parseFloat(getComputedStyle(capRow).zoom) || 1;
+      var ch = capRow.getBoundingClientRect().height || 0;
+      capRow.style.left = Math.round((pr.left - hr.left) / cz) + "px";
+      capRow.style.top = Math.max(0, Math.round((pr.top - hr.top - ch - 2) / cz)) + "px";
+    };
     apply();
     if (typeof requestAnimationFrame === "function") {
       requestAnimationFrame(apply);
@@ -9794,6 +9813,9 @@
         apply();
       });
       ro.observe(leftShell);
+      /* 당일 예상 칸 폭이 바뀌면(내용 다시 그림) 캡처 버튼 위치도 다시 */
+      var planObs = host.querySelector(".yna4-sla-progress-plan-panel");
+      if (planObs) ro.observe(planObs);
       host.__yan4ProgRO = ro;
     }
   }
@@ -9857,22 +9879,18 @@
       var planHdr = document.createElement("div");
       planHdr.className = "yna4-sla-progress-vendor-group-hdr";
       planHdr.textContent = "당일 예상";
-      var planCapBtn = makeSlaCaptureCopyButton("당일 예상", function () {
-        return planPanel;
-      });
-      planCapBtn.style.marginRight = "8px";
-      planCapBtn.style.verticalAlign = "middle";
-      planCapBtn.style.flex = "0 0 auto";
       planPanel.appendChild(planHdr);
       var planBody = document.createElement("div");
       planBody.className = "yna4-sla-progress-plan-body";
-      /* 캡처 버튼은 「예상 업체 …」 요약 줄 왼쪽 끝 (진척율 캡처처럼 작게) */
-      planBody.__yan4AfterPlanRender = function (h) {
-        var bar = h.querySelector(".yna4-unload-plan-bar");
-        if (bar) bar.insertBefore(planCapBtn, bar.firstChild);
-        else if (planCapBtn.parentNode) planCapBtn.parentNode.removeChild(planCapBtn);
-      };
       planPanel.appendChild(planBody);
+      /* 캡처: 진척율 「캡처」처럼 표 위 왼쪽에 작게 (위치는 syncProgressPanelLayout 에서) */
+      var planCapRow = document.createElement("div");
+      planCapRow.className = "yna4-sla-progress-plan-cap";
+      planCapRow.style.cssText = "position:absolute;z-index:2;left:0;top:0;line-height:normal;font-size:11px;";
+      planCapRow.setAttribute("data-html2canvas-ignore", "true");
+      planCapRow.appendChild(makePlanFullCaptureButton(planPanel));
+      host.style.position = "relative";
+      host.appendChild(planCapRow);
       /* MK2: 진척율 칸이 화면 폭을 다 써서, 입고예약 옆 세 번째 열로 */
       grid.appendChild(planPanel);
       grid.classList.add("yna4-sla-progress-grid--plan");
@@ -13343,6 +13361,54 @@
     if (resp && resp.ok) return true;
     console.warn("[SLA] 화면 캡처 실패, html2canvas 로 대체", resp && resp.error);
     return false;
+  }
+
+  /** 당일 예상 캡처 — 칸 안 스크롤에 가린 아래쪽까지 전체를 이미지로 */
+  function makePlanFullCaptureButton(panel) {
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "yna4-sla-pivot-drill-teams-btn yna4-sla-capture-btn";
+    btn.textContent = "캡처";
+    btn.title = "당일 예상 전체를 이미지로 복사 (스크롤 아래까지 · 팀즈에 붙여넣기)";
+    btn.setAttribute("data-html2canvas-ignore", "true");
+    btn.addEventListener("click", function (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (btn.disabled) return;
+      btn.disabled = true;
+      btn.textContent = "캡처…";
+      var flash = function (msg) {
+        btn.textContent = msg;
+        setTimeout(function () {
+          btn.textContent = "캡처";
+          btn.disabled = false;
+        }, 1600);
+      };
+      (async function () {
+        if (typeof yan4CopyHtmlAsImage !== "function") throw new Error("이미지 복사 없음");
+        var clone = panel.cloneNode(true);
+        var w = Math.max(320, Math.round(panel.getBoundingClientRect().width));
+        clone.style.cssText +=
+          ";height:auto!important;max-height:none!important;overflow:visible!important;margin:0!important;width:" + w + "px!important;max-width:none!important;";
+        var body = clone.querySelector(".yna4-sla-progress-plan-body");
+        if (body) {
+          body.style.cssText += ";height:auto!important;max-height:none!important;overflow:visible!important;";
+        }
+        Array.prototype.forEach.call(clone.querySelectorAll("[data-html2canvas-ignore]"), function (n) {
+          n.parentNode.removeChild(n);
+        });
+        return await yan4CopyHtmlAsImage(clone.outerHTML);
+      })().then(
+        function (ok) {
+          flash(ok ? "복사됨" : "실패");
+        },
+        function (e) {
+          console.warn("[SLA] 당일 예상 캡처 실패", e);
+          flash("실패");
+        }
+      );
+    });
+    return btn;
   }
 
   /** 화면 캡처로 PNG 를 클립보드에 비트맵으로 복사 (화면 밖이면 30MIN AUTO 방식) */
