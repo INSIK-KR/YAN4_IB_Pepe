@@ -544,6 +544,8 @@
   var unloadSlaAllParsed = [];
   /** 쉽먼트 입차예약 연결 결과 { key, ymd, pack, byIbc, matched, error } */
   var unloadShipJoin = null;
+  /** SLA 화면 등 다른 곳에 붙인 「당일 예상」 칸 — 통합 결과가 바뀌면 같이 다시 그림 */
+  var unloadPlanEmbedHosts = [];
   var unloadShipBusy = false;
   var unloadShipPending = null;
   var UNLOAD_SLA_DEADLINE_HOURS = 12;
@@ -3250,12 +3252,26 @@
   }
 
   function unloadPlanRender() {
+    var html = unloadPlanHtml();
     var host = document.getElementById(ROOT_ID + "-unload-plan-pane");
-    if (!host) return;
+    if (host) host.innerHTML = html;
+    unloadPlanEmbedHosts = unloadPlanEmbedHosts.filter(function (h) {
+      return h && h.isConnected;
+    });
+    unloadPlanEmbedHosts.forEach(function (h) {
+      h.innerHTML = html;
+    });
+  }
+
+  function unloadPlanHtml() {
     var j = unloadShipJoin;
     if (!j || !j.plan) {
-      host.innerHTML = "<p class='yna4-pane-sla-hint'>통합 결과 조회 후 온도 · 업체별 당일 입고 예상 물량이 표시됩니다.</p>";
-      return;
+      var hint = unloadShipBusy
+        ? "통합 결과 조회 중… 끝나면 표시됩니다."
+        : j && j.error
+        ? unloadSlaEscapeHtml(j.error)
+        : "통합 결과 조회 후 온도 · 업체별 당일 입고 예상 물량이 표시됩니다. (1페이지 Direct SLA 「작업 시작」)";
+      return "<p class='yna4-pane-sla-hint'>" + hint + "</p>";
     }
     var plan = j.plan;
     var esc = unloadSlaEscapeHtml;
@@ -3313,8 +3329,39 @@
       }
       html += "</section>";
     });
-    host.innerHTML = html;
+    return html;
   }
+
+  /** 다른 화면(SLA 진척율 옆)에 「당일 예상」 붙이기 — 같은 데이터 · 같은 버튼 */
+  function unloadPlanEmbedClick(e) {
+    var t = e.target;
+    if (!t || !t.closest) return;
+    if (t.closest("[data-role='plan-copy']")) {
+      unloadPlanCopyTeams();
+      return;
+    }
+    if (t.closest("[data-role='plan-copy-img']")) {
+      unloadPlanCopyTeams(true);
+      return;
+    }
+    var planRow = t.closest("[data-plan-key]");
+    if (planRow) {
+      var pk = planRow.getAttribute("data-plan-key");
+      unloadPlanOpen[pk] = !unloadPlanOpen[pk];
+      unloadPlanRender();
+    }
+  }
+
+  window.yan4UnloadPlanMount = function (host) {
+    if (!host) return;
+    host.classList.add("yna4-unload-plan-embed");
+    if (!host.__yan4PlanClick) {
+      host.__yan4PlanClick = true;
+      host.addEventListener("click", unloadPlanEmbedClick);
+    }
+    if (unloadPlanEmbedHosts.indexOf(host) < 0) unloadPlanEmbedHosts.push(host);
+    unloadPlanRender();
+  };
 
   /** 당일 예상 → 팀즈 표 (온도 → 업체, 예상 unit 많은 순) */
   function unloadPlanCopyTeams(asImage) {
@@ -3396,6 +3443,7 @@
     if (unloadShipBusy) return unloadShipPending || Promise.resolve(null);
     unloadShipBusy = true;
     unloadShipJoin = null;
+    unloadPlanRender();
     unloadShipPending = unloadShipCollect(ymd, unloadSlaAllParsed.slice())
       .then(function (j) {
         j.key = key;
@@ -3410,6 +3458,7 @@
         unloadShipPending = null;
         unloadShipSetLine(unloadShipSummaryText());
         unloadSlaApplyWorkerFilter();
+        unloadPlanRender();
         return unloadShipJoin;
       });
     return unloadShipPending;
@@ -18138,6 +18187,15 @@
         ".yna4-gap-api-table td{padding:8px;border-bottom:1px solid #eef2ff;vertical-align:middle;}",
         ".yna4-gap-api-table td.mono{font-variant-numeric:tabular-nums;}",
       ].join("");
+      skin.textContent += (
+        skin.textContent.match(
+          /\.yna4-sla-modal \.(?:yp-|t-(?:frozen|chill1|chill10|ambient|other)\b|yna4-unload-plan-)[^{]*\{[^}]*\}/g
+        ) || []
+      )
+        .map(function (r) {
+          return r.split(".yna4-sla-modal ").join(".yna4-unload-plan-embed ");
+        })
+        .join("");
       document.head.appendChild(skin);
     } else if (!document.head && typeof console !== "undefined" && console.warn) {
       console.warn("[YAN4 Shell] document.head 없음 — 스킨 스킵");
