@@ -9759,7 +9759,8 @@
     );
     var vendorPanel = host.querySelector(".yna4-sla-progress-vendors-panel");
     function apply() {
-      if (leftShell && vendorPanel) {
+      /* 화면이 숨겨진 채로 그려지면 높이가 0으로 재진다 — 그 값은 쓰지 않고, 보일 때 다시 맞춘다 */
+      if (leftShell && vendorPanel && leftShell.offsetHeight > 0) {
         var leftH = leftShell.offsetHeight;
         var vendorH = Math.max(
           80,
@@ -9780,6 +9781,20 @@
     apply();
     if (typeof requestAnimationFrame === "function") {
       requestAnimationFrame(apply);
+    }
+    /* 30min Auto 등으로 다른 화면을 보는 중에 그려져도, 다시 보이거나 크기가 바뀌면 높이를 다시 맞춤 */
+    if (host.__yan4ProgRO) {
+      try {
+        host.__yan4ProgRO.disconnect();
+      } catch (eRo) {}
+      host.__yan4ProgRO = null;
+    }
+    if (leftShell && typeof ResizeObserver === "function") {
+      var ro = new ResizeObserver(function () {
+        apply();
+      });
+      ro.observe(leftShell);
+      host.__yan4ProgRO = ro;
     }
   }
 
