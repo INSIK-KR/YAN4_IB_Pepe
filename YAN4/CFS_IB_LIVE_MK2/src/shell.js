@@ -3200,8 +3200,12 @@
     );
   }
 
+  /** 당일 예상 시간: 도착했으면 도착시간, 아니면 예약시간 — 「예약」 글자 없이 시간만 */
   function unloadPlanTimes(g) {
-    return g.v ? unloadShipTimesText(g.v) : "-";
+    var v = g.v;
+    if (!v) return "-";
+    var t = v.ARRIVED && v.ARRIVED.length ? v.ARRIVED : v.BOOKED || [];
+    return t.length ? t.join(", ") : "-";
   }
 
   /** 온도 구역 순서 · 색 (구역 제목에 온도 이름이 붙어 색만으로 구분하지 않는다) */
