@@ -13356,6 +13356,250 @@
     hostEl.appendChild(st);
     hostEl.appendChild(scrollBox);
 
+    /* ── MOS 엑셀 내보내기 (CFS HTP 「MOS에서 받기」와 같은 길) ──
+     * exportExcel → getAsyncFileSaveStatus(완료까지) → downloadSavedFile → 시트 읽기
+     * 목록 100건씩 수십 번 대신 요청 몇 번으로 하루치를 받음 */
+    var NH_EXPORT_POLL_MS = 1000;
+    var NH_EXPORT_MAX_WAIT_MS = 5 * 60 * 1000;
+
+    function nhCanExportExcel() {
+      return !!(
+        window.__YAN4_DESKTOP_SHELL__ &&
+        window.yan4ShellDesktop &&
+        typeof window.yan4ShellDesktop.fetch === "function" &&
+        typeof XLSX !== "undefined"
+      );
+    }
+
+    function nhLoginError() {
+      var e = new Error("MOS 로그인이 필요합니다. 상단 MOS 로그인 후 다시 조회하세요.");
+      e.nhLogin = true;
+      return e;
+    }
+
+    async function nhMosDesktopFetch(opts) {
+      var res = await window.yan4ShellDesktop.fetch(
+        Object.assign(
+          {
+            headers: {
+              "X-Requested-With": "XMLHttpRequest",
+              Accept: "application/json, text/javascript, */*; q=0.01",
+            },
+          },
+          opts
+        )
+      );
+      if (!res) throw new Error("응답 없음");
+      if (res.status === 401 || res.status === 403) throw nhLoginError();
+      if (res.error && !res.status) throw new Error(res.error);
+      if (res.status && (res.status < 200 || res.status >= 400)) {
+        throw new Error("HTTP " + res.status);
+      }
+      return res;
+    }
+
+    function nhExportQuery(dayY, centerId) {
+      return (
+        "startDate=" + encodeURIComponent(dayY) +
+        "&endDate=" + encodeURIComponent(dayY) +
+        "&centerId=" + encodeURIComponent(String(centerId)) +
+        "&contractType=ALL&workTypeCdList=INBOUND&isAgv=ALL"
+      );
+    }
+
+    function nhSleep(ms) {
+      return new Promise(function (r) {
+        setTimeout(r, ms);
+      });
+    }
+
+    function nhBase64ToU8(b64) {
+      var bin = atob(String(b64 || ""));
+      var out = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+      return out;
+    }
+
+    /** 엑셀 날짜/시간 칸 → { day: "YYYY-MM-DD"|null, sec: 하루 안 초|null } */
+    function nhExcelDayTime(v) {
+      if (typeof v === "number" && isFinite(v)) {
+        var whole = Math.floor(v);
+        var sec = Math.round((v - whole) * 86400);
+        if (sec >= 86400) {
+          sec -= 86400;
+          whole += 1;
+        }
+        var day = null;
+        if (whole > 0) {
+          var d = new Date(Date.UTC(1899, 11, 30) + whole * 86400000);
+          day = d.getUTCFullYear() + "-" + String(d.getUTCMonth() + 1).padStart(2, "0") + "-" + String(d.getUTCDate()).padStart(2, "0");
+        }
+        return { day: day, sec: sec };
+      }
+      var t = String(v == null ? "" : v).trim();
+      if (!t) return { day: null, sec: null };
+      var md = t.match(/(\d{4})[-./](\d{1,2})[-./](\d{1,2})/);
+      var mt = t.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+      return {
+        day: md ? md[1] + "-" + String(md[2]).padStart(2, "0") + "-" + String(md[3]).padStart(2, "0") : null,
+        sec: mt ? +mt[1] * 3600 + +mt[2] * 60 + +(mt[3] || 0) : null,
+      };
+    }
+
+    function nhIsoFrom(day, sec) {
+      var ms = new Date(day + "T00:00:00").getTime() + sec * 1000;
+      var d = new Date(ms);
+      return (
+        d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0") +
+        "T" + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0") + ":" + String(d.getSeconds()).padStart(2, "0")
+      );
+    }
+
+    /** 시트 → 목록 조회와 같은 모양의 행 (Employee · Process(Task) · Unit Qty · startTs/endTs 전체 일시) */
+    function nhRowsFromWorkbookU8(u8, dayY) {
+      var wb = XLSX.read(u8, { type: "array", dense: true });
+      var sn = wb.SheetNames.indexOf("MOS") >= 0 ? "MOS" : wb.SheetNames[0];
+      var table = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, raw: true, defval: "" });
+      var hi = -1;
+      for (var i = 0; i < Math.min(table.length, 20); i++) {
+        var cells = (table[i] || []).map(function (c) {
+          return String(c).trim();
+        });
+        if (cells.indexOf("Employee") >= 0 && cells.indexOf("Process(Task)") >= 0) {
+          hi = i;
+          break;
+        }
+      }
+      if (hi < 0) throw new Error("엑셀에서 Employee · Process(Task) 열을 찾지 못함");
+      var head = table[hi].map(function (c) {
+        return String(c).trim();
+      });
+      var rows = [];
+      for (var r = hi + 1; r < table.length; r++) {
+        var line = table[r];
+        if (!line || !line.length) continue;
+        var o = {};
+        var any = false;
+        for (var c = 0; c < head.length; c++) {
+          if (!head[c]) continue;
+          o[head[c]] = line[c];
+          if (line[c] !== "" && line[c] != null) any = true;
+        }
+        if (!any) continue;
+        var wd = nhExcelDayTime(o["Work Date"]);
+        var day = wd.day || dayY;
+        var st = nhExcelDayTime(o["HTP Start"]);
+        var en = nhExcelDayTime(o["HTP End"]);
+        if (st.sec != null && en.sec != null) {
+          var sDay = st.day || day;
+          var eDay = en.day || sDay;
+          var s0 = nhIsoFrom(sDay, st.sec);
+          var e0 = nhIsoFrom(eDay, en.sec);
+          /* 날짜 없이 시간만 있고 끝이 시작보다 이르면 자정을 넘긴 것 */
+          if (!en.day && new Date(e0).getTime() <= new Date(s0).getTime()) {
+            e0 = nhIsoFrom(eDay, en.sec + 86400);
+          }
+          o.startTs = s0;
+          o.endTs = e0;
+        }
+        o.workDate = day;
+        o.unitQty = o["Unit Qty"];
+        o.employee = o["Employee"];
+        rows.push(o);
+      }
+      return rows;
+    }
+
+    async function nhFetchViaExportExcel(dayY, centerId, refFull) {
+      var base = "https://mos.coupang.net";
+      setStatus("MOS에 엑셀 만들기 요청 중…");
+      nhProg(24);
+      var exp = await nhMosDesktopFetch({
+        url: base + "/status/worker-history/exportExcel?" + nhExportQuery(dayY, centerId),
+        method: "POST",
+        body: "",
+        contentType: "application/x-www-form-urlencoded; charset=UTF-8",
+        referer: refFull,
+        origin: base,
+      });
+      var body = String(exp.body || "").replace(/\\\//g, "/");
+      var idM = /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/.exec(body);
+      if (!idM) {
+        if (/<html/i.test(body)) throw nhLoginError();
+        throw new Error("파일 ID 없음 · " + body.slice(0, 120));
+      }
+      var nameM = /[\w.-]+\.xlsx/.exec(body);
+      var t = new Date();
+      var stamp =
+        t.getFullYear() + String(t.getMonth() + 1).padStart(2, "0") + String(t.getDate()).padStart(2, "0") +
+        String(t.getHours()).padStart(2, "0") + String(t.getMinutes()).padStart(2, "0") + String(t.getSeconds()).padStart(2, "0");
+      var fileName = nameM ? nameM[0] : "worker_history_" + stamp + ".xlsx";
+      var t0 = Date.now();
+      for (;;) {
+        if (nhStopRequested) throw new Error("중지됨");
+        var stRes = await nhMosDesktopFetch({
+          url: base + "/common/export-excel/getAsyncFileSaveStatus/" + idM[0],
+          method: "GET",
+          referer: refFull,
+        });
+        var status = "";
+        try {
+          status = String(JSON.parse(stRes.body || "{}").status || "").toUpperCase();
+        } catch (eJ) {
+          if (/<html/i.test(String(stRes.body || ""))) throw nhLoginError();
+          throw new Error("진행 상태를 읽지 못함");
+        }
+        if (status === "SUCCESS") break;
+        if (/FAIL|ERROR|CANCEL/.test(status)) throw new Error("MOS 파일 만들기 실패 (" + status + ")");
+        var waited = Date.now() - t0;
+        if (waited > NH_EXPORT_MAX_WAIT_MS) throw new Error("5분이 지나도 파일이 준비되지 않음");
+        setStatus("MOS가 엑셀을 만드는 중… " + Math.round(waited / 1000) + "초");
+        nhProg(Math.min(70, 26 + Math.round(waited / 1000) * 3));
+        await nhSleep(NH_EXPORT_POLL_MS);
+      }
+      setStatus("엑셀 받는 중…");
+      nhProg(78);
+      var file = await nhMosDesktopFetch({
+        url: base + "/common/export-excel/downloadSavedFile/" + idM[0] + "/" + encodeURIComponent(fileName),
+        method: "GET",
+        referer: refFull,
+        binary: true,
+        headers: { Accept: "*/*" },
+      });
+      if (!file.base64) throw new Error("파일 받기 실패" + (nameM ? "" : " (파일 이름 추정)"));
+      setStatus("엑셀 읽는 중…");
+      nhProg(88);
+      await nhSleep(20);
+      var rows = nhRowsFromWorkbookU8(nhBase64ToU8(file.base64), dayY);
+      return { rows: rows, totalHint: rows.length, stoppedEarly: false, viaExport: true };
+    }
+
+    /** 엑셀 Employee 칸에 ID가 없으면 이름으로 ID를 붙임 (같은 이름이 둘 이상이면 붙이지 않음) */
+    function nhAssignLoginIdsByName(rows, workerIds, nameById) {
+      var norm = function (v) {
+        return String(v == null ? "" : v).replace(/\s+/g, "").toUpperCase();
+      };
+      var byName = Object.create(null);
+      workerIds.forEach(function (id) {
+        var n = norm(nameById && nameById[id]);
+        if (!n) return;
+        byName[n] = byName[n] ? "#dup" : id;
+      });
+      (rows || []).forEach(function (row) {
+        if (!row || typeof row !== "object") return;
+        if (row.userLoginId != null && String(row.userLoginId).trim()) return;
+        var emp = row.employee != null ? row.employee : row.Employee;
+        var empU = norm(emp);
+        if (!empU) return;
+        for (var i = 0; i < workerIds.length; i++) {
+          if (empU.indexOf(workerIds[i]) >= 0) return;
+        }
+        var key = empU.replace(/\(.*\)$/, "");
+        var hit = byName[key] || byName[empU];
+        if (hit && hit !== "#dup") row.userLoginId = hit;
+      });
+    }
+
     async function runFetchMerged(
       dayY,
       centerId,
@@ -13453,19 +13697,29 @@
         var acParts = [];
         var acNameById = {};
         var aci;
+        /* 이름 찾기는 한꺼번에 보냄 (한 명씩 기다리지 않음) */
+        var acDone = 0;
+        var acLists = await Promise.all(
+          workerIds.map(function (wid) {
+            return nhFetchWorkerAutocomplete(wid)
+              .catch(function () {
+                return [];
+              })
+              .then(function (list) {
+                acDone++;
+                nhProg(6 + Math.round((acDone / Math.max(1, workerIds.length)) * 14));
+                return list;
+              });
+          })
+        );
+        if (nhStopRequested) {
+          setStatus("");
+          nhProg(0);
+          return;
+        }
         for (aci = 0; aci < workerIds.length; aci++) {
-          if (nhStopRequested) {
-            setStatus("");
-            nhProg(0);
-            return;
-          }
           var widAc = workerIds[aci];
-          var ac = await nhFetchWorkerAutocomplete(widAc);
-          if (nhStopRequested) {
-            setStatus("");
-            nhProg(0);
-            return;
-          }
+          var ac = acLists[aci] || [];
           var hitAc = null;
           var aiAc;
           for (aiAc = 0; aiAc < ac.length; aiAc++) {
@@ -13490,19 +13744,40 @@
             acNameById[widAc] = "";
             acParts.push(widAc + "→?");
           }
-          nhProg(
-            6 +
-              Math.round(
-                ((aci + 1) / Math.max(1, workerIds.length)) * 28
-              )
-          );
         }
         var centerId = cfsActiveCenterId(MOS_CENTER_ID);
         var size = MOS_PAGE_SIZE;
         var refFull = nhReferer(MOS_REFERER_RESOURCE_DEFAULT);
         var staticTail = nhWorkerListStaticTail();
 
-        var pack = await runFetchMerged(
+        var pack = null;
+        if (nhCanExportExcel()) {
+          try {
+            pack = await nhFetchViaExportExcel(dayY, centerId, refFull);
+          } catch (eEx) {
+            if (nhStopRequested) {
+              setStatus("");
+              nhProg(0);
+              return;
+            }
+            if (eEx && eEx.nhLogin) throw eEx;
+            if (typeof console !== "undefined" && console.warn) {
+              console.warn("[YAN4 MOS export]", eEx);
+            }
+            setStatus(
+              "MOS 엑셀 받기 실패 · 목록 조회로 다시 받는 중… (" +
+                (eEx && eEx.message ? eEx.message : String(eEx)) +
+                ")"
+            );
+            pack = null;
+          }
+        }
+        if (nhStopRequested) {
+          setStatus("");
+          nhProg(0);
+          return;
+        }
+        if (!pack) pack = await runFetchMerged(
           dayY,
           centerId,
           size,
@@ -13532,6 +13807,7 @@
           }
         );
         var mergedObjs = pack.rows;
+        nhAssignLoginIdsByName(mergedObjs, workerIds, acNameById);
         var byW = nhAccumulateRowsForWorkers(dayY, workerIds, mergedObjs);
         var wrap = document.getElementById(tableWrapId);
         if (wrap)
