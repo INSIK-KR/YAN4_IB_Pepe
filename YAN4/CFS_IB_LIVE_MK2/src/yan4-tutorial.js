@@ -606,7 +606,7 @@
     slot06: {
       name: "Need help Tracking",
       steps: [
-        { t: cardWhole("slot06"), title: "Need help Tracking", text: "작업자별 Need help 요청 내역을 모아 봅니다. (MOS 로그인)" },
+        { t: cardWhole("slot06"), title: "Need help Tracking", text: "작업자 ID를 넣고 조회하면 작업자별 마지막 시간대 · 누적진열량 · HTP · EACH HTP를 봅니다. HTP는 CFS HTP와 같은 기준(HTP 시간 × 8/9)이고 낮은 순으로 나옵니다. 마지막 진열이 냉동이면 이름 옆에 ❄가 붙습니다. (MOS 로그인)" },
         { t: inCard("slot06", "textarea"), title: "작업자 ID", text: "한 줄에 하나씩 넣습니다. 예) V6703574" },
         { t: inCard("slot06", "input"), title: "조회일", text: "조회할 날짜입니다." },
         { t: all(inCard("slot06", "button", "조회 시작"), inCard("slot06", "button", "조회 중지")), title: "조회 시작 · 중지", text: "조회를 시작하고 멈춥니다." },
