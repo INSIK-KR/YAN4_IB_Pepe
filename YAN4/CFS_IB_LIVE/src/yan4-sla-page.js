@@ -9540,8 +9540,19 @@
         var rect = wrap.getBoundingClientRect();
         if (rect.height > 0) {
           host.style.height = Math.ceil(rect.height) + "px";
+          /* 당일 예상: 「진척율 · 캡처」 줄 아래, 입고예약 표와 같은 위 · 아래 줄에 맞춤 */
           var planPanel = host.querySelector(".yna4-sla-progress-plan-panel");
-          if (planPanel) planPanel.style.height = Math.ceil(rect.height) + "px";
+          if (planPanel) {
+            var hostTop = host.getBoundingClientRect().top;
+            var vr = vendorPanel ? vendorPanel.getBoundingClientRect() : null;
+            if (vr && vr.height > 0) {
+              planPanel.style.marginTop = Math.max(0, Math.round(vr.top - hostTop)) + "px";
+              planPanel.style.height = Math.round(vr.height) + "px";
+            } else {
+              planPanel.style.marginTop = "0px";
+              planPanel.style.height = Math.ceil(rect.height) + "px";
+            }
+          }
         }
       }
     }
