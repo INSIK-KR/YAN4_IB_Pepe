@@ -9856,7 +9856,13 @@
       planPanel.className = "yna4-sla-progress-plan-panel";
       var planHdr = document.createElement("div");
       planHdr.className = "yna4-sla-progress-vendor-group-hdr";
-      planHdr.textContent = "당일 예상 · Direct SLA";
+      planHdr.textContent = "당일 예상";
+      var planCapBtn = makeSlaCaptureCopyButton("당일 예상", function () {
+        return planPanel;
+      });
+      planCapBtn.style.marginLeft = "8px";
+      planCapBtn.style.verticalAlign = "middle";
+      planHdr.appendChild(planCapBtn);
       planPanel.appendChild(planHdr);
       var planBody = document.createElement("div");
       planBody.className = "yna4-sla-progress-plan-body";
@@ -13743,6 +13749,14 @@
           return;
         }
         renderProgressPanel(progressHost, progressBundle);
+        /* 당일 예상: 1페이지 Direct SLA 조회 없이도 SLA 조회 때 같이 (PO · 쉽먼트) — 기다리지 않고 뒤에서 */
+        if (typeof window.yan4UnloadPlanFetchLight === "function") {
+          try {
+            window.yan4UnloadPlanFetchLight();
+          } catch (ePlanLight) {
+            console.warn("[YAN4 SLA 당일 예상]", ePlanLight);
+          }
+        }
       } else if (progressHost) {
         slaOverviewSet({ progress: null });
         progressHost.textContent = "";
@@ -14156,7 +14170,7 @@
       ".yna4-sla-progress-host:empty{display:none!important;border-bottom:none!important;padding-bottom:0!important}" +
       ".yna4-sla-progress-host.yna4-sla-progress-host--plan{display:flex!important;align-items:flex-start!important;gap:8px!important}" +
       ".yna4-sla-progress-host--plan>.yna4-sla-progress-wrap{flex:0 0 auto!important}" +
-      ".yna4-sla-progress-grid.yna4-sla-progress-grid--plan{grid-template-columns:minmax(0,1fr) 340px minmax(300px,440px)!important}" +
+      ".yna4-sla-progress-grid.yna4-sla-progress-grid--plan{grid-template-columns:minmax(0,1fr) 340px fit-content(460px)!important}" +
       ".yna4-sla-progress-grid--plan>.yna4-sla-progress-plan-panel{min-width:0;max-width:none;align-self:start}" +
       ".yna4-sla-progress-plan-panel{flex:1 1 auto;min-width:360px;max-width:760px;display:flex;flex-direction:column;border:1px solid #e2e8f0;background:#fff;box-sizing:border-box;overflow:hidden;line-height:normal}" +
       ".yna4-sla-progress-wrap{display:block!important;border:none!important;border-radius:0!important;background:#fff!important;padding:0!important;box-sizing:border-box!important;width:900px!important;max-width:calc(100%/0.9)!important;zoom:0.9!important;line-height:normal!important;font-size:11px!important}" +
