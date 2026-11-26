@@ -9540,6 +9540,8 @@
         var rect = wrap.getBoundingClientRect();
         if (rect.height > 0) {
           host.style.height = Math.ceil(rect.height) + "px";
+          var planPanel = host.querySelector(".yna4-sla-progress-plan-panel");
+          if (planPanel) planPanel.style.height = Math.ceil(rect.height) + "px";
         }
       }
     }
@@ -9600,6 +9602,25 @@
     grid.appendChild(right);
     wrap.appendChild(grid);
     host.appendChild(wrap);
+    /* 오른쪽: Direct SLA 통합 결과의 「당일 예상」 (1페이지 카드와 같은 데이터) */
+    if (typeof window.yan4UnloadPlanMount === "function") {
+      var planPanel = document.createElement("div");
+      planPanel.className = "yna4-sla-progress-plan-panel";
+      var planHdr = document.createElement("div");
+      planHdr.className = "yna4-sla-progress-vendor-group-hdr";
+      planHdr.textContent = "당일 예상 · Direct SLA";
+      planPanel.appendChild(planHdr);
+      var planBody = document.createElement("div");
+      planBody.className = "yna4-sla-progress-plan-body";
+      planPanel.appendChild(planBody);
+      host.appendChild(planPanel);
+      host.classList.add("yna4-sla-progress-host--plan");
+      try {
+        window.yan4UnloadPlanMount(planBody);
+      } catch (ePlan) {
+        console.warn("[YAN4 SLA 당일 예상]", ePlan);
+      }
+    }
     syncProgressPanelLayout(host);
   }
 
@@ -13858,6 +13879,9 @@
     st.textContent =
       ".yna4-sla-progress-host{margin-bottom:0!important;display:block!important;width:100%!important;max-width:100%!important;box-sizing:border-box!important;overflow:hidden!important;line-height:0!important;padding-bottom:4px!important;border-bottom:1px solid #e2e8f0!important}" +
       ".yna4-sla-progress-host:empty{display:none!important;border-bottom:none!important;padding-bottom:0!important}" +
+      ".yna4-sla-progress-host.yna4-sla-progress-host--plan{display:flex!important;align-items:flex-start!important;gap:8px!important}" +
+      ".yna4-sla-progress-host--plan>.yna4-sla-progress-wrap{flex:0 0 auto!important}" +
+      ".yna4-sla-progress-plan-panel{flex:1 1 auto;min-width:360px;max-width:760px;display:flex;flex-direction:column;border:1px solid #e2e8f0;background:#fff;box-sizing:border-box;overflow:hidden;line-height:normal}" +
       ".yna4-sla-progress-wrap{display:block!important;border:none!important;border-radius:0!important;background:#fff!important;padding:0!important;box-sizing:border-box!important;width:900px!important;max-width:calc(100%/0.9)!important;zoom:0.9!important;line-height:normal!important;font-size:11px!important}" +
       ".yna4-sla-pivot-host{margin-top:8px!important}" +
       ".yna4-sla-progress-host+.yna4-sla-pivot-host{margin-top:8px!important}" +
