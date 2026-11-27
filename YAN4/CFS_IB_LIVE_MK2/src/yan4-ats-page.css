@@ -934,7 +934,10 @@ background-color: #fdba74 !important;
 .yna4-ats-sum-kpi.is-overdue .v { color: #b91c1c; }
 .yna4-ats-sum-bar { display: flex; height: 6px; border-radius: 99px; background: #f1f5f9; overflow: hidden; margin-top: 3px; }
 .yna4-ats-sum-bar span { display: block; height: 100%; }
-.yna4-ats-sum-secs { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 6px; margin-top: 6px; align-items: stretch; }
+/* 위 카드 줄과 같은 칸 나눔 — 보충마감별은 이동중 카드 끝까지, 온도대별은 나머지 두 칸 */
+.yna4-ats-sum-secs { display: grid; grid-template-columns: 1.2fr repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 6px; align-items: stretch; }
+.yna4-ats-sum-secs > .yna4-ats-sum-sec:first-child { grid-column: span 3; }
+.yna4-ats-sum-secs > .yna4-ats-sum-sec:last-child { grid-column: span 2; }
 .yna4-ats-sum-sec { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 4px 10px; min-width: 0; }
 .yna4-ats-sum-sec-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 1px; }
 .yna4-ats-sum-sec-head b { font-size: 13px; }
@@ -958,6 +961,7 @@ background-color: #fdba74 !important;
 @media (max-width: 1100px) {
   .yna4-ats-sum-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .yna4-ats-sum-secs { grid-template-columns: minmax(0, 1fr); }
+  .yna4-ats-sum-secs > .yna4-ats-sum-sec:first-child, .yna4-ats-sum-secs > .yna4-ats-sum-sec:last-child { grid-column: auto; }
 }
 
 /* ---------- 보기 탭 ---------- */
