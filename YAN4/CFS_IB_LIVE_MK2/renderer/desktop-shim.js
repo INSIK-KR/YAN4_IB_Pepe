@@ -27,6 +27,10 @@
 
   function loginNeededText(url, status) {
     var sys = loginSystemOf(url);
+    /* 상단 로그인 버튼을 「재로그인 필요」로 (boot.js) */
+    try {
+      if (typeof window.__YAN4_MARK_RELOGIN__ === "function") window.__YAN4_MARK_RELOGIN__(sys);
+    } catch (eMark) {}
     var how =
       sys === "SharePoint"
         ? "SharePoint에 다시 로그인하세요"
