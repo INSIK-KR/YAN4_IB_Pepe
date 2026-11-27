@@ -6008,38 +6008,85 @@
     viewTabs.appendChild(tabDash);
     viewTabs.appendChild(tabOverview);
 
-    /* 조회 결과 개요 — 보충대기 · 이동중 · 센터 내 미재고 (진열완료 · 부분진열 뺀 남은 일) */
+    /* 조회 결과 개요 (CFS HTP 개요 형식) — 큰 숫자 카드 + 보충마감별 · 온도대별 표.
+       보충대기 · 이동중은 진열완료 · 부분진열 뺀 남은 일, 센터 내 미재고는 대시보드 ⑬ */
     var summaryStrip = document.createElement("div");
     summaryStrip.className = "yna4-ats-summary";
     summaryStrip.style.display = "none";
-    var ATS_SUMMARY_ITEMS = [
-      { key: "wait", label: "보충대기", tip: "센터 안에 재고가 있어 바로 보충할 수 있는 수량" },
-      { key: "moving", label: "이동중", tip: "아직 센터에 도착하지 않은(이동중) 재고로 보충할 수량" },
-      { key: "noStock", label: "센터 내 미재고", tip: "센터 안에 진열할 재고가 없는 수량 (대시보드 ⑬)" },
+    var ATS_SUM_CATS = [
+      { key: "wait", label: "보충대기", color: "#2a78d6", tip: "센터 안에 재고가 있어 바로 보충할 수 있는 수량" },
+      { key: "moving", label: "이동중", color: "#eda100", tip: "아직 센터에 도착하지 않은(이동중) 재고로 보충할 수량" },
+      { key: "noStock", label: "센터 내 미재고", color: "#94a3b8", tip: "센터 안에 진열할 재고가 없는 수량 (대시보드 ⑬)" },
     ];
-    var summaryVals = Object.create(null);
-    ATS_SUMMARY_ITEMS.forEach(function (it) {
-      var box = document.createElement("div");
-      box.className = "yna4-ats-summary-item is-" + it.key;
-      box.title = it.tip;
-      var lab = document.createElement("span");
-      lab.className = "yna4-ats-summary-label";
-      lab.textContent = it.label;
-      var val = document.createElement("span");
-      val.className = "yna4-ats-summary-val";
-      box.appendChild(lab);
-      box.appendChild(val);
-      summaryStrip.appendChild(box);
-      summaryVals[it.key] = val;
-    });
+    var ATS_SUM_TEMPS = ["냉장", "상온", "냉동", "기타"];
+    var ATS_SUM_COLLAPSE_KEY = "yna4AtsSummaryCollapsed";
+
+    function atsSumEsc(v) {
+      return String(v == null ? "" : v).replace(/[&<>"]/g, function (c) {
+        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+      });
+    }
+    function atsSumNum(n) {
+      return formatObQtyNumber(n) || "0";
+    }
+    function atsSumNew() {
+      return { wait: 0, moving: 0, noStock: 0, waitN: 0, movingN: 0, noStockN: 0, total: 0, n: 0 };
+    }
+    function atsSumAdd(o, k, q) {
+      o[k] += q;
+      o[k + "N"]++;
+      o.total += q;
+      o.n++;
+    }
+    function atsSumTempOf(r, pi) {
+      var t = String(atsOverviewTemp(r, pi) || "").toUpperCase();
+      if (/CHILL|냉장/.test(t)) return "냉장";
+      if (/AMBIENT|상온/.test(t)) return "상온";
+      if (/FROZEN|FREEZ|냉동/.test(t)) return "냉동";
+      return "기타";
+    }
+    /** 막대 하나 — 보충대기 · 이동중 · 미재고 를 쌓아서 */
+    function atsSumStackBar(o, max) {
+      var h = '<div class="yna4-ats-sum-bar">';
+      ATS_SUM_CATS.forEach(function (c) {
+        var w = max ? (o[c.key] / max) * 100 : 0;
+        if (w > 0) h += '<span style="width:' + w.toFixed(2) + "%;background:" + c.color + '"></span>';
+      });
+      return h + "</div>";
+    }
+    function atsSumTable(title, sub, firstHead, rows, max, rowExtra) {
+      var h =
+        '<div class="yna4-ats-sum-sec"><div class="yna4-ats-sum-sec-head"><b>' + atsSumEsc(title) + "</b>" +
+        (sub ? "<span>" + atsSumEsc(sub) + "</span>" : "") + "</div>";
+      if (!rows.length) return h + '<div class="yna4-ats-sum-empty">없음</div></div>';
+      h += '<table class="yna4-ats-sum-table"><thead><tr><th>' + atsSumEsc(firstHead) + "</th>";
+      ATS_SUM_CATS.forEach(function (c) {
+        h += '<th class="is-num"><i style="background:' + c.color + '"></i>' + atsSumEsc(c.label) + "</th>";
+      });
+      h += '<th class="is-num">합계</th><th class="is-bar"></th></tr></thead><tbody>';
+      rows.forEach(function (r) {
+        h += "<tr" + (r.cls ? ' class="' + r.cls + '"' : "") + '><td class="is-key">' + atsSumEsc(r.label) +
+          (rowExtra ? rowExtra(r) : "") + "</td>";
+        ATS_SUM_CATS.forEach(function (c) {
+          h += '<td class="is-num">' + (r.o[c.key] ? atsSumNum(r.o[c.key]) : '<span class="is-zero">-</span>') + "</td>";
+        });
+        h += '<td class="is-num is-total">' + atsSumNum(r.o.total) + "<small>" + r.o.n + '건</small></td><td class="is-bar">' +
+          atsSumStackBar(r.o, max) + "</td></tr>";
+      });
+      return h + "</tbody></table></div>";
+    }
 
     function renderAtsSummary(buckets) {
       if (!buckets) {
         summaryStrip.style.display = "none";
+        summaryStrip.innerHTML = "";
         return;
       }
-      var sum = { wait: [0, 0], moving: [0, 0], noStock: [0, 0] };
-      var pi, list, i, r, dk, k, q;
+      var all = atsSumNew();
+      var byDl = Object.create(null);
+      var byTemp = Object.create(null);
+      var overdue = atsSumNew();
+      var pi, list, i, r, dk, k, q, dl, tp;
       for (pi = 1; pi <= ATS_DASH_COUNT; pi++) {
         list = buckets[pi] || [];
         for (i = 0; i < list.length; i++) {
@@ -6054,15 +6101,83 @@
             k = String(r.status || "").trim() === "이동중" ? "moving" : "wait";
           }
           q = parseObQtyNumber(r.obQty);
-          if (isFinite(q)) sum[k][0] += q;
-          sum[k][1]++;
+          if (!isFinite(q)) q = 0;
+          atsSumAdd(all, k, q);
+          dl = String(r.atsDeadline || "").trim() || "(마감 없음)";
+          if (!byDl[dl]) byDl[dl] = atsSumNew();
+          atsSumAdd(byDl[dl], k, q);
+          tp = atsSumTempOf(r, pi);
+          if (!byTemp[tp]) byTemp[tp] = atsSumNew();
+          atsSumAdd(byTemp[tp], k, q);
+          if (k !== "noStock" && atsRemainMinutes(r.atsDeadline) < 0) atsSumAdd(overdue, k, q);
         }
       }
-      ATS_SUMMARY_ITEMS.forEach(function (it) {
-        summaryVals[it.key].textContent =
-          (formatObQtyNumber(sum[it.key][0]) || "0") + "unit · " + sum[it.key][1] + "건";
+      var dlRows = Object.keys(byDl).map(function (d) {
+        var rem = atsRemainMinutes(d);
+        return { label: d, o: byDl[d], rem: rem, cls: rem < 0 ? "is-overdue" : rem <= 60 ? "is-soon" : "" };
       });
+      dlRows.sort(function (a, b) {
+        return (isFinite(a.rem) ? a.rem : 1e9) - (isFinite(b.rem) ? b.rem : 1e9);
+      });
+      var tempRows = ATS_SUM_TEMPS.filter(function (t) {
+        return byTemp[t] && byTemp[t].n;
+      }).map(function (t) {
+        return { label: t, o: byTemp[t] };
+      });
+      var maxDl = 0;
+      dlRows.forEach(function (x) {
+        if (x.o.total > maxDl) maxDl = x.o.total;
+      });
+      var maxTemp = 0;
+      tempRows.forEach(function (x) {
+        if (x.o.total > maxTemp) maxTemp = x.o.total;
+      });
+      var collapsed = false;
+      try {
+        collapsed = localStorage.getItem(ATS_SUM_COLLAPSE_KEY) === "1";
+      } catch (eC) {}
+      var pct = function (v) {
+        return all.total ? Math.round((v / all.total) * 100) + "%" : "-";
+      };
+      var h =
+        '<div class="yna4-ats-sum-top"><b>개요</b><span>진열완료 · 부분진열 된 건은 빠짐</span>' +
+        '<button type="button" class="yna4-ats-sum-toggle">' + (collapsed ? "표 펼치기 ▾" : "표 접기 ▴") + "</button></div>";
+      h += '<div class="yna4-ats-sum-kpis">';
+      h +=
+        '<div class="yna4-ats-sum-hero"><div class="t">남은 보충</div><div class="v">' + atsSumNum(all.total) +
+        '<small>unit</small></div><div class="s">' + all.n + "건 · 보충마감 " + dlRows.length + "개</div></div>";
+      ATS_SUM_CATS.forEach(function (c) {
+        h +=
+          '<div class="yna4-ats-sum-kpi is-' + c.key + '" style="border-top-color:' + c.color + '" title="' + atsSumEsc(c.tip) + '">' +
+          '<div class="t">' + atsSumEsc(c.label) + '</div><div class="v">' + atsSumNum(all[c.key]) + "<small>unit</small></div>" +
+          '<div class="s">' + all[c.key + "N"] + "건 · " + pct(all[c.key]) + "</div>" +
+          '<div class="yna4-ats-sum-bar"><span style="width:' +
+          (all.total ? (all[c.key] / all.total) * 100 : 0).toFixed(2) + "%;background:" + c.color + '"></span></div></div>';
+      });
+      h +=
+        '<div class="yna4-ats-sum-kpi is-overdue" style="border-top-color:#dc2626" title="보충기한이 이미 지난 보충대기 · 이동중 수량">' +
+        '<div class="t">기한 지남</div><div class="v">' + atsSumNum(overdue.total) + "<small>unit</small></div>" +
+        '<div class="s">' + overdue.n + "건 · 보충대기 " + atsSumNum(overdue.wait) + " · 이동중 " + atsSumNum(overdue.moving) + "</div></div>";
+      h += "</div>";
+      if (!collapsed) {
+        h += '<div class="yna4-ats-sum-secs">';
+        h += atsSumTable("보충마감별 유닛", "급한 마감부터 · 빨강 기한 지남 · 주황 1시간 안", "보충마감", dlRows, maxDl, function (x) {
+          return isFinite(x.rem) ? "<small>" + atsSumEsc(atsFormatRemain(x.rem)) + "</small>" : "";
+        });
+        h += atsSumTable("온도대별 유닛", "", "온도대", tempRows, maxTemp, null);
+        h += "</div>";
+      }
+      summaryStrip.innerHTML = h;
       summaryStrip.style.display = "";
+      var tg = summaryStrip.querySelector(".yna4-ats-sum-toggle");
+      if (tg) {
+        tg.addEventListener("click", function () {
+          try {
+            localStorage.setItem(ATS_SUM_COLLAPSE_KEY, collapsed ? "0" : "1");
+          } catch (eS) {}
+          renderAtsSummary(atsLastBuckets);
+        });
+      }
     }
 
     var overviewHost = document.createElement("div");
