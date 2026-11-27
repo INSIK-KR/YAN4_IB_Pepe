@@ -10,6 +10,9 @@
   var busyKind = "";
   /** 이번 실행에서 로그인 창을 닫아 확인된 서비스만 「로그인완료」 */
   var confirmedOk = { coupang: false, po: false, mos: false, shipments: false };
+  /** 조회 중 로그인 풀림이 확인된 서비스 — 다시 로그인할 때까지 「재로그인 필요」 */
+  var needRelogin = { coupang: false, po: false, mos: false, shipments: false };
+  var RELOGIN_KIND = { WMS: "coupang", PO: "po", MOS: "mos", SHPT: "shipments" };
 
   var LOGIN_BTNS = [
     { id: "btnLoginCoupang", kind: "coupang", idle: "WMS", detailKey: "coupang" },
@@ -32,12 +35,17 @@
       btn = document.getElementById(spec.id);
       if (!btn) continue;
       isBusy = busyKind === spec.kind;
-      isOk = !isBusy && !!confirmedOk[spec.kind];
+      var isRelogin = !isBusy && !!needRelogin[spec.kind];
+      isOk = !isBusy && !isRelogin && !!confirmedOk[spec.kind];
       btn.classList.toggle("is-busy", isBusy);
+      btn.classList.toggle("is-relogin", isRelogin);
       btn.classList.toggle("is-ok", isOk);
       if (isBusy) {
         btn.textContent = "로그인중";
         btn.title = spec.idle + " 로그인 진행 중";
+      } else if (isRelogin) {
+        btn.textContent = "재로그인 필요";
+        btn.title = spec.idle + " 로그인이 풀렸습니다 · 눌러서 다시 로그인하세요";
       } else if (isOk) {
         btn.textContent = "로그인완료";
         btn.title = spec.idle + " 로그인 완료 · 다시 누르면 재로그인";
@@ -83,6 +91,15 @@
     confirmedOk[key] = n > 0;
   }
 
+  /** 조회하다 로그인 풀림을 만나면 (WMS · PO · MOS · SHPT) 상단 버튼을 「재로그인 필요」로 */
+  window.__YAN4_MARK_RELOGIN__ = function (sys) {
+    var kind = RELOGIN_KIND[String(sys || "").toUpperCase()] || "";
+    if (!kind || needRelogin[kind]) return;
+    needRelogin[kind] = true;
+    confirmedOk[kind] = false;
+    paintLoginButtons();
+  };
+
   /** 상단에서 고른 센터. 쉽먼트 로그인 확인에 쓴다 */
   function activeCenterName() {
     try {
@@ -126,6 +143,8 @@
         var kind = payload && payload.kind;
         if (kind && busyKind === kind) busyKind = "";
         else if (!kind) busyKind = "";
+        /* 로그인 창을 닫았으면 「재로그인 필요」는 풀고 다시 확인 */
+        if (kind && Object.prototype.hasOwnProperty.call(needRelogin, kind)) needRelogin[kind] = false;
         window.yan4ShellDesktop
           .sessionStatus()
           .then(function (st) {

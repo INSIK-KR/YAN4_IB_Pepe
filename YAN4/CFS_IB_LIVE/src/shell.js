@@ -1460,7 +1460,10 @@
       var merged = await unloadGapFetchRcrtMergedFromApi(function (page) {
         return unloadGapBuildInventorySearchUrl(id, page);
       });
-      if (merged.loginPage) return { ok: false, entries: [], login: true };
+      if (merged.loginPage) {
+        yan4LoginText("https://inbound.coupang.com/");
+        return { ok: false, entries: [], login: true };
+      }
       if (!merged.list.length) {
         var byExt = await unloadGapFetchRcrtMergedFromApi(function (page) {
           return unloadGapBuildInventoryExternalSkuSearchUrl(id, page);
@@ -13582,6 +13585,7 @@
 
     function nhLoginError() {
       var e = new Error("MOS 로그인이 필요합니다. 상단 MOS 로그인 후 다시 조회하세요.");
+      yan4LoginText("https://mos.coupang.net/");
       e.nhLogin = true;
       return e;
     }

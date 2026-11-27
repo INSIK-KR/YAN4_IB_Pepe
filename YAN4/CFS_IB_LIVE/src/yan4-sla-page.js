@@ -6914,6 +6914,7 @@
           j = JSON.parse(String(text || ""));
         } catch (eJ) {
           // JSON 이 아니면 로그인 페이지
+          yan4LoginText(INVENTORY_REFERER);
           return { ok: false, qty: 0, login: true };
         }
         content = j && j.success !== false && j.result && j.result.content;
@@ -11198,6 +11199,7 @@
 
   /** 로그인 풀림 — 예전 SLA 값 대신 RCRT 칸에 "로그인 필요" */
   function markDirectDrillLoginNeeded(td, unitsTd) {
+    yan4LoginText("https://inventory.coupang.com/");
     fillDirectDrillLocationCell(td, []);
     td.textContent = "로그인 필요";
     if (unitsTd) fillDirectDrillUnitsCell(unitsTd, []);
