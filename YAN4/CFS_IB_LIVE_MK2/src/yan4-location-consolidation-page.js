@@ -916,7 +916,7 @@
     }
     if (statusEl) {
       statusEl.textContent =
-        "bin API 조회 중…" +
+        "조회 중…" +
         (expectedEmpty != null && expectedEmpty !== ""
           ? " (통로집계 빈 " + expectedEmpty + ")"
           : "");
@@ -1110,7 +1110,7 @@
     if (!mount) return;
     if (!normalized || !normalized.length) {
       mount.innerHTML =
-        '<div class="zone-empty-note">API 조회 후 그래프를 확인하세요.</div>';
+        '<div class="zone-empty-note">조회 후 그래프를 확인하세요.</div>';
       return;
     }
     destroyAllCharts();
@@ -1254,13 +1254,13 @@
     var btn = $("#" + ROOT_ID + "-fetch");
     if (btn) btn.disabled = true;
     try {
-      setStatus("목록 API 조회 중…");
+      setStatus("조회 중…");
       await ensureChartJs();
       var listPack = await fetchZoneList();
       var zones = pickTargetZones(listPack.zones || []);
       if (!zones.length) {
         throw new Error(
-          "1CP·1FP·1AP·1APR 존을 찾지 못했습니다 (목록 API 확인)"
+          "1CP·1FP·1AP·1APR 존을 찾지 못했습니다"
         );
       }
       setStatus(
@@ -1609,7 +1609,7 @@
     btnRun.type = "button";
     btnRun.className = "yna4-pane-btn yna4-pane-btn--primary";
     btnRun.textContent = "조회 실행";
-    btnRun.title = "inventory API로 전 존·통로 수집 후 대시보드 모달 열기";
+    btnRun.title = "전 존 · 통로를 조회한 뒤 결과 창을 엽니다";
 
     var btnDash = document.createElement("button");
     btnDash.type = "button";
@@ -1624,7 +1624,7 @@
 
     paneStatusEl = document.createElement("div");
     paneStatusEl.className = "yna4-pane-status";
-    paneStatusEl.textContent = "조회 실행 — API 수집 후 모달 자동 표시";
+    paneStatusEl.textContent = "「조회 실행」을 누르면 끝난 뒤 결과 창이 열립니다";
 
     hostEl.appendChild(actions);
     hostEl.appendChild(paneStatusEl);

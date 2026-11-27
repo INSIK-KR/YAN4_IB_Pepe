@@ -8116,7 +8116,7 @@
           throw e;
         }
         if (statusEl) {
-          statusEl.textContent = label + " · 서버 504 — 다시 시도 " + (attempt + 1) + "…";
+          statusEl.textContent = label + " · 응답이 늦어 다시 시도 " + (attempt + 1) + "…";
         }
         await sleep(EXCEL_504_RETRY_WAITS_MS[attempt]);
         attempt++;
@@ -12100,7 +12100,7 @@
       };
     }
 
-    statusEl.textContent = prefix + "Direct 피벗 집계…";
+    statusEl.textContent = prefix + "직납 표 만드는 중…";
     var refYear = parseYmd(dr.endYmd);
     refYear = refYear ? refYear.getFullYear() : new Date().getFullYear();
     var built = buildDirectPivotMatrixFromRows(allRows);
@@ -12747,10 +12747,10 @@
     var dr = defaultDateRange();
     var ts = formatPipelineTimestamp();
 
-    statusEl.textContent = prefix + "SharePoint SLA 다운로드…";
+    statusEl.textContent = prefix + "SLA 파일 받는 중…";
     var slaBuf = await fetchSharePointSlaBuffer();
     if (stopRequested) return { stopped: true };
-    statusEl.textContent = prefix + "SLA 조회표 인덱싱…";
+    statusEl.textContent = prefix + "SLA 파일 정리 중…";
     var slaLookup = parseSlaFileLookup(slaBuf);
     lastShrinkSlaLookup = slaLookup;
 
@@ -12778,7 +12778,7 @@
     var ctCache = await buildCtStorageCache(allRows, slaLookup, dr, statusEl);
     if (stopRequested) return { stopped: true };
 
-    statusEl.textContent = prefix + "피벗 집계…";
+    statusEl.textContent = prefix + "표 만드는 중…";
     var refYear = parseYmd(dr.endYmd);
     refYear = refYear ? refYear.getFullYear() : new Date().getFullYear();
     var pivotQueryAt = new Date();
@@ -14611,7 +14611,7 @@
         updateSlaAutoToggleUi(on);
         syncSlaAutoSchedule(on);
         if (on) {
-          statusEl.textContent = "30min Auto · starting…";
+          statusEl.textContent = "30min Auto 시작…";
           startSlaAutoCountdown(btnAuto);
           setSlaAutoCountdownRunning(true);
           runSlaAutoPipelineNow();

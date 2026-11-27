@@ -6042,7 +6042,7 @@
       if (!startDate) startDate = toteDefaultYmd(-2);
       if (!endDate) endDate = toteDefaultYmd(0);
 
-      toteSetStatus("API 조회 준비…");
+      toteSetStatus("조회 준비…");
       setProgressByStatusId(ROOT_ID + "-tote-api-status", 0);
 
       var windows = toteSplitRangeWindows(
@@ -9161,9 +9161,9 @@
 
         setProgressByStatusId(statusId, 58);
         setStatus(
-          "통합 3단계 · 검품 엑셀(정상종료 " +
+          "통합 3단계 · 검품 내역(정상종료 " +
             bY +
-            ") 다운로드·파싱… · 발주 SKU " +
+            ") 받는 중… · 발주 SKU " +
             skuIter.length
         );
 
@@ -9177,11 +9177,11 @@
 
         setProgressByStatusId(statusId, 72);
         setStatus(
-          "통합 3단계 · 검품 엑셀 " +
+          "통합 3단계 · 검품 내역 " +
             inspectDayRowCount +
-            "건 ↔ SKU " +
+            "건 · SKU " +
             skuIter.length +
-            " 조인…"
+            " 맞추는 중…"
         );
 
         var merged = [];
@@ -10786,7 +10786,7 @@
         var statHtml = await fetchInboundHtml(STAT_URL + "?" + qs);
         var total = parseStatisticUnhandledTotal(statHtml);
         if (total == null || !isFinite(total)) {
-          setStatus("미처리 건수 파싱 실패 · 응답 확인");
+          setStatus("미처리 건수를 읽지 못했습니다 · 다시 조회해 보세요");
           return;
         }
 
@@ -13099,7 +13099,7 @@
         var tr0 = document.createElement("tr");
         var td = document.createElement("td");
         td.colSpan = 4;
-        td.textContent = "startTs~endTs 없음 또는 unitQty 0만 존재";
+        td.textContent = "진열 기록이 없습니다";
         tr0.appendChild(td);
         tb.appendChild(tr0);
       }
@@ -13113,7 +13113,7 @@
       var ids = Object.keys(byWorker || {});
       if (!ids.length) {
         wrap.textContent =
-          "매칭된 작업자 없음 · list JSON의 userLoginId·employee와 입력 ID 대조";
+          "진열 기록이 없습니다 · 작업자 ID와 조회일을 확인하세요";
         return;
       }
 
@@ -13707,7 +13707,7 @@
 
     async function nhFetchViaExportExcel(dayY, centerId, refFull) {
       var base = "https://mos.coupang.net";
-      setStatus("MOS에 엑셀 만들기 요청 중…");
+      setStatus("작업 중…");
       nhProg(24);
       var exp = await nhMosDesktopFetch({
         url: base + "/status/worker-history/exportExcel?" + nhExportQuery(dayY, centerId),
@@ -13748,11 +13748,11 @@
         if (/FAIL|ERROR|CANCEL/.test(status)) throw new Error("MOS 파일 만들기 실패 (" + status + ")");
         var waited = Date.now() - t0;
         if (waited > NH_EXPORT_MAX_WAIT_MS) throw new Error("5분이 지나도 파일이 준비되지 않음");
-        setStatus("MOS가 엑셀을 만드는 중… " + Math.round(waited / 1000) + "초");
+        setStatus("작업 중… " + Math.round(waited / 1000) + "초");
         nhProg(Math.min(70, 26 + Math.round(waited / 1000) * 3));
         await nhSleep(NH_EXPORT_POLL_MS);
       }
-      setStatus("엑셀 받는 중…");
+      setStatus("작업 중…");
       nhProg(78);
       var file = await nhMosDesktopFetch({
         url: base + "/common/export-excel/downloadSavedFile/" + idM[0] + "/" + encodeURIComponent(fileName),
@@ -13762,7 +13762,7 @@
         headers: { Accept: "*/*" },
       });
       if (!file.base64) throw new Error("파일 받기 실패" + (nameM ? "" : " (파일 이름 추정)"));
-      setStatus("엑셀 읽는 중…");
+      setStatus("작업 중…");
       nhProg(88);
       await nhSleep(20);
       var rows = nhRowsFromWorkbookU8(nhBase64ToU8(file.base64), dayY);
@@ -13960,9 +13960,7 @@
               console.warn("[YAN4 MOS export]", eEx);
             }
             setStatus(
-              "MOS 엑셀 받기 실패 · 목록 조회로 다시 받는 중… (" +
-                (eEx && eEx.message ? eEx.message : String(eEx)) +
-                ")"
+              "작업 중… (조금 더 걸립니다)"
             );
             pack = null;
           }
@@ -14915,7 +14913,7 @@
     ) {
       return { rows: [], note: "데스크톱에서만 Presto 조회 가능" };
     }
-    if (onProgress) onProgress("Presto 생산성 조회 중… (작업자 " + workers.length + "명)");
+    if (onProgress) onProgress("생산성 조회 중… (작업자 " + workers.length + "명)");
     var sql = recvBuildProductivitySql(ymd, workers, cid, areaPrefixes);
     var res = await window.yan4ShellDesktop.prestoQuery({ sql: sql });
     if (!res || !res.ok) {
@@ -15694,7 +15692,7 @@
         var sec = Math.floor((Date.now() - startedAt) / 1000);
         var elapsed = sec >= 60 ? Math.floor(sec / 60) + "분 " + (sec % 60) + "초" : sec + "초";
         status.textContent =
-          (progressQueued ? "Presto 대기 중… " : "Presto 조회 중… ") +
+          (progressQueued ? "대기 중… " : "조회 중… ") +
           elapsed +
           (progressPct != null ? " · " + progressPct + "%" : "") +
           " (" + userLabel + " · " + ymd + ")";
