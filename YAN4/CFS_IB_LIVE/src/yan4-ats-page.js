@@ -2747,8 +2747,12 @@
     return pad2(Math.floor(total / 60)) + ":" + pad2(total % 60);
   }
 
+  /** 마지막 조회 때 보충기한에서 뺀 분 (보충마감설정) — 개요에서 워크플로우 원래 시각으로 되돌릴 때 */
+  var atsUsedDeadlineOffsetMin = null;
+
   function buildOutboundItem(barcode, obQty, deadlineRaw) {
     var dlTime = extractOutboundDeadlineTime(deadlineRaw);
+    atsUsedDeadlineOffsetMin = getAtsDeadlineOffsetMin();
     return {
       barcode: barcode,
       obQty: obQty || "",
@@ -6076,6 +6080,13 @@
       return h + "</tbody></table></div>";
     }
 
+    /** 우리 보충마감(워크플로우 − 보충마감설정) → 워크플로우 보충기한 (타공정 공유용) */
+    function atsSumWorkflowHm(hm) {
+      if (!/^\d{1,2}:\d{2}$/.test(String(hm || ""))) return hm;
+      var off = atsUsedDeadlineOffsetMin != null ? atsUsedDeadlineOffsetMin : getAtsDeadlineOffsetMin();
+      return subtractMinutesFromHm(hm, -off) || hm;
+    }
+
     function renderAtsSummary(buckets) {
       if (!buckets) {
         summaryStrip.style.display = "none";
@@ -6141,12 +6152,12 @@
       };
       var h = '<div class="yna4-ats-sum-kpis">';
       h +=
-        '<div class="yna4-ats-sum-hero"><button type="button" class="yna4-ats-sum-toggle" title="보충마감별 · 온도대별 표 ' +
+        '<div class="yna4-ats-sum-hero" title="시각은 워크플로우 보충기한 기준 (보충마감설정을 빼기 전)"><button type="button" class="yna4-ats-sum-toggle" title="보충마감별 · 온도대별 표 ' +
         (collapsed ? "펼치기" : "접기") + '">' + (collapsed ? "표 ▾" : "표 ▴") + '</button><div class="t">남은 보충</div><div class="v">' + atsSumNum(all.total) +
         '<small>unit</small></div><div class="s yna4-ats-sum-hero-dl">' +
         dlRows
           .map(function (x) {
-            return '<span class="' + (x.cls || "") + '">' + atsSumEsc(x.label) + " <b>" + atsSumNum(x.o.total) + "unit</b></span>";
+            return '<span class="' + (x.cls || "") + '">' + atsSumEsc(atsSumWorkflowHm(x.label)) + " <b>" + atsSumNum(x.o.total) + "unit</b></span>";
           })
           .join("") +
         "</div></div>";
