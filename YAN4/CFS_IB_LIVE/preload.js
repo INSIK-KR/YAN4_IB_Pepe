@@ -4,6 +4,9 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("yan4ShellDesktop", {
   /** 알림창 — 제목을 앱에서 정함 (기본 alert 는 제목이 「cfs-ib-live」) */
+  saveTextLog: function (name, text) {
+    return ipcRenderer.invoke("yan4-save-text-log", name, text);
+  },
   alertSync: function (message, title) {
     return ipcRenderer.sendSync("yan4-shell-alert", String(message == null ? "" : message), String(title || ""));
   },
