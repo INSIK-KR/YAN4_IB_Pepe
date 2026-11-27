@@ -6022,7 +6022,8 @@
       { key: "moving", label: "이동중", color: "#eda100", tip: "아직 센터에 도착하지 않은(이동중) 재고로 보충할 수량" },
       { key: "noStock", label: "센터 내 미재고", color: "#94a3b8", tip: "센터 안에 진열할 재고가 없는 수량 (대시보드 ⑬)" },
     ];
-    var ATS_SUM_TEMPS = ["냉장", "상온", "냉동", "기타"];
+    /* 「기타」(온도대 없음 — 거의 센터 내 미재고)는 온도대별 표에서 뺌 */
+    var ATS_SUM_TEMPS = ["냉장", "상온", "냉동"];
     var ATS_SUM_COLLAPSE_KEY = "yna4AtsSummaryCollapsed";
 
     function atsSumEsc(v) {
@@ -6176,10 +6177,10 @@
       h += "</div>";
       if (!collapsed) {
         h += '<div class="yna4-ats-sum-secs">';
-        h += atsSumTable("보충마감별 유닛", "급한 마감부터 · 빨강 기한 지남 · 주황 1시간 안", "보충마감", dlRows, maxDl, function (x) {
+        h += atsSumTable("보충마감별 unit", "", "보충마감", dlRows, maxDl, function (x) {
           return isFinite(x.rem) ? "<small>" + atsSumEsc(atsFormatRemain(x.rem)) + "</small>" : "";
         });
-        h += atsSumTable("온도대별 유닛", "", "온도대", tempRows, maxTemp, null);
+        h += atsSumTable("온도대별 unit", "", "온도대", tempRows, maxTemp, null);
         h += "</div>";
       }
       summaryStrip.innerHTML = h;
