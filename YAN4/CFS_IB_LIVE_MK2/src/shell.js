@@ -8,6 +8,11 @@
     return fallback || "HTTP " + status + (rest || "");
   }
 
+  /** 자료(JSON) 대신 웹페이지가 왔는지 — 로그인이 풀리면 로그인 화면이 옴 */
+  function yan4LooksLikeHtml(txt) {
+    return /^s*</.test(String(txt == null ? "" : txt));
+  }
+
   /** 로그인 화면(HTML)이 온 경우 — HTTP 코드 없이 */
   function yan4LoginText(url) {
     var f = window.__YAN4_LOGIN_TEXT__;
@@ -9676,6 +9681,10 @@
                     reject(new Error(yan4HttpErr(resp.status, "https://mos.coupang.net/")));
                     return;
                   }
+                  if (yan4LooksLikeHtml(resp.body)) {
+                    reject(new Error(yan4LoginText(GROSS_UPH_URL)));
+                    return;
+                  }
                   resolve(JSON.parse(String(resp.body || "{}")));
                 } catch (e0) {
                   reject(e0);
@@ -9701,6 +9710,10 @@
               onload: function (r) {
                 if (r.status < 200 || r.status >= 400) {
                   reject(new Error(yan4HttpErr(r.status, GROSS_UPH_URL)));
+                  return;
+                }
+                if (yan4LooksLikeHtml(r.responseText)) {
+                  reject(new Error(yan4LoginText(GROSS_UPH_URL)));
                   return;
                 }
                 try {
@@ -12780,6 +12793,7 @@
           );
         }
       } catch (eJ) {}
+      if (yan4LooksLikeHtml(txt)) return yan4LoginText("https://mos.coupang.net/");
       return "호출 응답 파싱 실패 · " + id;
     }
 
@@ -13720,7 +13734,7 @@
       var body = String(exp.body || "").replace(/\\\//g, "/");
       var idM = /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/.exec(body);
       if (!idM) {
-        if (/<html/i.test(body)) throw nhLoginError();
+        if (yan4LooksLikeHtml(body) || /<html/i.test(body)) throw nhLoginError();
         throw new Error("파일 ID 없음 · " + body.slice(0, 120));
       }
       var nameM = /[\w.-]+\.xlsx/.exec(body);
@@ -13741,7 +13755,7 @@
         try {
           status = String(JSON.parse(stRes.body || "{}").status || "").toUpperCase();
         } catch (eJ) {
-          if (/<html/i.test(String(stRes.body || ""))) throw nhLoginError();
+          if (yan4LooksLikeHtml(stRes.body) || /<html/i.test(String(stRes.body || ""))) throw nhLoginError();
           throw new Error("진행 상태를 읽지 못함");
         }
         if (status === "SUCCESS") break;
@@ -13835,6 +13849,7 @@
         try {
           json = JSON.parse(txt);
         } catch (eP) {
+          if (yan4LooksLikeHtml(txt)) throw nhLoginError();
           throw new Error(
             "JSON 파싱 실패 · 응답 앞 120자: " + txt.slice(0, 120)
           );
@@ -14033,7 +14048,7 @@
         btnQuery.disabled = false;
         btnStop.disabled = true;
         nhProg(0);
-        setStatus("");
+        /* 안내 칸은 tick 이 정함 (성공이면 비우고, 오류 · 로그인 필요면 그대로 남김) */
       }
     });
 
