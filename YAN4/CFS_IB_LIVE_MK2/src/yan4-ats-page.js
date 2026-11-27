@@ -6009,12 +6009,12 @@
     viewTabs.appendChild(tabOverview);
 
     /* 조회 결과 개요 (CFS HTP 개요 형식) — 큰 숫자 카드 + 보충마감별 · 온도대별 표.
-       보충대기 · 이동중은 진열완료 · 부분진열 뺀 남은 일, 센터 내 미재고는 대시보드 ⑬ */
+       진열가능 보충 · 이동중은 진열완료 · 부분진열 뺀 남은 일, 센터 내 미재고는 대시보드 ⑬ */
     var summaryStrip = document.createElement("div");
     summaryStrip.className = "yna4-ats-summary";
     summaryStrip.style.display = "none";
     var ATS_SUM_CATS = [
-      { key: "wait", label: "보충대기", color: "#2a78d6", tip: "센터 안에 재고가 있어 바로 보충할 수 있는 수량" },
+      { key: "wait", label: "진열가능 보충", color: "#2a78d6", tip: "센터 안에 재고가 있어 바로 보충할 수 있는 수량" },
       { key: "moving", label: "이동중", color: "#eda100", tip: "아직 센터에 도착하지 않은(이동중) 재고로 보충할 수량" },
       { key: "noStock", label: "센터 내 미재고", color: "#94a3b8", tip: "센터 안에 진열할 재고가 없는 수량 (대시보드 ⑬)" },
     ];
@@ -6045,7 +6045,7 @@
       if (/FROZEN|FREEZ|냉동/.test(t)) return "냉동";
       return "기타";
     }
-    /** 막대 하나 — 보충대기 · 이동중 · 미재고 를 쌓아서 */
+    /** 막대 하나 — 진열가능 보충 · 이동중 · 미재고 를 쌓아서 */
     function atsSumStackBar(o, max) {
       var h = '<div class="yna4-ats-sum-bar">';
       ATS_SUM_CATS.forEach(function (c) {
@@ -6159,9 +6159,9 @@
           (all.total ? (all[c.key] / all.total) * 100 : 0).toFixed(2) + "%;background:" + c.color + '"></span></div></div>';
       });
       h +=
-        '<div class="yna4-ats-sum-kpi is-overdue" style="border-top-color:#dc2626" title="보충기한이 이미 지난 보충대기 · 이동중 수량">' +
+        '<div class="yna4-ats-sum-kpi is-overdue" style="border-top-color:#dc2626" title="보충기한이 이미 지난 진열가능 보충 · 이동중 수량">' +
         '<div class="t">기한 지남</div><div class="v">' + atsSumNum(overdue.total) + "<small>unit</small></div>" +
-        '<div class="s">보충대기 ' + atsSumNum(overdue.wait) + "unit · 이동중 " + atsSumNum(overdue.moving) + "unit</div></div>";
+        '<div class="s">진열가능 보충 ' + atsSumNum(overdue.wait) + "unit · 이동중 " + atsSumNum(overdue.moving) + "unit</div></div>";
       h += "</div>";
       if (!collapsed) {
         h += '<div class="yna4-ats-sum-secs">';
