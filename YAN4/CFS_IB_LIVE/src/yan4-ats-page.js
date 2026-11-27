@@ -6394,9 +6394,9 @@
 
     /** CT 현황판 목록 열 — 상품 한 줄에 CT · 차량 · 기한까지 */
     var ATS_OV_LIST_HEAD = [
+      "FROM FC",
       "보충",
       "재고",
-      "FROM FC",
       "CT",
       "로케이션",
       "상품명",
@@ -6459,9 +6459,9 @@
             overdue: rem < 0,
             soon: rem >= 0 && rem <= 30,
             cells: [
+              r.fromCenter || "",
               r.obQty || "",
               r.qty || "",
-              r.fromCenter || "",
               isNoCt ? "-" : g.key,
               r.location || "",
               r.name || "",
@@ -6524,7 +6524,7 @@
         h += "<tr>";
         r.cells.forEach(function (c, ci) {
           var st = "border:1px solid #cbd5e1;padding:3px 6px;white-space:nowrap;";
-          if (ci === 0 || ci === 1) st += "text-align:right;";
+          if (ci === 1 || ci === 2) st += "text-align:right;";
           if (ci === ATS_OV_LIST_CT_COL) {
             st += "text-align:center;font-weight:700;" + (r.color ? "background:" + r.color + ";" : "");
           }
@@ -6559,7 +6559,7 @@
           var td = document.createElement("td");
           td.textContent = c;
           td.title = c;
-          if (ci === 0 || ci === 1) td.className = "is-num";
+          if (ci === 1 || ci === 2) td.className = "is-num";
           if (ci === ATS_OV_LIST_CT_COL) {
             td.className = "is-ct";
             if (r.color) td.style.background = r.color;
