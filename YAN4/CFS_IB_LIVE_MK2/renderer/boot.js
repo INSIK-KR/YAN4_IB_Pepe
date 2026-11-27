@@ -321,8 +321,12 @@
       });
       sel.appendChild(group);
     });
+    /* 센터 확인은 WMS 로그인 뒤에 (앱을 끄면 WMS 로그인이 안 남아서 켤 때 확인하면 늘 실패함) */
     paintIdle();
-    refreshCurrent();
+    label.textContent = "센터: WMS 로그인 후 확인";
+    label.title =
+      (api.hasRecord() ? "앱 기준(마지막 확인/전환): " + centerText(api.activeId()) + " · " : "") +
+      "상단 「WMS」로 로그인하면 자동으로 확인합니다 · 클릭: 지금 확인";
     label.style.cursor = "pointer";
     label.addEventListener("click", refreshCurrent);
     if (window.yan4ShellDesktop && typeof window.yan4ShellDesktop.onLoginClosed === "function") {

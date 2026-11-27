@@ -908,6 +908,31 @@ background-color: #fdba74 !important;
 
 }
 
+/* ---------- 조회 결과 개요 ---------- */
+.yna4-ats-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 2px;
+}
+.yna4-ats-summary-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 12px;
+  border: 1px solid #cbd5e1;
+  border-left-width: 4px;
+  border-radius: 8px;
+  background: #fff;
+  font: 12px "Segoe UI", "Malgun Gothic", sans-serif;
+  color: #334155;
+}
+.yna4-ats-summary-item.is-wait { border-left-color: #2563eb; }
+.yna4-ats-summary-item.is-moving { border-left-color: #f59e0b; }
+.yna4-ats-summary-item.is-noStock { border-left-color: #94a3b8; }
+.yna4-ats-summary-label { font-weight: 700; }
+.yna4-ats-summary-val { font-weight: 800; font-size: 14px; color: #0f172a; font-variant-numeric: tabular-nums; }
+
 /* ---------- 보기 탭 ---------- */
 .yna4-ats-view-tabs {
   display: flex;
