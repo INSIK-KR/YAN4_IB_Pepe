@@ -1560,6 +1560,15 @@ function createWindow() {
 }
 
 /** 앱 알림창: 로그인 풀림 안내면 제목 「재로그인 필요」 */
+/* ATS 조회 기록 등 텍스트 로그 — 다운로드 폴더에 저장, 저장한 경로를 돌려줌 */
+ipcMain.handle("yan4-save-text-log", function (e, name, text) {
+  var safe = String(name || "log.txt").replace(/[\\/:*?"<>|]+/g, "_").slice(0, 120);
+  if (!/\.txt$/i.test(safe)) safe += ".txt";
+  var p = path.join(app.getPath("downloads"), safe);
+  fs.writeFileSync(p, String(text == null ? "" : text), "utf8");
+  return p;
+});
+
 ipcMain.on("yan4-shell-alert", function (e, message, title) {
   var msg = String(message == null ? "" : message);
   var login = /로그인 필요|로그인이 필요|로그인이 풀렸/.test(msg);

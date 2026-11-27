@@ -1438,6 +1438,250 @@
     return inventoryGet(url, {});
   }
 
+  /* ---------- ATS 조회 기록 (화면에는 안 나옴) ----------
+     조회실행마다 단계별 걸린 시간 · 요청 수 · 쉰 시간을 모아 둠.
+     Ctrl+Shift+Alt+A → 최근 기록을 클립보드에 복사 + 다운로드 폴더에 txt 저장.
+     URL은 경로만(숫자는 #) — 바코드 · 쿠키 · 로그인 정보는 남기지 않음 */
+  var ATS_PERF_KEEP = 5;
+  var ATS_PERF_STORE_KEY = "yna4AtsPerfLogV1";
+  var atsPerfRun = null;
+  var atsPerfRuns = (function () {
+    try {
+      var a = JSON.parse(localStorage.getItem(ATS_PERF_STORE_KEY) || "[]");
+      return Array.isArray(a) ? a : [];
+    } catch (eL) {
+      return [];
+    }
+  })();
+  function atsPerfNow() {
+    return typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
+  }
+  function atsPerfReqKey(url) {
+    try {
+      var u = new URL(String(url || ""));
+      var host = u.hostname.split(".")[0];
+      var p = u.pathname.replace(/\d+/g, "#").replace(/[A-Z]{2,}-[A-Z0-9#-]+/gi, "*");
+      if (p.length > 60) p = p.slice(0, 60) + "…";
+      return host + " " + p;
+    } catch (eU) {
+      return "기타";
+    }
+  }
+  function atsPerfBegin(info) {
+    atsPerfRun = {
+      at: new Date().toISOString(),
+      t0: atsPerfNow(),
+      info: info || {},
+      notes: {},
+      stages: [],
+      cur: null,
+      req: {},
+    };
+  }
+  function atsPerfCloseStage() {
+    var r = atsPerfRun;
+    if (!r || !r.cur) return;
+    r.cur.ms = Math.round(atsPerfNow() - r.cur.t0);
+    delete r.cur.t0;
+    r.stages.push(r.cur);
+    r.cur = null;
+  }
+  function atsPerfStage(name) {
+    if (!atsPerfRun) return;
+    atsPerfCloseStage();
+    atsPerfRun.cur = { name: name, t0: atsPerfNow(), n: 0, reqMs: 0, maxMs: 0, fail: 0, sleepMs: 0 };
+  }
+  function atsPerfNote(k, v) {
+    if (atsPerfRun) atsPerfRun.notes[k] = v;
+  }
+  function atsPerfReq(url, ms, ok) {
+    var r = atsPerfRun;
+    if (!r) return;
+    var k = atsPerfReqKey(url);
+    var q = r.req[k] || (r.req[k] = { n: 0, ms: 0, max: 0, fail: 0 });
+    q.n++;
+    q.ms += ms;
+    if (ms > q.max) q.max = ms;
+    if (!ok) q.fail++;
+    if (r.cur) {
+      r.cur.n++;
+      r.cur.reqMs += ms;
+      if (ms > r.cur.maxMs) r.cur.maxMs = ms;
+      if (!ok) r.cur.fail++;
+    }
+  }
+  function atsPerfEnd(result, rowCount) {
+    var r = atsPerfRun;
+    if (!r) return;
+    atsPerfCloseStage();
+    var out = {
+      at: r.at,
+      totalMs: Math.round(atsPerfNow() - r.t0),
+      result: String(result || ""),
+      rows: rowCount,
+      info: r.info,
+      notes: r.notes,
+      stages: r.stages,
+      req: r.req,
+    };
+    atsPerfRun = null;
+    atsPerfRuns.push(out);
+    while (atsPerfRuns.length > ATS_PERF_KEEP) atsPerfRuns.shift();
+    try {
+      localStorage.setItem(ATS_PERF_STORE_KEY, JSON.stringify(atsPerfRuns));
+    } catch (eS) {}
+  }
+  function atsPerfWrap(fn, urlOf) {
+    return function () {
+      if (!atsPerfRun) return fn.apply(this, arguments);
+      var url = urlOf(arguments);
+      var t = atsPerfNow();
+      return fn.apply(this, arguments).then(
+        function (v) {
+          atsPerfReq(url, Math.round(atsPerfNow() - t), true);
+          return v;
+        },
+        function (e) {
+          atsPerfReq(url, Math.round(atsPerfNow() - t), false);
+          throw e;
+        }
+      );
+    };
+  }
+  (function () {
+    var rawSleep = sleep;
+    sleep = function (ms) {
+      if (atsPerfRun && atsPerfRun.cur) {
+        var n = Number(ms);
+        if (isFinite(n) && n > 0) atsPerfRun.cur.sleepMs += n;
+      }
+      return rawSleep(ms);
+    };
+    gmXhr = atsPerfWrap(gmXhr, function (a) {
+      return a[0] && a[0].url;
+    });
+    inventoryGet = atsPerfWrap(inventoryGet, function (a) {
+      return a[0];
+    });
+    inventoryPostForm = atsPerfWrap(inventoryPostForm, function (a) {
+      return a[0];
+    });
+    inboundGet = atsPerfWrap(inboundGet, function (a) {
+      return a[0];
+    });
+  })();
+
+  function atsPerfSec(ms) {
+    return (Math.round((Number(ms) || 0) / 100) / 10).toFixed(1) + "초";
+  }
+  function atsPerfDur(ms) {
+    var s = Math.round((Number(ms) || 0) / 1000);
+    return s >= 60 ? Math.floor(s / 60) + "분 " + (s % 60) + "초" : s + "초";
+  }
+  function atsPerfText() {
+    var ver = "";
+    try {
+      ver = document.title || "";
+    } catch (eT) {}
+    var lines = ["[ATS 조회 기록] " + ver + " · 복사 " + new Date().toLocaleString("ko-KR")];
+    if (!atsPerfRuns.length) {
+      lines.push("기록 없음 — 조회실행 후 다시 눌러 주세요.");
+      return lines.join("\n");
+    }
+    atsPerfRuns
+      .slice()
+      .reverse()
+      .forEach(function (r, idx) {
+        lines.push("");
+        lines.push(
+          "■ " + (idx === 0 ? "최근" : idx + 1 + "번째 전") + " · " + new Date(r.at).toLocaleString("ko-KR") +
+            " · 총 " + atsPerfDur(r.totalMs) + " · 결과 " + (r.rows != null ? r.rows + "행" : "-") + " · " + r.result
+        );
+        var meta = [];
+        Object.keys(r.info || {}).forEach(function (k) {
+          meta.push(k + " " + r.info[k]);
+        });
+        Object.keys(r.notes || {}).forEach(function (k) {
+          meta.push(k + " " + r.notes[k]);
+        });
+        if (meta.length) lines.push("  " + meta.join(" · "));
+        lines.push("  [단계] 걸린시간 · 요청수 · 요청시간합 · 최대 · 쉼 · 실패");
+        (r.stages || []).forEach(function (s) {
+          lines.push(
+            "  - " + s.name + " : " + atsPerfSec(s.ms) + " · " + s.n + "회 · " + atsPerfSec(s.reqMs) +
+              " · 최대 " + atsPerfSec(s.maxMs) + " · 쉼 " + atsPerfSec(s.sleepMs) + (s.fail ? " · 실패 " + s.fail : "")
+          );
+        });
+        lines.push("  [요청 종류] 횟수 · 평균 · 최대 · 실패");
+        Object.keys(r.req || {})
+          .sort(function (a, b) {
+            return r.req[b].ms - r.req[a].ms;
+          })
+          .forEach(function (k) {
+            var q = r.req[k];
+            lines.push(
+              "  - " + k + " : " + q.n + "회 · 평균 " + atsPerfSec(q.ms / Math.max(q.n, 1)) + " · 최대 " +
+                atsPerfSec(q.max) + (q.fail ? " · 실패 " + q.fail : "")
+            );
+          });
+      });
+    return lines.join("\n");
+  }
+  function atsPerfToast(msg) {
+    try {
+      var d = document.createElement("div");
+      d.textContent = msg;
+      d.style.cssText =
+        "position:fixed;right:16px;bottom:16px;z-index:2147483647;background:#0f172a;color:#fff;padding:10px 14px;border-radius:8px;font:600 12px 'Segoe UI','Malgun Gothic',sans-serif;box-shadow:0 6px 20px rgba(0,0,0,.25)";
+      document.body.appendChild(d);
+      setTimeout(function () {
+        d.remove();
+      }, 3500);
+    } catch (eT) {}
+  }
+  document.addEventListener(
+    "keydown",
+    function (ev) {
+      if (!(ev.ctrlKey && ev.shiftKey && ev.altKey && (ev.code === "KeyA" || /^a$/i.test(ev.key)))) return;
+      ev.preventDefault();
+      var txt = atsPerfText();
+      var saved = Promise.resolve("");
+      var api = window.yan4ShellDesktop;
+      if (api && typeof api.saveTextLog === "function") {
+        var d = new Date();
+        var p2 = function (n) {
+          return String(n).padStart(2, "0");
+        };
+        var name =
+          "ATS-조회기록-" + d.getFullYear() + p2(d.getMonth() + 1) + p2(d.getDate()) + "-" + p2(d.getHours()) + p2(d.getMinutes()) + ".txt";
+        saved = api.saveTextLog(name, txt).catch(function () {
+          return "";
+        });
+      }
+      var copied =
+        navigator.clipboard && navigator.clipboard.writeText
+          ? navigator.clipboard.writeText(txt).then(
+              function () {
+                return true;
+              },
+              function () {
+                return false;
+              }
+            )
+          : Promise.resolve(false);
+      Promise.all([copied, saved]).then(function (res) {
+        var bits = [];
+        if (res[0]) bits.push("클립보드에 복사");
+        if (res[1]) bits.push("다운로드 폴더에 저장");
+        atsPerfToast(
+          "ATS 조회 기록 " + atsPerfRuns.length + "회 · " + (bits.length ? bits.join(" · ") + "했습니다" : "복사 실패")
+        );
+      });
+    },
+    true
+  );
+
+
   /** inventory POST (form-urlencoded) — replenish/order/search 등 */
   function inventoryPostForm(url, formBody, opt) {
     opt = opt || {};
@@ -2149,6 +2393,7 @@
       seen[normKey(cart)] = 1;
       carts.push(cart);
     }
+    atsPerfNote("GC", carts.length);
     for (i = 0; i < carts.length; i++) {
       if (stopRequested) break;
       if (onProgress) onProgress(i + 1, carts.length, carts[i]);
@@ -2540,6 +2785,7 @@
       seen[sid] = 1;
       skuIds.push(sid);
     }
+    atsPerfNote("SKU", skuIds.length);
     for (i = 0; i < skuIds.length; i++) {
       if (stopRequested) break;
       if (onProgress) onProgress(i + 1, skuIds.length, skuIds[i]);
@@ -7289,6 +7535,8 @@
       transferInfoCache = Object.create(null);
       clearAtsReplenishDoneKeys();
       clearAllDashboardPanels();
+      atsPerfBegin({ 시간대: selectedCutlineUrls ? selectedCutlineUrls.length + "개" : "전체" });
+      atsPerfStage("출고 대시보드");
       try {
         var dash = await fetchOutboundItems(
           function (ci, ct, url, pg, pgMax) {
@@ -7319,6 +7567,8 @@
           setStatus(hint, "err");
           return;
         }
+        atsPerfNote("바코드", barcodes.length);
+        atsPerfStage("버퍼존 주문표");
         var bufferIndex = emptyReplenishOrderIndex();
         try {
           setAtsPipelineProgress(36, ATS_PIPELINE_PROGRESS_LABEL);
@@ -7339,6 +7589,7 @@
             console.warn("[YAN4 ATS] replenish/order 조회 실패 — 기존 버퍼존 규칙 유지", eBuf);
           }
         }
+        atsPerfStage("바코드별 재고 (+같은 유통기한 GC 이관)");
         var allRows = [];
         var bufferCoveredCt = 0;
         var bufferPartialCt = 0;
@@ -7417,6 +7668,7 @@
           }
           if (si + 1 < barcodes.length) await sleep(BARCODE_DELAY_MS);
         }
+        atsPerfStage("GC 이관 상태");
         var fallbackInfo = { replacedCt: 0, noStockCt: 0 };
         if (!stopRequested && allRows.length) {
           var gcCartCount = 0;
@@ -7435,6 +7687,7 @@
             });
           }
           setAtsPipelineProgress(88, ATS_PIPELINE_PROGRESS_LABEL);
+          atsPerfStage("진열완료 → 다음 재고");
           fallbackInfo = await replaceStowCompleteWithNextInventory(
             allRows,
             poolByBc,
@@ -7442,6 +7695,7 @@
           );
         }
         if (!stopRequested && allRows.length) {
+          atsPerfStage("SKU 보관온도");
           skuTempZoneCache = Object.create(null);
           await enrichRowsTempZoneBySku(allRows, function (done, total) {
             setAtsPipelineProgress(
@@ -7472,13 +7726,16 @@
             bits.push("출고 조회 일부 실패 " + dash.failed + "건 — 다시 조회 권장");
           }
           setStatus(bits.join(" · "), dash.failed ? "err" : "ok");
+          atsPerfEnd(bits.join(" · "), atsAllRows.length);
         }
       } catch (e) {
         setStatus("실패: " + (e && e.message ? e.message : String(e)), "err");
+        atsPerfEnd("실패: " + (e && e.message ? e.message : String(e)), null);
         if (typeof console !== "undefined" && console.warn) {
           console.warn("[YAN4 ATS]", e);
         }
       } finally {
+        if (atsPerfRun) atsPerfEnd(stopRequested ? "중지됨" : statusEl.textContent || "끝남", null);
         pipelineBusy = false;
         btnRun.disabled = false;
         btnGloc.disabled = false;
