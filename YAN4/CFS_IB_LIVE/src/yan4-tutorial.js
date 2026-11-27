@@ -174,7 +174,7 @@
         t: "#btnLoginCoupang",
         title: "WMS 로그인 (가장 먼저)",
         text:
-          "SLA·ATS 조회 대부분이 WMS 세션을 씁니다.<br>로그인이 끝나면 버튼이 「로그인완료」로 바뀝니다. 세션이 풀리면 다시 눌러 재로그인합니다.",
+          "SLA·ATS 조회 대부분이 WMS 세션을 씁니다.<br>로그인이 끝나면 버튼이 「로그인완료」로 바뀝니다.<br>조회하다가 로그인이 풀리면 버튼이 빨간 「재로그인 필요」로 바뀝니다. 그 버튼을 눌러 다시 로그인하세요.",
       },
       {
         t: all("#btnLoginPo", "#btnLoginMos", "#btnLoginShipments"),
