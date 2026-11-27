@@ -1559,6 +1559,26 @@ function createWindow() {
   });
 }
 
+/** 앱 알림창: 로그인 풀림 안내면 제목 「재로그인 필요」 */
+ipcMain.on("yan4-shell-alert", function (e, message, title) {
+  var msg = String(message == null ? "" : message);
+  var login = /로그인 필요|로그인이 필요|로그인이 풀렸/.test(msg);
+  try {
+    var win = BrowserWindow.fromWebContents(e.sender);
+    var opts = {
+      type: login ? "warning" : "none",
+      title: title || (login ? "재로그인 필요" : "CFS IB LIVE"),
+      message: msg,
+      buttons: ["확인"],
+      defaultId: 0,
+      noLink: true,
+    };
+    if (win) dialog.showMessageBoxSync(win, opts);
+    else dialog.showMessageBoxSync(opts);
+  } catch (eAlert) {}
+  e.returnValue = true;
+});
+
 ipcMain.handle("yan4-shell-session-status", async function () {
   return refreshSessionStatus();
 });
