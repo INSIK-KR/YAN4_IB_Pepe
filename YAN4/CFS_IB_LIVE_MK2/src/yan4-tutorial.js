@@ -321,7 +321,7 @@
         tab: "피벗 표",
         before: slaCloseDrill,
         t: slaFirstCell,
-        act: "이 칸을 더블클릭해 보세요",
+        show: "이렇게 칸을 더블클릭합니다",
         snap: slaDrillKey,
         done: drillOpenedBy(null),
         title: "급한 칸부터 — 더블클릭",
@@ -356,8 +356,9 @@
       },
       {
         tab: "피벗 표",
+        before: slaCloseDrill,
         t: slaDirectCell,
-        act: "직납 칸을 더블클릭해 보세요",
+        show: "직납 칸도 똑같이 더블클릭합니다",
         snap: slaDrillKey,
         done: drillOpenedBy(/^DIRECT/),
         title: "D · 직납 칸",
@@ -699,7 +700,7 @@
     [
       {
         title: "3페이지 · 토트 바코드 화면",
-        text: "GC바코드 하나로 상품과 그 상품이 담긴 토트 바코드를 크게 띄웁니다. 스캐너로 바로 찍을 수 있습니다.",
+        text: "GC바코드 하나를 넣으면, 그 GC가 들어 있는 CT바코드 안의 모든 GC바코드와 상품 바코드를 크게 띄웁니다. 스캐너로 바로 찍을 수 있습니다.",
       },
       { t: inPage("3", ".yna4-page3-toolbar"), title: "GC바코드 · 조회", text: "GC바코드를 넣고 「조회」를 누릅니다. 「중지」로 멈춥니다." },
       { t: inPage("3", ".yna4-page3-name-head"), title: "상품명 · 총 유닛", text: "조회한 상품 이름과 총 유닛 수입니다." },
@@ -708,7 +709,7 @@
           return qa(".yna4-page3-col", pageEl("3")).filter(isVis)[0] || null;
         },
         title: "토트바코드",
-        text: "상품이 담긴 토트 바코드입니다. 키보드 <b>Q</b> 이전 · <b>E</b> 다음으로 넘깁니다. 아래 숫자는 몇 번째 토트인지입니다.",
+        text: "CT 안에 든 GC바코드입니다. 키보드 <b>Q</b> 이전 · <b>E</b> 다음으로 넘깁니다. 아래 숫자는 몇 번째 GC인지입니다.",
       },
       {
         t: function () {
@@ -774,6 +775,11 @@
       "@keyframes yna4TutPulse{0%,100%{outline:0 solid rgba(34,197,94,.6);}50%{outline:6px solid rgba(34,197,94,.35);}}",
       ".yna4-tut-badge{position:fixed;top:42px;left:50%;transform:translateX(-50%);background:#fef3c7;border:2px solid #f59e0b;color:#78350f;font-weight:800;font-size:12px;padding:5px 14px;border-radius:999px;pointer-events:none;white-space:nowrap;box-shadow:0 6px 16px rgba(0,0,0,.25);}",
       ".yna4-tut-note--act{color:#15803d !important;font-weight:800;font-size:13px !important;}",
+      ".yna4-tut-cursor{position:fixed;width:28px;height:28px;margin:-2px 0 0 -5px;pointer-events:none;transition:left .9s ease-in-out,top .9s ease-in-out,transform .1s;filter:drop-shadow(0 2px 3px rgba(0,0,0,.45));}",
+      ".yna4-tut-cursor svg{display:block;}",
+      ".yna4-tut-cursor.is-press{transform:scale(.8);}",
+      ".yna4-tut-click{position:fixed;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;border:3px solid #22c55e;box-sizing:border-box;pointer-events:none;animation:yna4TutClick .3s ease-out forwards;}",
+      "@keyframes yna4TutClick{from{transform:scale(.3);opacity:1;}to{transform:scale(1.3);opacity:0;}}",
       ".yna4-tut-spot{position:fixed;border:3px solid #fbbf24;border-radius:8px;box-shadow:0 0 0 9999px rgba(15,23,42,.6);pointer-events:none;transition:all .2s ease;}",
       ".yna4-tut-bubble{position:fixed;display:flex;gap:12px;align-items:flex-start;background:#fff;border-radius:14px;border:2px solid #1d4ed8;box-shadow:0 16px 40px rgba(15,23,42,.35);padding:12px 14px 10px 10px;box-sizing:border-box;color:#0f172a;}",
       ".yna4-tut-frog{width:76px;height:76px;flex:0 0 auto;border-radius:50%;background:#e0f2fe;border:2px solid #bfdbfe;}",
@@ -951,6 +957,7 @@
       cur.root.remove();
     } catch (e) {}
     if (cur.actTimer) clearInterval(cur.actTimer);
+    clearShow();
     if (cur.demo) endDemo(cur.demo);
     if (cur.slaTab0) selectSlaTab(cur.slaTab0);
     window.removeEventListener("keydown", onKey, true);
@@ -980,9 +987,98 @@
     render();
   }
 
+  /* ───────── 보여 주기 단계: 마우스 커서가 칸으로 가서 더블클릭 → 바뀌는 모습을 보여 줌 ───────── */
+  var CURSOR_SVG =
+    '<svg width="28" height="28" viewBox="0 0 24 24"><path d="M4 2 L4 19 L8.5 14.8 L11.6 21.5 L14.3 20.3 L11.2 13.7 L17.5 13.7 Z" fill="#fff" stroke="#0f172a" stroke-width="1.6" stroke-linejoin="round"/></svg>';
+  function clearShow() {
+    if (!cur) return;
+    (cur.showTimers || []).forEach(function (t) {
+      clearTimeout(t);
+      clearInterval(t);
+    });
+    cur.showTimers = [];
+    qa(".yna4-tut-cursor, .yna4-tut-click", cur.root).forEach(function (n) {
+      n.remove();
+    });
+  }
+  function runShow(step, el, note) {
+    var me = cur, iMe = cur.i;
+    me.showTimers = me.showTimers || [];
+    var alive = function () {
+      return cur === me && cur.i === iMe;
+    };
+    var later = function (fn, ms) {
+      me.showTimers.push(
+        setTimeout(function () {
+          if (alive()) fn();
+        }, ms)
+      );
+    };
+    var snap0 = null;
+    try {
+      snap0 = typeof step.snap === "function" ? step.snap() : null;
+    } catch (eSnap) {}
+    var spotOf = function () {
+      var r = el.getBoundingClientRect();
+      return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+    };
+    var cursor = document.createElement("div");
+    cursor.className = "yna4-tut-cursor";
+    cursor.innerHTML = CURSOR_SVG;
+    var br = me.bubble.getBoundingClientRect();
+    cursor.style.left = Math.round(br.left + br.width / 2) + "px";
+    cursor.style.top = Math.round(br.top + 24) + "px";
+    me.root.appendChild(cursor);
+    later(function () {
+      var p = spotOf();
+      cursor.style.left = p.x + "px";
+      cursor.style.top = p.y + "px";
+    }, 400);
+    var click = function () {
+      var p = spotOf();
+      var c = document.createElement("div");
+      c.className = "yna4-tut-click";
+      c.style.left = p.x + "px";
+      c.style.top = p.y + "px";
+      me.root.appendChild(c);
+      cursor.classList.add("is-press");
+      later(function () {
+        cursor.classList.remove("is-press");
+        c.remove();
+      }, 200);
+    };
+    later(click, 1500);
+    later(click, 1750);
+    later(function () {
+      try {
+        el.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true, view: window, detail: 2 }));
+      } catch (eDbl) {}
+      var tries = 0;
+      var poll = setInterval(function () {
+        if (!alive()) return clearInterval(poll);
+        var ok = true;
+        try {
+          if (typeof step.done === "function") ok = !!step.done(snap0);
+        } catch (eDone) {
+          ok = false;
+        }
+        if (!ok && ++tries < 40) return;
+        clearInterval(poll);
+        note.textContent = ok ? "✓ 이렇게 아래에 목록이 열립니다" : "목록이 열리지 않았습니다 · 「다음」을 누르세요";
+        place();
+        if (ok) later(function () {
+          go(iMe + 1);
+        }, 1600);
+      }, 150);
+      me.showTimers.push(poll);
+    }, 1950);
+  }
+
   function render() {
     var step = cur.steps[cur.i];
-    if (typeof step.before === "function" && cur.beforeAt !== cur.i) {
+    clearShow();
+    /* 보여 주기 단계는 이전으로 돌아와도 다시 처음부터 (열린 드릴 닫고) */
+    if (typeof step.before === "function" && (cur.beforeAt !== cur.i || step.show)) {
       cur.beforeAt = cur.i;
       try {
         step.before();
@@ -1000,7 +1096,7 @@
     if (els.length) {
       var r0 = unionRect(els);
       /* 직접 해 보기 칸은 항상 가운데로 (고정 머리글 밑에 숨으면 클릭이 머리글에 맞음) */
-      if (step.act || r0.top < 40 || r0.bottom > window.innerHeight - 10) {
+      if (step.act || step.show || r0.top < 40 || r0.bottom > window.innerHeight - 10) {
         try {
           els[0].scrollIntoView({ block: "center", inline: "nearest" });
         } catch (e) {}
@@ -1012,11 +1108,14 @@
     var note = b.querySelector(".yna4-tut-note");
     var missing = !!step.t && !els.length;
     var acting = !!(step.act && els.length);
-    note.className = "yna4-tut-note" + (acting ? " yna4-tut-note--act" : "");
+    var showing = !!(step.show && els.length);
+    note.className = "yna4-tut-note" + (acting || showing ? " yna4-tut-note--act" : "");
     note.textContent = missing
       ? step.missing || NO_TARGET_NOTE
       : acting
         ? "👉 " + step.act
+        : showing
+          ? "🖱 " + step.show
         : cur.demo && step.demoNote
           ? step.demoNote
           : "";
@@ -1059,6 +1158,7 @@
     try {
       b.querySelector(".yna4-tut-next").focus({ preventScroll: true });
     } catch (e) {}
+    if (showing) runShow(step, els[0], note);
   }
 
   function place() {
