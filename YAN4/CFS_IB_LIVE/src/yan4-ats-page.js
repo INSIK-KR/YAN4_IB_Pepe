@@ -6139,12 +6139,10 @@
       var pct = function (v) {
         return all.total ? Math.round((v / all.total) * 100) + "%" : "-";
       };
-      var h =
-        '<div class="yna4-ats-sum-top"><b>개요</b><span>진열완료 · 부분진열 된 건은 빠짐</span>' +
-        '<button type="button" class="yna4-ats-sum-toggle">' + (collapsed ? "표 펼치기 ▾" : "표 접기 ▴") + "</button></div>";
-      h += '<div class="yna4-ats-sum-kpis">';
+      var h = '<div class="yna4-ats-sum-kpis">';
       h +=
-        '<div class="yna4-ats-sum-hero"><div class="t">남은 보충</div><div class="v">' + atsSumNum(all.total) +
+        '<div class="yna4-ats-sum-hero"><button type="button" class="yna4-ats-sum-toggle" title="보충마감별 · 온도대별 표 ' +
+        (collapsed ? "펼치기" : "접기") + '">' + (collapsed ? "표 ▾" : "표 ▴") + '</button><div class="t">남은 보충</div><div class="v">' + atsSumNum(all.total) +
         '<small>unit</small></div><div class="s yna4-ats-sum-hero-dl">' +
         dlRows
           .map(function (x) {
