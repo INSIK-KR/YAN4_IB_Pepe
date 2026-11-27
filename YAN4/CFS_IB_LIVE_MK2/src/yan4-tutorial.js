@@ -291,7 +291,7 @@
         tab: "개요",
         t: inPage("sla", ".yna4-sla-overview-host"),
         title: "개요",
-        text: "조회 결과를 한 장으로 요약합니다. 채널별(RocketMart · 이관 · AG · 직납) · 온도대별로 남은 UNIT을 먼저 봅니다.",
+        text: "남은 보충을 한눈에 봅니다.<br><b>위 카드</b> 진열가능 보충 · 이동중 · 센터 내 미재고 unit<br><b>아래 표</b> 입고마감시간별 · 온도대별 unit · 「표」 버튼으로 접고 펼칩니다.",
       },
       {
         tab: "개요",
