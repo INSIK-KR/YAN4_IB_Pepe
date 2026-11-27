@@ -6070,7 +6070,7 @@
         ATS_SUM_CATS.forEach(function (c) {
           h += '<td class="is-num">' + (r.o[c.key] ? atsSumNum(r.o[c.key]) : '<span class="is-zero">-</span>') + "</td>";
         });
-        h += '<td class="is-num is-total">' + atsSumNum(r.o.total) + "<small>" + r.o.n + '건</small></td><td class="is-bar">' +
+        h += '<td class="is-num is-total">' + atsSumNum(r.o.total) + '</td><td class="is-bar">' +
           atsSumStackBar(r.o, max) + "</td></tr>";
       });
       return h + "</tbody></table></div>";
@@ -6145,19 +6145,19 @@
       h += '<div class="yna4-ats-sum-kpis">';
       h +=
         '<div class="yna4-ats-sum-hero"><div class="t">남은 보충</div><div class="v">' + atsSumNum(all.total) +
-        '<small>unit</small></div><div class="s">' + all.n + "건 · 보충마감 " + dlRows.length + "개</div></div>";
+        '<small>unit</small></div><div class="s">보충마감 ' + dlRows.length + "개</div></div>";
       ATS_SUM_CATS.forEach(function (c) {
         h +=
           '<div class="yna4-ats-sum-kpi is-' + c.key + '" style="border-top-color:' + c.color + '" title="' + atsSumEsc(c.tip) + '">' +
           '<div class="t">' + atsSumEsc(c.label) + '</div><div class="v">' + atsSumNum(all[c.key]) + "<small>unit</small></div>" +
-          '<div class="s">' + all[c.key + "N"] + "건 · " + pct(all[c.key]) + "</div>" +
+          '<div class="s">전체의 ' + pct(all[c.key]) + "</div>" +
           '<div class="yna4-ats-sum-bar"><span style="width:' +
           (all.total ? (all[c.key] / all.total) * 100 : 0).toFixed(2) + "%;background:" + c.color + '"></span></div></div>';
       });
       h +=
         '<div class="yna4-ats-sum-kpi is-overdue" style="border-top-color:#dc2626" title="보충기한이 이미 지난 보충대기 · 이동중 수량">' +
         '<div class="t">기한 지남</div><div class="v">' + atsSumNum(overdue.total) + "<small>unit</small></div>" +
-        '<div class="s">' + overdue.n + "건 · 보충대기 " + atsSumNum(overdue.wait) + " · 이동중 " + atsSumNum(overdue.moving) + "</div></div>";
+        '<div class="s">보충대기 ' + atsSumNum(overdue.wait) + " · 이동중 " + atsSumNum(overdue.moving) + "</div></div>";
       h += "</div>";
       if (!collapsed) {
         h += '<div class="yna4-ats-sum-secs">';
