@@ -948,6 +948,7 @@ background-color: #fdba74 !important;
 .yna4-ats-sum-table td.is-total { font-weight: 800; }
 .yna4-ats-sum-table td.is-total small { font-weight: 500; color: #64748b; margin-left: 4px; }
 .yna4-ats-sum-table .is-zero { color: #cbd5e1; }
+.yna4-ats-sum-table td small.u { font-size: 10px; font-weight: 500; color: #94a3b8; margin-left: 2px; }
 .yna4-ats-sum-table .is-bar { width: 30%; min-width: 80px; }
 .yna4-ats-sum-table td.is-bar .yna4-ats-sum-bar { margin-top: 0; }
 .yna4-ats-sum-table tr.is-overdue td.is-key, .yna4-ats-sum-table tr.is-overdue td.is-key small { color: #b91c1c; }
