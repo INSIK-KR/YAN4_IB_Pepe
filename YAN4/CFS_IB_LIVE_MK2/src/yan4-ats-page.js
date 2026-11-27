@@ -6314,6 +6314,16 @@
       return t.split(" — ")[0] || "";
     }
 
+    /** 하차시간 → 비교용 숫자 (없거나 못 읽으면 Infinity) */
+    function atsUnloadMs(raw) {
+      var m = String(raw || "").match(/(\d{4})[-./](\d{1,2})[-./](\d{1,2})[\sT]+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+      if (!m) return Infinity;
+      return new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0)).getTime();
+    }
+
+    /** 보충수량이 이만큼 이상이면 현황판 목록 보충 칸 색칠 */
+    var ATS_OV_BIG_OB = 25;
+
     function collectAtsOverviewGroups(buckets) {
       var byKey = Object.create(null);
       var groups = [];
@@ -6340,6 +6350,7 @@
               vehicle: [],
               temps: [],
               unload: "",
+              unloadMs: Infinity,
               deadline: "",
               remain: Infinity,
               moving: 0,
@@ -6357,6 +6368,8 @@
           var tz = atsOverviewTemp(r, pi);
           if (tz && g.temps.indexOf(tz) < 0) g.temps.push(tz);
           if (r.unloadTime && !g.unload) g.unload = r.unloadTime;
+          var ums = atsUnloadMs(r.unloadTime);
+          if (ums < g.unloadMs) g.unloadMs = ums;
           if (String(r.status || "").trim() === "이동중") g.moving++;
           var kind = atsLocationIsBufferZone(r.location)
             ? 0
@@ -6377,7 +6390,9 @@
         });
         gg.prioRank = atsPriorityRank(gg.prio[0]);
       });
+      /* 하차시간 빠른 CT부터 · 하차시간 없는 CT(직납 · 버퍼존 등)는 그 뒤 */
       groups.sort(function (a, b) {
+        if (a.unloadMs !== b.unloadMs) return a.unloadMs < b.unloadMs ? -1 : 1;
         if (a.kind !== b.kind) return a.kind - b.kind;
         var c = atsCompareRank(a.prioRank, b.prioRank);
         if (c) return c;
@@ -6409,6 +6424,8 @@
       "남은 시간",
     ];
     var ATS_OV_LIST_CT_COL = 3;
+    var ATS_OV_LIST_OB_COL = 1;
+    var ATS_OV_LIST_NAME_COL = 5;
     var ATS_OV_LIST_REMAIN_COL = 12;
     var ATS_OV_LIST_COLORS = [
       "#e9d5ff",
@@ -6456,6 +6473,8 @@
             ctStart: xi === 0,
             ct: isNoCt ? "" : g.key,
             obQty: r.obQty,
+            bigOb: parseObQtyNumber(r.obQty) >= ATS_OV_BIG_OB,
+            prepack: x.dash === 1,
             overdue: rem < 0,
             soon: rem >= 0 && rem <= 30,
             cells: [
@@ -6525,6 +6544,8 @@
         r.cells.forEach(function (c, ci) {
           var st = "border:1px solid #cbd5e1;padding:3px 6px;white-space:nowrap;";
           if (ci === 1 || ci === 2) st += "text-align:right;";
+          if (ci === ATS_OV_LIST_OB_COL && r.bigOb) st += "background:#fecaca;color:#991b1b;font-weight:700;";
+          if (ci === ATS_OV_LIST_NAME_COL && r.prepack) st += "background:#e5e7eb;";
           if (ci === ATS_OV_LIST_CT_COL) {
             st += "text-align:center;font-weight:700;" + (r.color ? "background:" + r.color + ";" : "");
           }
@@ -6560,6 +6581,11 @@
           td.textContent = c;
           td.title = c;
           if (ci === 1 || ci === 2) td.className = "is-num";
+          if (ci === ATS_OV_LIST_OB_COL && r.bigOb) td.className += " is-big-ob";
+          if (ci === ATS_OV_LIST_NAME_COL && r.prepack) {
+            td.className = "is-prepack";
+            td.title = c + " · 프리팩 대기";
+          }
           if (ci === ATS_OV_LIST_CT_COL) {
             td.className = "is-ct";
             if (r.color) td.style.background = r.color;
