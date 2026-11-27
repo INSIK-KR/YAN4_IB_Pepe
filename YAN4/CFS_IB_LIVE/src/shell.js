@@ -18253,7 +18253,24 @@
         sel +
           " .yna4-pane-mod--nh-tracking .yna4-nh-sum-table th:last-child," +
           sel +
-          " .yna4-pane-mod--nh-tracking .yna4-nh-sum-table td:last-child{min-width:57px;width:1%;white-space:nowrap;}",
+          " .yna4-pane-mod--nh-tracking .yna4-nh-sum-table td:last-child{min-width:0;width:1%;white-space:nowrap;}",
+        /* 노트북 화면 가로 스크롤 없앰: 칸 여백 · 호출 버튼 작게, 머리글은 두 줄 허용 */
+        sel +
+          " .yna4-pane-mod--nh-tracking .yna4-nh-scroll{padding:6px;}",
+        sel +
+          " .yna4-pane-mod--nh-tracking .yna4-nh-sum-table th{padding:6px 4px;white-space:normal;word-break:keep-all;line-height:1.15;}",
+        sel +
+          " .yna4-pane-mod--nh-tracking .yna4-nh-sum-table > tbody > tr:not(.nh-inline-detail) > td{padding:6px 4px;}",
+        sel +
+          " .yna4-pane-mod--nh-tracking .yna4-nh-sum-table th:first-child," +
+          sel +
+          " .yna4-pane-mod--nh-tracking .yna4-nh-sum-table > tbody > tr:not(.nh-inline-detail) > td:first-child{padding-left:6px;}",
+        sel +
+          " .yna4-pane-mod--nh-tracking .yna4-nh-sum-table th:last-child," +
+          sel +
+          " .yna4-pane-mod--nh-tracking .yna4-nh-sum-table > tbody > tr:not(.nh-inline-detail) > td:last-child{padding-right:5px;}",
+        sel +
+          " .yna4-pane-mod--nh-tracking .yna4-nh-sum-table .yna4-nh-call-btn{font-size:8px;padding:3px 5px;border-radius:5px;}",
         ".yna4-sla-modal{position:fixed;inset:0;z-index:2147483647;}",
         ".yna4-sla-modal-backdrop{position:absolute;inset:0;background:rgba(15,23,42,.45);}",
         ".yna4-sla-modal-dialog{position:absolute;left:2vw;right:2vw;top:4vh;bottom:4vh;background:#fff;border-radius:10px;border:1px solid #cbd5e1;display:flex;flex-direction:column;overflow:hidden;}",
