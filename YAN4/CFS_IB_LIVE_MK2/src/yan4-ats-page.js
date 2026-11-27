@@ -6394,14 +6394,13 @@
 
     /** CT 현황판 목록 열 — 상품 한 줄에 CT · 차량 · 기한까지 */
     var ATS_OV_LIST_HEAD = [
-      "로케이션",
       "보충",
       "재고",
       "FROM FC",
       "CT",
-      "차량번호",
+      "로케이션",
       "상품명",
-      "SKU ID",
+      "차량번호",
       "온도대",
       "상태",
       "우선순위",
@@ -6409,8 +6408,8 @@
       "보충기한",
       "남은 시간",
     ];
-    var ATS_OV_LIST_CT_COL = 4;
-    var ATS_OV_LIST_REMAIN_COL = 13;
+    var ATS_OV_LIST_CT_COL = 3;
+    var ATS_OV_LIST_REMAIN_COL = 12;
     var ATS_OV_LIST_COLORS = [
       "#e9d5ff",
       "#bfdbfe",
@@ -6460,14 +6459,13 @@
             overdue: rem < 0,
             soon: rem >= 0 && rem <= 30,
             cells: [
-              r.location || "",
               r.obQty || "",
               r.qty || "",
               r.fromCenter || "",
               isNoCt ? "-" : g.key,
-              r.vehicleNo || "",
+              r.location || "",
               r.name || "",
-              r.skuId || "",
+              r.vehicleNo || "",
               atsOverviewTemp(r, x.dash),
               r.status || "",
               r.priority || "",
@@ -6526,7 +6524,7 @@
         h += "<tr>";
         r.cells.forEach(function (c, ci) {
           var st = "border:1px solid #cbd5e1;padding:3px 6px;white-space:nowrap;";
-          if (ci === 1 || ci === 2) st += "text-align:right;";
+          if (ci === 0 || ci === 1) st += "text-align:right;";
           if (ci === ATS_OV_LIST_CT_COL) {
             st += "text-align:center;font-weight:700;" + (r.color ? "background:" + r.color + ";" : "");
           }
@@ -6561,7 +6559,7 @@
           var td = document.createElement("td");
           td.textContent = c;
           td.title = c;
-          if (ci === 1 || ci === 2) td.className = "is-num";
+          if (ci === 0 || ci === 1) td.className = "is-num";
           if (ci === ATS_OV_LIST_CT_COL) {
             td.className = "is-ct";
             if (r.color) td.style.background = r.color;
