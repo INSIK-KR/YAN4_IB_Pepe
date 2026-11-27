@@ -908,30 +908,50 @@ background-color: #fdba74 !important;
 
 }
 
-/* ---------- 조회 결과 개요 ---------- */
-.yna4-ats-summary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 8px 0 2px;
+/* ---------- 조회 결과 개요 (CFS HTP 개요 형식) ---------- */
+.yna4-ats-summary { margin: 10px 0 4px; font-family: "Segoe UI", "Malgun Gothic", sans-serif; color: #0f172a; }
+.yna4-ats-sum-top { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.yna4-ats-sum-top b { font-size: 15px; }
+.yna4-ats-sum-top span { font-size: 11px; color: #64748b; }
+.yna4-ats-sum-toggle { margin-left: auto; font: 700 11px "Segoe UI", "Malgun Gothic", sans-serif; color: #1d4ed8; background: none; border: 0; cursor: pointer; }
+.yna4-ats-sum-kpis { display: grid; grid-template-columns: 1.2fr repeat(4, minmax(0, 1fr)); gap: 8px; }
+.yna4-ats-sum-hero, .yna4-ats-sum-kpi { border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.yna4-ats-sum-hero { background: #0f172a; color: #fff; }
+.yna4-ats-sum-kpi { background: #fff; border: 1px solid #e2e8f0; border-top: 3px solid #94a3b8; }
+.yna4-ats-sum-hero .t, .yna4-ats-sum-kpi .t { font-size: 11px; font-weight: 600; color: #64748b; }
+.yna4-ats-sum-hero .t { color: #94a3b8; }
+.yna4-ats-sum-hero .v, .yna4-ats-sum-kpi .v { font-size: 24px; font-weight: 800; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.yna4-ats-sum-hero .v { font-size: 28px; }
+.yna4-ats-sum-hero .v small, .yna4-ats-sum-kpi .v small { font-size: 11px; font-weight: 600; margin-left: 3px; color: #94a3b8; }
+.yna4-ats-sum-hero .s, .yna4-ats-sum-kpi .s { font-size: 11px; color: #64748b; font-variant-numeric: tabular-nums; }
+.yna4-ats-sum-hero .s { color: #cbd5e1; }
+.yna4-ats-sum-kpi.is-overdue .v { color: #b91c1c; }
+.yna4-ats-sum-bar { display: flex; height: 7px; border-radius: 99px; background: #f1f5f9; overflow: hidden; margin-top: 4px; }
+.yna4-ats-sum-bar span { display: block; height: 100%; }
+.yna4-ats-sum-secs { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 8px; margin-top: 8px; align-items: start; }
+.yna4-ats-sum-sec { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 8px 10px; min-width: 0; }
+.yna4-ats-sum-sec-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+.yna4-ats-sum-sec-head b { font-size: 13px; }
+.yna4-ats-sum-sec-head span { font-size: 11px; color: #64748b; }
+.yna4-ats-sum-empty { font-size: 12px; color: #94a3b8; padding: 6px 0; }
+.yna4-ats-sum-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.yna4-ats-sum-table th { font-size: 11px; font-weight: 600; color: #64748b; text-align: left; padding: 3px 6px; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
+.yna4-ats-sum-table th i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; }
+.yna4-ats-sum-table td { padding: 4px 6px; border-bottom: 1px solid #f1f5f9; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.yna4-ats-sum-table .is-num { text-align: right; }
+.yna4-ats-sum-table td.is-key { font-weight: 700; }
+.yna4-ats-sum-table td.is-key small { font-weight: 500; color: #64748b; margin-left: 6px; }
+.yna4-ats-sum-table td.is-total { font-weight: 800; }
+.yna4-ats-sum-table td.is-total small { font-weight: 500; color: #64748b; margin-left: 4px; }
+.yna4-ats-sum-table .is-zero { color: #cbd5e1; }
+.yna4-ats-sum-table .is-bar { width: 30%; min-width: 80px; }
+.yna4-ats-sum-table td.is-bar .yna4-ats-sum-bar { margin-top: 0; }
+.yna4-ats-sum-table tr.is-overdue td.is-key, .yna4-ats-sum-table tr.is-overdue td.is-key small { color: #b91c1c; }
+.yna4-ats-sum-table tr.is-soon td.is-key, .yna4-ats-sum-table tr.is-soon td.is-key small { color: #c2410c; }
+@media (max-width: 1100px) {
+  .yna4-ats-sum-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .yna4-ats-sum-secs { grid-template-columns: minmax(0, 1fr); }
 }
-.yna4-ats-summary-item {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 6px 12px;
-  border: 1px solid #cbd5e1;
-  border-left-width: 4px;
-  border-radius: 8px;
-  background: #fff;
-  font: 12px "Segoe UI", "Malgun Gothic", sans-serif;
-  color: #334155;
-}
-.yna4-ats-summary-item.is-wait { border-left-color: #2563eb; }
-.yna4-ats-summary-item.is-moving { border-left-color: #f59e0b; }
-.yna4-ats-summary-item.is-noStock { border-left-color: #94a3b8; }
-.yna4-ats-summary-label { font-weight: 700; }
-.yna4-ats-summary-val { font-weight: 800; font-size: 14px; color: #0f172a; font-variant-numeric: tabular-nums; }
 
 /* ---------- 보기 탭 ---------- */
 .yna4-ats-view-tabs {
