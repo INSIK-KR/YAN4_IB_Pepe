@@ -6145,7 +6145,13 @@
       h += '<div class="yna4-ats-sum-kpis">';
       h +=
         '<div class="yna4-ats-sum-hero"><div class="t">남은 보충</div><div class="v">' + atsSumNum(all.total) +
-        '<small>unit</small></div><div class="s">보충마감 ' + dlRows.length + "개</div></div>";
+        '<small>unit</small></div><div class="s yna4-ats-sum-hero-dl">' +
+        dlRows
+          .map(function (x) {
+            return '<span class="' + (x.cls || "") + '">' + atsSumEsc(x.label) + " <b>" + atsSumNum(x.o.total) + "</b></span>";
+          })
+          .join("") +
+        "</div></div>";
       ATS_SUM_CATS.forEach(function (c) {
         h +=
           '<div class="yna4-ats-sum-kpi is-' + c.key + '" style="border-top-color:' + c.color + '" title="' + atsSumEsc(c.tip) + '">' +
