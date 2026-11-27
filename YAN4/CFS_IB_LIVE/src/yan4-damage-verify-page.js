@@ -1447,7 +1447,7 @@
       return;
     }
     running = true;
-    setStatus("파싱 " + blocks.length + "건…");
+    setStatus("읽는 중 " + blocks.length + "건…");
     lastRows = [];
     wmsGcProductCache = Object.create(null);
     var i, j, reports, report, pack;
