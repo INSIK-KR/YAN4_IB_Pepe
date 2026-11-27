@@ -1195,3 +1195,6 @@ background-color: #fdba74 !important;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* 보충마감 칩이 조회실행 줄 옆에 있을 때 — 한 줄 다 차지하지 않게 */
+.yna4-ats-toolbar-row--main .yna4-ats-deadline-chips { flex: 0 1 auto !important; width: auto !important; margin-left: 6px; }

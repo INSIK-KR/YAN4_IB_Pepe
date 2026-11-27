@@ -3943,8 +3943,7 @@
     if (!chipHost) return;
     var list = collectUniqueAtsDeadlinesFromTables(tablesByDash);
     if (!list.length) {
-      chipHost.innerHTML =
-        "<span class=\"yna4-ats-deadline-chips-hint\">조회 실행 후 보충마감 시간대·잔여 건수 표시</span>";
+      chipHost.innerHTML = "";
       return;
     }
     var deadlineCounts = collectAtsDeadlineCountsFromTables(tablesByDash);
@@ -5923,8 +5922,7 @@
       "aria-label",
       "보충마감별 팀즈 복사·PDF 출력 필터"
     );
-    deadlineChipsHost.innerHTML =
-      "<span class=\"yna4-ats-deadline-chips-hint\">조회 실행 후 보충마감 시간대·잔여 건수 표시</span>";
+    deadlineChipsHost.innerHTML = "";
 
     var btnPrintPdf = document.createElement("button");
     btnPrintPdf.type = "button";
@@ -5942,11 +5940,11 @@
     toolbarRowTeams.appendChild(teamsBtnGroup);
     toolbarRowTeams.appendChild(ovTempGroup);
     toolbarRowTeams.appendChild(btnPrintPdf);
-    toolbarRowDeadline.appendChild(deadlineChipsHost);
+    /* 보충마감 칩 — 따로 한 줄 쓰지 않고 조회실행 · AUTO · 10MIN 줄 옆에 */
+    toolbarRowMain.appendChild(deadlineChipsHost);
     toolbar.appendChild(toolbarRowMain);
     toolbar.appendChild(toolbarRowCutline);
     toolbar.appendChild(toolbarRowTeams);
-    toolbar.appendChild(toolbarRowDeadline);
 
     var dashboardsScroll = document.createElement("div");
     dashboardsScroll.className = "yna4-ats-dashboards-scroll";
@@ -6862,25 +6860,6 @@
       }
       var groups = collectAtsOverviewGroups(atsLastBuckets);
       refreshAtsOvTempButtons(groups);
-      var totalOb = 0, overdue = 0, soon = 0, totalRows = 0;
-      groups.forEach(function (g) {
-        totalOb += g.obSum;
-        totalRows += g.rows.length;
-        if (g.remain < 0) overdue++;
-        else if (g.remain <= 30) soon++;
-      });
-      var sumBar = document.createElement("div");
-      sumBar.className = "yna4-ats-ov-summary-bar";
-      var sum = document.createElement("div");
-      sum.className = "yna4-ats-ov-summary";
-      sum.textContent =
-        "남은 CT " + groups.length + "개 · " + totalRows + "건 · 보충 " +
-        (formatObQtyNumber(totalOb) || "0") + "unit" +
-        (overdue ? " · 기한 지남 " + overdue : "") +
-        (soon ? " · 30분 이내 " + soon : "") +
-        " · 진열완료(초록)·부분진열(주황) 제외 · CT마다 색으로 구분";
-      sumBar.appendChild(sum);
-      overviewHost.appendChild(sumBar);
       if (!groups.length) {
         var p1 = document.createElement("p");
         p1.className = "yna4-ats-ov-empty";
