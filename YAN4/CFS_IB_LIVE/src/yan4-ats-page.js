@@ -6049,32 +6049,47 @@
       return "기타";
     }
     /** 막대 하나 — 진열가능 보충 · 이동중 · 미재고 를 쌓아서 */
-    function atsSumStackBar(o, max) {
+    function atsSumStackBar(o, max, cats) {
       var h = '<div class="yna4-ats-sum-bar">';
-      ATS_SUM_CATS.forEach(function (c) {
+      (cats || ATS_SUM_CATS).forEach(function (c) {
         var w = max ? (o[c.key] / max) * 100 : 0;
         if (w > 0) h += '<span style="width:' + w.toFixed(2) + "%;background:" + c.color + '"></span>';
       });
       return h + "</div>";
     }
-    function atsSumTable(title, sub, firstHead, rows, max, rowExtra) {
+    /** cats 를 주면 그 항목만 열로 (온도대별은 센터 내 미재고 빼고). 합계 · 막대도 그 항목만 */
+    function atsSumTable(title, sub, firstHead, rows, max, rowExtra, cats) {
+      cats = cats || ATS_SUM_CATS;
+      var rowTotal = function (o) {
+        var t = 0;
+        cats.forEach(function (c) {
+          t += o[c.key] || 0;
+        });
+        return t;
+      };
+      if (cats !== ATS_SUM_CATS) {
+        max = 0;
+        rows.forEach(function (r) {
+          if (rowTotal(r.o) > max) max = rowTotal(r.o);
+        });
+      }
       var h =
         '<div class="yna4-ats-sum-sec"><div class="yna4-ats-sum-sec-head"><b>' + atsSumEsc(title) + "</b>" +
         (sub ? "<span>" + atsSumEsc(sub) + "</span>" : "") + "</div>";
       if (!rows.length) return h + '<div class="yna4-ats-sum-empty">없음</div></div>';
       h += '<table class="yna4-ats-sum-table"><thead><tr><th>' + atsSumEsc(firstHead) + "</th>";
-      ATS_SUM_CATS.forEach(function (c) {
+      cats.forEach(function (c) {
         h += '<th class="is-num"><i style="background:' + c.color + '"></i>' + atsSumEsc(c.label) + "</th>";
       });
       h += '<th class="is-num">합계</th><th class="is-bar"></th></tr></thead><tbody>';
       rows.forEach(function (r) {
         h += "<tr" + (r.cls ? ' class="' + r.cls + '"' : "") + '><td class="is-key">' + atsSumEsc(r.label) +
           (rowExtra ? rowExtra(r) : "") + "</td>";
-        ATS_SUM_CATS.forEach(function (c) {
+        cats.forEach(function (c) {
           h += '<td class="is-num">' + (r.o[c.key] ? atsSumNum(r.o[c.key]) + '<small class="u">unit</small>' : '<span class="is-zero">-</span>') + "</td>";
         });
-        h += '<td class="is-num is-total">' + atsSumNum(r.o.total) + '<small class="u">unit</small></td><td class="is-bar">' +
-          atsSumStackBar(r.o, max) + "</td></tr>";
+        h += '<td class="is-num is-total">' + atsSumNum(rowTotal(r.o)) + '<small class="u">unit</small></td><td class="is-bar">' +
+          atsSumStackBar(r.o, max, cats) + "</td></tr>";
       });
       return h + "</tbody></table></div>";
     }
@@ -6175,10 +6190,20 @@
       h += "</div>";
       if (!collapsed) {
         h += '<div class="yna4-ats-sum-secs">';
-        h += atsSumTable("보충마감별 unit", "", "보충마감", dlRows, maxDl, function (x) {
+        h += atsSumTable("보충마감별 unit", "", "입고마감시간", dlRows, maxDl, function (x) {
           return isFinite(x.rem) ? "<small>" + atsSumEsc(atsFormatRemain(x.rem)) + "</small>" : "";
         });
-        h += atsSumTable("온도대별 unit", "", "온도대", tempRows, maxTemp, null);
+        h += atsSumTable(
+          "온도대별 unit",
+          "",
+          "온도대",
+          tempRows,
+          maxTemp,
+          null,
+          ATS_SUM_CATS.filter(function (c) {
+            return c.key !== "noStock";
+          })
+        );
         h += "</div>";
       }
       summaryStrip.innerHTML = h;
