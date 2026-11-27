@@ -565,7 +565,7 @@
         { t: cardWhole("unload"), title: "Direct SLA", text: "직납 하차 내역을 모아 하차 SLA 결과를 만듭니다. (WMS · 쉽먼트 · PO Management 로그인)" },
         { t: all(inCard("unload", "button", "오늘"), inCard("unload", "button", "어제")), title: "오늘 · 어제", text: "조회할 날을 고릅니다." },
         { t: inCard("unload", "button", "작업 시작"), title: "작업 시작 · 중지", text: "하차 목록을 모으고, 이어서 쉽먼트 · PO Management · 재고 RCRT까지 미리 조회해 둡니다. 멈추려면 「작업 중지」." },
-        { t: inCard("unload", "button", "통합 결과"), title: "통합 결과", text: "모은 결과를 SLA 표로 엽니다. 쉽먼트 입차예약을 붙여 예약시간 · 쉽먼트 업체명을 보여 주고, 아직 하차 전인 예약 업체는 회색 줄로 맨 아래에 붙입니다. 입고(업체확정 발주수량) · 진열완료 · 남은 진열은 PO Management에서 스큐상태 입고 · 입고완료 줄만 셉니다. 진열완료가 빈칸이거나 0인 SKU는 재고 RCRT에 남은 수량을 남은 진열로 봅니다(재고가 없으면 0). 「작업 시작」 때 미리 조회해 두어 바로 열리고, 쉽먼트 · PO Management 로그인이 안 되어 있으면 결과를 열지 않습니다. 결과 창 「당일 예상」 탭에서는 온도별로 나눠 업체별 당일 입고 예상 unit을 막대 그래프로, SKU 수 · 예약시간과 함께 봅니다. 하차 여부와 상관없이 PO 기준 예상 물량입니다.<br>오류가 나면 진단 칸에서 「칸 안 전체 선택」 후 내용을 전달합니다." },
+        { t: inCard("unload", "button", "통합 결과"), title: "통합 결과", text: "하차 SLA 결과 표를 엽니다.<br>업체별로 예약시간 · 입고 수량 · 진열 완료 · 남은 진열을 봅니다. 아직 하차 전인 업체는 맨 아래 회색 줄로 나옵니다.<br>「당일 예상」 탭에서는 오늘 들어올 업체별 예상 물량을 봅니다.<br>결과가 안 열리면 쉽먼트 · PO Management 로그인을 확인하세요. 오류가 나면 진단 칸 내용을 복사해서 전달해 주세요." },
       ],
     },
     avail: {
@@ -606,7 +606,7 @@
     slot06: {
       name: "Need help Tracking",
       steps: [
-        { t: cardWhole("slot06"), title: "Need help Tracking", text: "작업자 ID를 넣고 조회하면 작업자별 진열 MH · 누적진열량 · HTP · EACH HTP를 봅니다. 진열 MH는 CFS HTP와 같은 기준(HTP 시간 × 8/9)이라 누적진열량 ÷ 진열 MH가 HTP이고, 낮은 순으로 나옵니다. 시간대별 진열량은 이름을 눌러 봅니다. 마지막 진열이 냉동이면 이름 옆에 ❄가 붙습니다. (MOS 로그인)" },
+        { t: cardWhole("slot06"), title: "Need help Tracking", text: "작업자 ID를 넣고 조회하면 작업자별로 얼마나 진열했는지 봅니다. (MOS 로그인)<br><b>진열 MH</b> 진열한 시간 · <b>누적진열량</b> 오늘 진열한 수량<br><b>HTP</b> 시간당 진열 수량 · <b>EACH HTP</b> 낱개 진열만 본 시간당 수량<br>HTP가 낮은 사람부터 나오고, 가장 낮은 5명은 빨간 줄입니다. 이름을 누르면 시간대별 진열량이 나옵니다. 이름 옆 ❄는 마지막에 냉동을 진열한 사람입니다." },
         { t: inCard("slot06", "textarea"), title: "작업자 ID", text: "한 줄에 하나씩 넣습니다. 예) V6703574" },
         { t: inCard("slot06", "input"), title: "조회일", text: "조회할 날짜입니다." },
         { t: all(inCard("slot06", "button", "조회 시작"), inCard("slot06", "button", "조회 중지")), title: "조회 시작 · 중지", text: "조회를 시작하고 멈춥니다." },
