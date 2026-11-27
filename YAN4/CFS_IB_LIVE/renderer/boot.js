@@ -13,6 +13,16 @@
   /** 조회 중 로그인 풀림이 확인된 서비스 — 다시 로그인할 때까지 「재로그인 필요」 */
   var needRelogin = { coupang: false, po: false, mos: false, shipments: false };
   var RELOGIN_KIND = { WMS: "coupang", PO: "po", MOS: "mos", SHPT: "shipments" };
+  /* 앱을 켜고 아직 아무것도 안 눌렀으면 「재로그인 필요」를 띄우지 않음.
+     앱을 끄면 WMS 로그인이 안 남아서, 켤 때 자동으로 하는 센터 확인 · 보충 패널 조회가 거절되는 건 당연함 */
+  var userActed = false;
+  function onUserAct() {
+    userActed = true;
+    document.removeEventListener("pointerdown", onUserAct, true);
+    document.removeEventListener("keydown", onUserAct, true);
+  }
+  document.addEventListener("pointerdown", onUserAct, true);
+  document.addEventListener("keydown", onUserAct, true);
 
   var LOGIN_BTNS = [
     { id: "btnLoginCoupang", kind: "coupang", idle: "WMS", detailKey: "coupang" },
@@ -94,7 +104,7 @@
   /** 조회하다 로그인 풀림을 만나면 (WMS · PO · MOS · SHPT) 상단 버튼을 「재로그인 필요」로 */
   window.__YAN4_MARK_RELOGIN__ = function (sys) {
     var kind = RELOGIN_KIND[String(sys || "").toUpperCase()] || "";
-    if (!kind || needRelogin[kind]) return;
+    if (!kind || needRelogin[kind] || !userActed) return;
     needRelogin[kind] = true;
     confirmedOk[kind] = false;
     paintLoginButtons();
