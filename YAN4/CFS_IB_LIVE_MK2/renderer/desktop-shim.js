@@ -12,6 +12,15 @@
     return;
   }
 
+  /* 알림창 제목: 로그인 필요 안내면 「재로그인 필요」 (기본 제목 「cfs-ib-live」 대신) */
+  if (typeof api.alertSync === "function") {
+    window.alert = function (message) {
+      try {
+        api.alertSync(message);
+      } catch (eAlert) {}
+    };
+  }
+
   /** 401·403 이 어느 시스템인지 — 상단 로그인 버튼 이름(WMS·PO·MOS·SHPT) */
   function loginSystemOf(url) {
     var h = "";
