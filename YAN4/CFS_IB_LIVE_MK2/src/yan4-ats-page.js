@@ -6165,7 +6165,7 @@
         h +=
           '<div class="yna4-ats-sum-kpi is-' + c.key + '" style="border-top-color:' + c.color + '" title="' + atsSumEsc(c.tip) + '">' +
           '<div class="t">' + atsSumEsc(c.label) + '</div><div class="v">' + atsSumNum(all[c.key]) + "<small>unit</small></div>" +
-          '<div class="s">전체의 ' + pct(all[c.key]) + "</div>" +
+          '<div class="s">전체보충의 ' + pct(all[c.key]) + "</div>" +
           '<div class="yna4-ats-sum-bar"><span style="width:' +
           (all.total ? (all[c.key] / all.total) * 100 : 0).toFixed(2) + "%;background:" + c.color + '"></span></div></div>';
       });
