@@ -13685,8 +13685,8 @@
           var eDay = en.day || sDay;
           var s0 = nhIsoFrom(sDay, st.sec);
           var e0 = nhIsoFrom(eDay, en.sec);
-          /* 날짜 없이 시간만 있고 끝이 시작보다 이르면 자정을 넘긴 것 */
-          if (!en.day && new Date(e0).getTime() <= new Date(s0).getTime()) {
+          /* 날짜 없이 시간만 있고 끝이 시작보다 이르면 자정을 넘긴 것 (시작 = 끝인 0초 행은 그대로 · CFS HTP 와 같음) */
+          if (!en.day && new Date(e0).getTime() < new Date(s0).getTime()) {
             e0 = nhIsoFrom(eDay, en.sec + 86400);
           }
           o.startTs = s0;
