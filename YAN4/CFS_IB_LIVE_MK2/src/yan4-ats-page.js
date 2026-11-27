@@ -6068,9 +6068,9 @@
         h += "<tr" + (r.cls ? ' class="' + r.cls + '"' : "") + '><td class="is-key">' + atsSumEsc(r.label) +
           (rowExtra ? rowExtra(r) : "") + "</td>";
         ATS_SUM_CATS.forEach(function (c) {
-          h += '<td class="is-num">' + (r.o[c.key] ? atsSumNum(r.o[c.key]) : '<span class="is-zero">-</span>') + "</td>";
+          h += '<td class="is-num">' + (r.o[c.key] ? atsSumNum(r.o[c.key]) + '<small class="u">unit</small>' : '<span class="is-zero">-</span>') + "</td>";
         });
-        h += '<td class="is-num is-total">' + atsSumNum(r.o.total) + '</td><td class="is-bar">' +
+        h += '<td class="is-num is-total">' + atsSumNum(r.o.total) + '<small class="u">unit</small></td><td class="is-bar">' +
           atsSumStackBar(r.o, max) + "</td></tr>";
       });
       return h + "</tbody></table></div>";
@@ -6148,7 +6148,7 @@
         '<small>unit</small></div><div class="s yna4-ats-sum-hero-dl">' +
         dlRows
           .map(function (x) {
-            return '<span class="' + (x.cls || "") + '">' + atsSumEsc(x.label) + " <b>" + atsSumNum(x.o.total) + "</b></span>";
+            return '<span class="' + (x.cls || "") + '">' + atsSumEsc(x.label) + " <b>" + atsSumNum(x.o.total) + "unit</b></span>";
           })
           .join("") +
         "</div></div>";
@@ -6163,7 +6163,7 @@
       h +=
         '<div class="yna4-ats-sum-kpi is-overdue" style="border-top-color:#dc2626" title="보충기한이 이미 지난 보충대기 · 이동중 수량">' +
         '<div class="t">기한 지남</div><div class="v">' + atsSumNum(overdue.total) + "<small>unit</small></div>" +
-        '<div class="s">보충대기 ' + atsSumNum(overdue.wait) + " · 이동중 " + atsSumNum(overdue.moving) + "</div></div>";
+        '<div class="s">보충대기 ' + atsSumNum(overdue.wait) + "unit · 이동중 " + atsSumNum(overdue.moving) + "unit</div></div>";
       h += "</div>";
       if (!collapsed) {
         h += '<div class="yna4-ats-sum-secs">';
