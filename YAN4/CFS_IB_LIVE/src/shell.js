@@ -15220,7 +15220,7 @@
     function recvIdleText() {
       return (
         recvCenterText(recvCenterId) +
-        " · 토트 · 날짜(여러 날이면 날짜별 시트) 선택 후 작업 시작 (생산성은 Presto 계정 저장 후)" +
+        " · 토트 · 날짜(여러 날이면 날짜별 시트) 선택 후 작업 시작 (생산성은 MySQL 계정 저장 후)" +
         (recvToteOptionsFor(recvCenterId).length ? "" : " · 이 센터는 RCRT 미지정이라 「전체」만")
       );
     }
@@ -15268,7 +15268,7 @@
       function (store) {
         if (store.yan4PrestoUser) {
           setRecvStatus(
-            "Presto 계정 저장됨 (" +
+            "MySQL 계정 저장됨 (" +
               store.yan4PrestoUser +
               ") · 토트·날짜 후 작업 시작"
           );
@@ -15277,7 +15277,7 @@
       function (u) {
         if (recvExportRunning) return;
         setRecvStatus(
-          "Presto 계정 저장 완료 (" + u + ") · 개인 AD여야 로컬 조회 가능"
+          "MySQL 계정 저장 완료 (" + u + ")"
         );
       }
     );
@@ -15429,7 +15429,7 @@
   }
 
   /**
-   * Presto 계정 칸 — 입고내역 RWA · STOW SCAN TRACKING 공용.
+   * MySQL 계정 칸 — 입고내역 RWA · STOW SCAN TRACKING 공용.
    * 같은 저장값을 쓰고, 한쪽에서 저장하면 "yan4-presto-account-saved" 로 다른 칸도 바로 바뀜.
    */
   var PRESTO_ACCOUNT_SAVED_EVENT = "yan4-presto-account-saved";
@@ -15443,15 +15443,15 @@
     var user = document.createElement("input");
     user.type = "text";
     user.className = "yna4-pane-inp";
-    user.placeholder = "개인 AD ID";
+    user.placeholder = "MySQL ID";
     user.autocomplete = "off";
-    user.title = "서비스 계정(svc) 불가 · DBeaver와 같은 개인 AD";
+    user.title = "서비스 계정(svc) 불가 · DBeaver와 같은 MySQL 계정";
     user.style.flex = "1";
     user.style.minWidth = "4em";
     var pw = document.createElement("input");
     pw.type = "password";
     pw.className = "yna4-pane-inp";
-    pw.placeholder = "AD PW";
+    pw.placeholder = "MySQL PW";
     pw.autocomplete = "off";
     pw.style.flex = "1";
     pw.style.minWidth = "4em";
@@ -15489,7 +15489,7 @@
     u = String(u || "").trim();
     p = String(p || "");
     if (!u) {
-      alert("Presto 아이디를 입력하세요.");
+      alert("MySQL 계정 아이디를 입력하세요.");
       return "";
     }
     if (/svc|service|_sa$|^sa_|bot|robot|pipeline/i.test(u)) {
@@ -15497,8 +15497,8 @@
         "「" +
           u +
           "」은(는) 서비스 계정처럼 보입니다.\n" +
-          "PC에서는 Presto가 서비스 계정을 막습니다.\n" +
-          "DBeaver에 쓰는 개인 AD 계정인가요? 그래도 저장할까요?"
+          "PC에서는 서비스 계정으로 조회할 수 없습니다.\n" +
+          "DBeaver에 쓰는 MySQL 계정인가요? 그래도 저장할까요?"
       );
       if (!okSvc) return "";
     }
@@ -15612,7 +15612,7 @@
 
     var status = document.createElement("div");
     status.className = "yna4-pane-status";
-    status.textContent = "현재 센터 기준 조회 · Presto 계정은 입고내역 RWA와 같이 씀";
+    status.textContent = "현재 센터 기준 조회 · MySQL 계정은 입고내역 RWA와 같이 씀";
     mod.appendChild(status);
     paneBody.appendChild(mod);
 
@@ -15620,12 +15620,12 @@
       scanAcc,
       function (store) {
         if (!store.yan4PrestoUser) {
-          status.textContent = "Presto 계정(개인 AD) 입력 후 계정 저장 · 입고내역 RWA와 같이 씀";
+          status.textContent = "MySQL 계정 입력 후 계정 저장 · 입고내역 RWA와 같이 씀";
         }
       },
       function (u) {
         if (running) return;
-        status.textContent = "Presto 계정 저장 완료 (" + u + ") · 입고내역 RWA와 같이 씀";
+        status.textContent = "MySQL 계정 저장 완료 (" + u + ") · 입고내역 RWA와 같이 씀";
       }
     );
     btnSaveAcc.addEventListener("click", async function () {

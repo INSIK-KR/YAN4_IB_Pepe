@@ -1703,10 +1703,10 @@ function formatPrestoAccessError(err, user) {
   var who = String(user || "").trim();
   if (/Service accounts cannot be used from local environments/i.test(msg)) {
     return (
-      "Presto: 저장된 계정" +
+      "저장된 MySQL 계정" +
       (who ? "「" + who + "」" : "") +
       "이(가) 서비스 계정으로 거부됨. " +
-      "DBeaver Presto 접속에 쓰는 개인 AD ID/PW로 다시 저장하세요 (svc/bot 계정 불가)."
+      "DBeaver에 쓰는 MySQL 계정 ID/PW로 다시 저장하세요 (svc/bot 계정 불가)."
     );
   }
   return who ? msg + " (user=" + who + ")" : msg;
@@ -1798,7 +1798,7 @@ async function runPrestoSql(sql, opt) {
   var port = Number(opt.port || store.yan4PrestoPort || 443) || 443;
   var catalog = String(opt.catalog || store.yan4PrestoCatalog || "hive").trim();
   var schema = String(opt.schema || store.yan4PrestoSchema || "ods").trim();
-  if (!user) throw new Error("Presto 아이디가 없습니다. 먼저 계정을 저장하세요.");
+  if (!user) throw new Error("MySQL 계정이 없습니다. 먼저 계정을 저장하세요.");
   if (!String(sql || "").trim()) throw new Error("SQL이 비어 있습니다.");
 
   var base = "https://" + host + (port === 443 ? "" : ":" + port);
