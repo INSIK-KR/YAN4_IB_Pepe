@@ -26,7 +26,7 @@
   var NEED_DETAIL_PATH = "/workflow/nob/v2/view/needToReplenish/detail/";
   var DETAIL_CUTLINE_CAP = 24;
   var OUTBOUND_PAGE_CAP = 500;
-  var OUTBOUND_PAGE_DELAY_MS = 55;
+  var OUTBOUND_PAGE_DELAY_MS = 50;
   /** 보충 상세·목록 — RPA와 동일: select[name=pagingSize]=100 후 조회 */
   var OUTBOUND_LIST_PAGE_SIZE = "100";
   var INVENTORY_SEARCH =
@@ -40,10 +40,10 @@
   var REPLENISH_ORDER_REFERER =
     "https://inventory.coupang.com/replenish/order/list";
   var REPLENISH_ORDER_PAGE_CAP = 80;
-  var REPLENISH_ORDER_PAGE_DELAY_MS = 60;
+  var REPLENISH_ORDER_PAGE_DELAY_MS = 50;
   var INVENTORY_LOG_RANGE_DAYS = 7;
   var INVENTORY_SKU_PAGE_BASE = "https://inventory.coupang.com/sku/";
-  var TEMP_ZONE_DELAY_MS = 90;
+  var TEMP_ZONE_DELAY_MS = 50;
   var INBOUND_TRANSFER_PAGING_MAIN =
     "https://inbound.coupang.com/transfer/admin/operation/paging";
   var INBOUND_TRANSFER_PAGING_SAME_CENTER =
@@ -75,10 +75,10 @@
   }
   var TRANSFER_SEARCH_DATE_TYPE = "PICKING_START_DATE";
   var TRANSFER_DATE_LOOKBACK_DAYS = 31;
-  var TRANSFER_DELAY_MS = 100;
+  var TRANSFER_DELAY_MS = 50;
   var TRANSFER_PAGE_CAP = 8;
   var INVENTORY_PAGE_CAP = 40;
-  var BARCODE_DELAY_MS = 120;
+  var BARCODE_DELAY_MS = 50;
   var ATS_NO_STOCK_LABEL = "진열가능한 재고 없음";
   var ATS_NO_STOCK_QTY = "X";
   /** 보충마감 = 출고마감 - N분. 기본 50, 사용자가 툴바에서 바꿈 */
@@ -1434,6 +1434,60 @@
     });
   }
 
+  /* ---------- ATS 조회 속도 (2026-11-28) ----------
+     요청은 2개씩 동시에 · 요청 뒤 50ms 쉼 (SLA 직납 드릴과 같은 기준).
+     SKU 보관온도는 10일 동안 이 PC에 저장해 두고 다시 묻지 않음 */
+  var ATS_FETCH_CONCURRENCY = 2;
+  var ATS_TEMP_CACHE_KEY = "yna4AtsSkuTempZoneV1";
+  var ATS_TEMP_CACHE_DAYS = 10;
+  var ATS_TEMP_CACHE_MAX = 5000;
+
+  /** count 개 일을 n 개씩 동시에 — fn(i) 는 Promise. 하나라도 실패하면 전체 실패(원래 순서 처리와 같게) */
+  function atsPool(n, count, fn) {
+    var next = 0;
+    async function worker() {
+      while (next < count) {
+        var i = next++;
+        await fn(i);
+      }
+    }
+    var ws = [];
+    for (var k = 0; k < Math.min(n, count); k++) ws.push(worker());
+    return Promise.all(ws);
+  }
+
+  function atsTempCacheLoad() {
+    var o;
+    try {
+      o = JSON.parse(localStorage.getItem(ATS_TEMP_CACHE_KEY) || "{}");
+    } catch (eL) {
+      o = {};
+    }
+    if (!o || typeof o !== "object") o = {};
+    var now = Date.now();
+    var lim = ATS_TEMP_CACHE_DAYS * 86400000;
+    Object.keys(o).forEach(function (k) {
+      var v = o[k];
+      if (!Array.isArray(v) || !v[0] || !(now - Number(v[1]) < lim)) delete o[k];
+    });
+    return o;
+  }
+
+  function atsTempCacheSave(o) {
+    var keys = Object.keys(o);
+    if (keys.length > ATS_TEMP_CACHE_MAX) {
+      keys.sort(function (a, b) {
+        return Number(o[a][1]) - Number(o[b][1]);
+      });
+      keys.slice(0, keys.length - ATS_TEMP_CACHE_MAX).forEach(function (k) {
+        delete o[k];
+      });
+    }
+    try {
+      localStorage.setItem(ATS_TEMP_CACHE_KEY, JSON.stringify(o));
+    } catch (eS) {}
+  }
+
   function inventoryFetch(url) {
     return inventoryGet(url, {});
   }
@@ -2283,6 +2337,7 @@
   }
 
   var transferInfoCache = Object.create(null);
+  var transferInflight = Object.create(null);
 
   function fetchTransferInfoForCart(cartBarcode) {
     var cart = String(cartBarcode || "").trim().toUpperCase();
@@ -2294,6 +2349,23 @@
     if (transferInfoCache[key] !== undefined) {
       return Promise.resolve(transferInfoCache[key]);
     }
+    /* 동시 조회 때 같은 GC를 두 번 묻지 않게 — 진행 중인 요청을 같이 기다림 */
+    if (transferInflight[key]) return transferInflight[key];
+    var pInfo = fetchTransferInfoForCartRaw(cart, key);
+    transferInflight[key] = pInfo;
+    return pInfo.then(
+      function (v) {
+        delete transferInflight[key];
+        return v;
+      },
+      function (e) {
+        delete transferInflight[key];
+        throw e;
+      }
+    );
+  }
+
+  function fetchTransferInfoForCartRaw(cart, key) {
     var pagingBases = [
       INBOUND_TRANSFER_PAGING_MAIN,
       INBOUND_TRANSFER_PAGING_SAME_CENTER,
@@ -2394,12 +2466,14 @@
       carts.push(cart);
     }
     atsPerfNote("GC", carts.length);
-    for (i = 0; i < carts.length; i++) {
-      if (stopRequested) break;
-      if (onProgress) onProgress(i + 1, carts.length, carts[i]);
-      await fetchTransferInfoForCart(carts[i]);
-      if (i + 1 < carts.length) await sleep(TRANSFER_DELAY_MS);
-    }
+    var cartDone = 0;
+    await atsPool(ATS_FETCH_CONCURRENCY, carts.length, async function (ix) {
+      if (stopRequested) return;
+      await fetchTransferInfoForCart(carts[ix]);
+      cartDone += 1;
+      if (onProgress) onProgress(cartDone, carts.length, carts[ix]);
+      if (!stopRequested && cartDone < carts.length) await sleep(TRANSFER_DELAY_MS);
+    });
     for (i = 0; i < allRows.length; i++) {
       row = allRows[i];
       if (!rowNeedsTransferLookup(row)) continue;
@@ -2785,13 +2859,25 @@
       seen[sid] = 1;
       skuIds.push(sid);
     }
-    atsPerfNote("SKU", skuIds.length);
+    /* 10일 안에 확인한 SKU는 저장해 둔 보관온도를 씀 — 새 SKU만 묻기 */
+    var tempStore = atsTempCacheLoad();
+    var askIds = [];
     for (i = 0; i < skuIds.length; i++) {
-      if (stopRequested) break;
-      if (onProgress) onProgress(i + 1, skuIds.length, skuIds[i]);
-      await fetchTempZoneForSkuId(skuIds[i]);
-      if (i + 1 < skuIds.length) await sleep(TEMP_ZONE_DELAY_MS);
+      sid = skuIds[i];
+      if (tempStore[sid]) skuTempZoneCache[sid] = tempStore[sid][0];
+      else if (skuTempZoneCache[sid] === undefined) askIds.push(sid);
     }
+    atsPerfNote("SKU", skuIds.length + " (새로 확인 " + askIds.length + ")");
+    var tempDone = 0;
+    await atsPool(ATS_FETCH_CONCURRENCY, askIds.length, async function (ix) {
+      if (stopRequested) return;
+      var zone = await fetchTempZoneForSkuId(askIds[ix]);
+      if (zone) tempStore[askIds[ix]] = [zone, Date.now()];
+      tempDone += 1;
+      if (onProgress) onProgress(tempDone, askIds.length, askIds[ix]);
+      if (!stopRequested && tempDone < askIds.length) await sleep(TEMP_ZONE_DELAY_MS);
+    });
+    if (askIds.length) atsTempCacheSave(tempStore);
     for (i = 0; i < allRows.length; i++) {
       row = allRows[i];
       if (!rowNeedsTempZoneLookup(row)) continue;
@@ -3600,26 +3686,34 @@
 
   async function collectOutboundItemsFromDetailUrls(urls, onProgress) {
     var store = outboundItemStore();
-    var di;
-    for (di = 0; di < urls.length; di++) {
-      if (stopRequested) break;
-      if (onProgress) onProgress(di + 1, urls.length, urls[di], 1, 1);
+    /* 시간대(컷라인) 2개씩 동시에 — 한 시간대 안의 페이지는 차례대로. 합치기는 원래 순서대로 */
+    var parts = new Array(urls.length);
+    var failedCt = 0;
+    var started = 0;
+    await atsPool(ATS_FETCH_CONCURRENCY, urls.length, async function (di) {
+      if (stopRequested) return;
+      started += 1;
+      var ci = started;
+      if (onProgress) onProgress(ci, urls.length, urls[di], 1, 1);
       try {
         var html = await gmXhr({
           url: urls[di],
           headers: outboundDetailHeaders(urls[di]),
           tag: "outbound 상세 p1",
         });
-        var part = await collectOutboundItemsAllPages(urls[di], html, function (p, maxH) {
-          if (onProgress) onProgress(di + 1, urls.length, urls[di], p, maxH);
+        parts[di] = await collectOutboundItemsAllPages(urls[di], html, function (p, maxH) {
+          if (onProgress) onProgress(ci, urls.length, urls[di], p, maxH);
         });
-        mergeOutboundStores(store, part);
       } catch (eD) {
         // 실패한 컷라인은 건너뛰되 개수는 남김 — 완료 메시지에 표시
-        store.failed = (store.failed || 0) + 1;
+        failedCt += 1;
       }
-      if (di + 1 < urls.length) await sleep(80);
+      if (!stopRequested) await sleep(OUTBOUND_PAGE_DELAY_MS);
+    });
+    for (var di = 0; di < urls.length; di++) {
+      if (parts[di]) mergeOutboundStores(store, parts[di]);
     }
+    if (failedCt) store.failed = (store.failed || 0) + failedCt;
     return store;
   }
 
@@ -7597,33 +7691,52 @@
         var si;
         var invBase = 40;
         var invSpan = 40;
-        for (si = 0; si < barcodes.length; si++) {
-          if (stopRequested) {
-            setStatus("중지됨", "err");
-            break;
-          }
-          setAtsPipelineProgress(
-            invBase +
-              Math.round(((si + 1) / Math.max(barcodes.length, 1)) * invSpan),
-            ATS_PIPELINE_PROGRESS_LABEL
-          );
-          var bc = barcodes[si];
-          var ob = obByBc[bc] || null;
-          var inv = await fetchInventoryForBarcode(bc);
-          var matched = (inv && inv.matched) || [];
-          var bufOrderRows = lookupBufferOrderRows(
+        /* 바코드별 재고 — 2개씩 동시에 받아 두고(요청 뒤 쉬는 시간은 그대로), 행 만들기는 원래 순서대로 */
+        var invResults = new Array(barcodes.length);
+        var invDone = 0;
+        await atsPool(ATS_FETCH_CONCURRENCY, barcodes.length, async function (ix) {
+          if (stopRequested) return;
+          var bcA = barcodes[ix];
+          var invA = await fetchInventoryForBarcode(bcA);
+          var matchedA = (invA && invA.matched) || [];
+          var bufRowsA = lookupBufferOrderRows(
             bufferIndex,
-            bc,
-            inv && inv.meta ? inv.meta : null
+            bcA,
+            invA && invA.meta ? invA.meta : null
           );
           // 이 SKU가 버퍼존 주문표에 있으면 inventory 버퍼존 로케이션은 제외(중복 방지)
-          if (bufOrderRows.length) {
-            matched = matched.filter(function (m) {
+          if (bufRowsA.length) {
+            matchedA = matchedA.filter(function (m) {
               return !atsLocationIsBufferZone(m && m.location);
             });
           }
+          var poolCopy = matchedA.slice();
+          var obA = obByBc[bcA] || null;
+          var obNumA = parseObQtyNumber(obA && obA.obQty);
+          var supA = sumBufferOrderSupplyQty(bufRowsA);
+          var coveredA = isFinite(obNumA) && isFinite(supA) && obNumA - supA <= 0;
+          if (!coveredA && !stopRequested) {
+            await enrichInventoryMatchesTransferStatus(matchedA);
+          }
+          invResults[ix] = { inv: invA, matched: matchedA, pool: poolCopy, bufOrderRows: bufRowsA };
+          invDone += 1;
+          setAtsPipelineProgress(
+            invBase + Math.round((invDone / Math.max(barcodes.length, 1)) * invSpan),
+            ATS_PIPELINE_PROGRESS_LABEL
+          );
+          if (!stopRequested && invDone < barcodes.length) await sleep(BARCODE_DELAY_MS);
+        });
+        if (stopRequested) setStatus("중지됨", "err");
+        for (si = 0; si < barcodes.length; si++) {
+          var res = invResults[si];
+          if (!res) continue;
+          var bc = barcodes[si];
+          var ob = obByBc[bc] || null;
+          var inv = res.inv;
+          var matched = res.matched;
+          var bufOrderRows = res.bufOrderRows;
           poolByBc[normalizeBarcode(bc) || String(bc || "")] = {
-            matched: matched.slice(),
+            matched: res.pool,
             meta: inv && inv.meta ? inv.meta : null,
             ob: ob,
           };
@@ -7650,12 +7763,10 @@
             needQtyNum = obQtyNum - bufSupply;
             if (needQtyNum <= 0) {
               bufferCoveredCt += 1;
-              if (si + 1 < barcodes.length) await sleep(BARCODE_DELAY_MS);
               continue;
             }
             bufferPartialCt += 1;
           }
-          await enrichInventoryMatchesTransferStatus(matched);
           var picked = selectInventoryMatchesForObQty(matched, needQtyNum);
           if (picked.length) {
             var built = buildAtsRowsFromInventoryPicks(picked, ob, needQtyNum);
@@ -7666,7 +7777,6 @@
               makeNoStockRow(bc, inv && inv.meta ? inv.meta : null, ob)
             );
           }
-          if (si + 1 < barcodes.length) await sleep(BARCODE_DELAY_MS);
         }
         atsPerfStage("GC 이관 상태");
         var fallbackInfo = { replacedCt: 0, noStockCt: 0 };
