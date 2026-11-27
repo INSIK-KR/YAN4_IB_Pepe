@@ -607,7 +607,7 @@
     slot06: {
       name: "Need help Tracking",
       steps: [
-        { t: cardWhole("slot06"), title: "Need help Tracking", text: "작업자 ID를 넣고 조회하면 작업자별로 얼마나 진열했는지 봅니다. (MOS 로그인)<br><b>진열 MH</b> 진열한 시간 · <b>누적진열량</b> 오늘 진열한 수량<br><b>HTP</b> 시간당 진열 수량 · <b>EACH HTP</b> 낱개 진열만 본 시간당 수량<br>HTP가 낮은 사람부터 나오고, 가장 낮은 5명은 빨간 줄입니다. 이름을 누르면 시간대별 진열량이 나옵니다. 이름 옆 ❄는 마지막에 냉동을 진열한 사람입니다." },
+        { t: cardWhole("slot06"), title: "Need help Tracking", text: "작업자 ID를 넣고 조회하면 작업자별로 얼마나 진열했는지 봅니다. (MOS 로그인)<br><b>진열 MH</b> 진열한 시간 · <b>누적진열량</b> 오늘 진열한 수량<br><b>HTP</b> 시간당 진열 수량 · <b>EACH HTP</b> 선반진열만 본 시간당 수량<br>HTP가 낮은 사람부터 나오고, 가장 낮은 5명은 빨간 줄입니다. 이름을 누르면 시간대별 진열량이 나옵니다. 이름 옆 ❄는 마지막에 냉동상품을 진열한 인원입니다." },
         { t: inCard("slot06", "textarea"), title: "작업자 ID", text: "한 줄에 하나씩 넣습니다. 예) V6703574" },
         { t: inCard("slot06", "input"), title: "조회일", text: "조회할 날짜입니다." },
         { t: all(inCard("slot06", "button", "조회 시작"), inCard("slot06", "button", "조회 중지")), title: "조회 시작 · 중지", text: "조회를 시작하고 멈춥니다." },
