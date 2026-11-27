@@ -13146,7 +13146,7 @@
       sumTbl.className = "yna4-pane-sla-table yna4-nh-sum-table";
       var sumThead = document.createElement("thead");
       var sumHr = document.createElement("tr");
-      ["이름", "시간대", "누적진열량", "HTP", "EACH HTP", "호출"].forEach(function (
+      ["이름", "진열 MH", "누적진열량", "HTP", "EACH HTP", "호출"].forEach(function (
         hText
       ) {
         var th = document.createElement("th");
@@ -13239,8 +13239,13 @@
           sub.textContent = row.wid;
           tdNm.appendChild(sub);
 
+          /* 진열 MH: CFS HTP 와 같음 · STOW 행 (HTP 끝 − 시작) × 8/9 합 → 누적진열량 ÷ 진열 MH = HTP */
           var tdSlot = document.createElement("td");
-          tdSlot.textContent = row.met.slotLabel;
+          var stowMh0 = row.agg && row.agg.stowMh > 0 ? row.agg.stowMh : 0;
+          tdSlot.textContent = stowMh0 > 0 ? stowMh0.toFixed(1) + "h" : "—";
+          tdSlot.title =
+            "CFS HTP 진열 MH · HTP 시간 × 8/9" +
+            (row.met.lastH >= 0 ? " · 마지막 진열 " + row.met.slotLabel : "");
           var tdHtp = document.createElement("td");
           tdHtp.textContent = row.htp.htpText;
           tdHtp.title = "CFS HTP 기준 · 진열량 ÷ (HTP 시간 × 8/9)";
