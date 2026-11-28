@@ -1417,7 +1417,7 @@
               resolve(String(res.body || ""));
               return;
             }
-            reject(new Error((res && res.error) || "inventory fetch 실패"));
+            reject(new Error((res && res.error) || "inventory fetch 실패" + (res && res.status ? " (" + res.status + ")" : "")));
           }
         );
         return;
@@ -1488,8 +1488,17 @@
     } catch (eS) {}
   }
 
+  /* 재고 요청이 실패하면 1초 쉬고 한 번만 다시 — 한 번 실패로 조회 전체가 끝나던 것 줄임 (시간 제한은 없음) */
+  var atsInvRetryCt = 0;
   function inventoryFetch(url) {
-    return inventoryGet(url, {});
+    return inventoryGet(url, {}).catch(function (e1) {
+      if (stopRequested) throw e1;
+      atsInvRetryCt += 1;
+      if (typeof atsPerfNote === "function") atsPerfNote("재고 다시 시도", atsInvRetryCt + "회 (" + String((e1 && e1.message) || e1).slice(0, 60) + ")");
+      return sleep(1000).then(function () {
+        return inventoryGet(url, {});
+      });
+    });
   }
 
   /* ---------- ATS 조회 기록 (화면에는 안 나옴) ----------
@@ -3540,6 +3549,17 @@
     }
   }
 
+  function outboundPagingSizeIs100(html) {
+    return String(outboundPagingSizeShown(html)).split(" ")[0] === OUTBOUND_LIST_PAGE_SIZE;
+  }
+  function outboundHasPageItems(html) {
+    try {
+      return !!new DOMParser().parseFromString(String(html || ""), "text/html").querySelector("w-page-item");
+    } catch (eP) {
+      return false;
+    }
+  }
+
   async function applyOutboundPagingSize100(baseUrl, html0, info) {
     info = info || {};
     var doc = new DOMParser().parseFromString(String(html0 || ""), "text/html");
@@ -3614,11 +3634,14 @@
 
   async function fetchOutboundListPageHtml(baseUrl, uiPage, contextHtml, info) {
     info = info || {};
+    /* 1쪽이 100줄 보기면 다음 쪽도 100줄로 받은 것만 씀 — 20줄 쪽을 받으면 1쪽에서 받은 줄을 또 받아 보충수량이 두 번 더해짐 */
+    var want100 = outboundPagingSizeIs100(contextHtml);
     info.tries = info.tries || 0;
+    /* 다음 쪽도 100줄씩 — 주소에 줄수를 안 넣으면 20줄씩 와서 1쪽에서 받은 줄을 다시 받음 */
     var tryUrls = [
-      buildOutboundPageUrl(baseUrl, "page", Math.max(0, uiPage - 1)),
-      buildOutboundPageUrl(baseUrl, "page", uiPage),
-      buildOutboundPageUrl(baseUrl, "pageNumber", uiPage),
+      buildOutboundPageUrl(buildOutboundPageUrl(baseUrl, "page", Math.max(0, uiPage - 1)), "pagingSize", OUTBOUND_LIST_PAGE_SIZE),
+      buildOutboundPageUrl(buildOutboundPageUrl(baseUrl, "page", uiPage), "pagingSize", OUTBOUND_LIST_PAGE_SIZE),
+      buildOutboundPageUrl(buildOutboundPageUrl(baseUrl, "pageNumber", uiPage), "pagingSize", OUTBOUND_LIST_PAGE_SIZE),
     ];
     // 앞서 통한 방식부터 — 매 페이지 GET 3가지를 차례로 더듬던 것 줄임
     var order = [0, 1, 2];
@@ -3643,6 +3666,7 @@
         });
         var storeGet = parseOutboundItemsFromHtml(htmlGet);
         if (!storeGet.list.length) continue;
+        if (want100 && !outboundPagingSizeIs100(htmlGet)) continue;
         if (parseOutboundActivePageFromHtml(htmlGet) === uiPage) {
           outboundPageMethod = ai;
           info.how = "GET" + ai;
@@ -3703,12 +3727,19 @@
     info.pages.push(store.list.length);
     var maxHint = parseOutboundMaxPageFromHtml(htmlReady);
     if (!isFinite(maxHint) || maxHint < 1) maxHint = 1;
+    /* 끝쪽 표시를 믿어도 되는 경우 — 받은 쪽이 모두 100줄 보기이고, 쪽 번호가 화면에 있고, 10쪽 미만(쪽 번호가 다 보이는 범위)
+       하나라도 아니면 예전처럼 빈 쪽 · 실패가 나올 때까지 받음 */
+    var trustMax = outboundPagingSizeIs100(htmlReady) && outboundHasPageItems(htmlReady) && maxHint < 10;
     var seenSig = Object.create(null);
     seenSig[outboundPageStoreSig(store)] = 1;
     var contextHtml = htmlReady;
     var p;
     for (p = 2; p <= OUTBOUND_PAGE_CAP; p++) {
       if (stopRequested) break;
+      if (trustMax && p > maxHint) {
+        info.end = "끝쪽까지 받음";
+        break;
+      }
       if (onPageProgress) onPageProgress(p, maxHint);
       var htmlP = "";
       var pInfo = {};
@@ -3734,6 +3765,7 @@
         break;
       }
       info.pages.push(storeP.list.length);
+      if (trustMax && !outboundPagingSizeIs100(htmlP)) trustMax = false;
       seenSig[sig] = 1;
       mergeOutboundStores(store, storeP);
       contextHtml = htmlP;
@@ -7722,6 +7754,7 @@
       transferInfoCache = Object.create(null);
       clearAtsReplenishDoneKeys();
       clearAllDashboardPanels();
+      atsInvRetryCt = 0;
       atsPerfBegin({ 시간대: selectedCutlineUrls ? selectedCutlineUrls.length + "개" : "전체" });
       atsPerfStage("출고 대시보드");
       try {
