@@ -7429,11 +7429,16 @@
 
     var ATS_PIPELINE_PROGRESS_LABEL = "조회실행 중…";
 
+    /* 한 번 조회하는 동안 게이지는 올라가기만 함 — 2개씩 동시에 받을 때 서로 다른 진행률을 번갈아 적어 오르내리던 것 막음. 0이면 새 조회 */
+    var atsProgressLast = 0;
     function setAtsPipelineProgress(percent, msg) {
       var p = Number(percent);
       if (!isFinite(p)) p = 0;
       if (p < 0) p = 0;
       if (p > 100) p = 100;
+      if (p === 0) atsProgressLast = 0;
+      else if (p < atsProgressLast) p = atsProgressLast;
+      atsProgressLast = p;
       statusEl.textContent = msg || ATS_PIPELINE_PROGRESS_LABEL;
       statusEl.className = "yna4-ats-status yna4-ats-pane-status";
       statusEl.style.setProperty("--yna4-progress", p.toFixed(1) + "%");
