@@ -4928,7 +4928,7 @@
       dashBlock.className = "yna4-ats-print-dash-block";
       host.appendChild(dashBlock);
       var printTitle = getAtsDashboardSectionTitle(d, tablesByDash);
-      if (!printTitle) printTitle = "대시보드 " + d;
+      if (!printTitle) printTitle = "보충 현황 " + d;
       appendChunksForRows(rows, dashBlock, printTitle);
     }
 
@@ -6309,7 +6309,7 @@
     var sortModeSwitch = document.createElement("span");
     sortModeSwitch.className = "yna4-ats-zone-mode-switch yna4-ats-sort-mode-switch";
     sortModeSwitch.setAttribute("role", "group");
-    sortModeSwitch.setAttribute("aria-label", "대시보드 화면 나열 순서");
+    sortModeSwitch.setAttribute("aria-label", "보충 현황 화면 나열 순서");
     var btnSortFifo = document.createElement("button");
     btnSortFifo.type = "button";
     btnSortFifo.className = "yna4-ats-zone-mode-btn yna4-ats-sort-mode-btn";
@@ -6358,7 +6358,7 @@
     var ovTempGroup = document.createElement("span");
     ovTempGroup.className = "yna4-ats-teams-btn-group yna4-ats-ov-temp-group";
     ovTempGroup.setAttribute("role", "group");
-    ovTempGroup.setAttribute("aria-label", "CT 현황판 온도대별 복사");
+    ovTempGroup.setAttribute("aria-label", "CT 진행표 온도대별 복사");
     ovTempGroup.setAttribute("data-ats-zone-mode", "teams");
     ovTempGroup.style.display = "none";
     ATS_OV_TEMP_CATS.concat(["전체"]).forEach(function (cat) {
@@ -6369,7 +6369,7 @@
       b.setAttribute("data-label", cat);
       b.textContent = cat;
       b.title =
-        (cat === "전체" ? "CT 현황판 전체" : "CT 현황판 " + cat) +
+        (cat === "전체" ? "CT 진행표 전체" : "CT 진행표 " + cat) +
         " 목록 복사 · 「팀즈」 모드는 표, 「이미지」 모드는 이미지";
       ovTempGroup.appendChild(b);
     });
@@ -6411,7 +6411,7 @@
     var dashboardsGrid = document.createElement("div");
     dashboardsGrid.className = "yna4-ats-dashboards-grid";
     dashboardsGrid.setAttribute("role", "region");
-    dashboardsGrid.setAttribute("aria-label", "ATS 대시보드 ①~⑬");
+    dashboardsGrid.setAttribute("aria-label", "ATS 보충 현황 ①~⑬");
 
     atsPrintContext.dashboardsGrid = dashboardsGrid;
     atsPrintContext.deadlineChipsHost = deadlineChipsHost;
@@ -6462,11 +6462,11 @@
     var tabDash = document.createElement("button");
     tabDash.type = "button";
     tabDash.className = "yna4-ats-view-tab";
-    tabDash.textContent = "대시보드";
+    tabDash.textContent = "보충 현황";
     var tabOverview = document.createElement("button");
     tabOverview.type = "button";
     tabOverview.className = "yna4-ats-view-tab";
-    tabOverview.textContent = "CT 현황판";
+    tabOverview.textContent = "CT 진행표";
     viewTabs.appendChild(tabDash);
     viewTabs.appendChild(tabOverview);
 
@@ -6478,7 +6478,7 @@
     var ATS_SUM_CATS = [
       { key: "wait", label: "진열가능 보충", color: "#2a78d6", tip: "센터 안에 재고가 있어 바로 보충할 수 있는 수량" },
       { key: "moving", label: "이동중", color: "#eda100", tip: "아직 센터에 도착하지 않은(이동중) 재고로 보충할 수량" },
-      { key: "noStock", label: "센터 내 미재고", color: "#94a3b8", tip: "센터 안에 진열할 재고가 없는 수량 (대시보드 ⑬)" },
+      { key: "noStock", label: "센터 내 미재고", color: "#94a3b8", tip: "센터 안에 진열할 재고가 없는 수량 (보충 현황 ⑬)" },
     ];
     /* 「기타」(온도대 없음 — 거의 센터 내 미재고)는 온도대별 표에서 뺌 */
     var ATS_SUM_TEMPS = ["냉장", "상온", "냉동"];
@@ -7313,7 +7313,7 @@
       var now = new Date();
       var hm = String(now.getHours()).padStart(2, "0") + ":" + String(now.getMinutes()).padStart(2, "0");
       var title =
-        "CT 현황판 · " + restLabel + " (" + hm + " 기준) · CT " + ctN + "개 · " +
+        "CT 진행표 · " + restLabel + " (" + hm + " 기준) · CT " + ctN + "개 · " +
         rows.length + "건 · 보충 " + (formatObQtyNumber(unit) || "0") + "unit";
       var tsv = [title, ATS_OV_LIST_HEAD.join("\t")]
         .concat(
@@ -7329,7 +7329,7 @@
       var what = asImage ? "이미지 복사" : "팀즈 복사";
       copyHtmlPlainToClipboardAts(buildAtsOverviewListHtml(title, rows), tsv, asImage).then(function (ok) {
         flash(ok ? "복사됨" : "복사 실패");
-        setStatus(ok ? "현황판 " + what + " 완료 · " + rows.length + "줄" : "현황판 " + what + " 실패", ok ? "ok" : "err");
+        setStatus(ok ? "진행표 " + what + " 완료 · " + rows.length + "줄" : "진행표 " + what + " 실패", ok ? "ok" : "err");
       });
     }
 
