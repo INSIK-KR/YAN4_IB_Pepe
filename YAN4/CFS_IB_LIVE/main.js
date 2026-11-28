@@ -757,6 +757,58 @@ function getDownloadsDirOrEmpty() {
   return downloadsDir;
 }
 
+/** 크롬이 실제로 저장하는 폴더들 — 프로필마다 설정 파일(Preferences)을 읽기만 함.
+ *  「저장 위치」 설정값 + 「위치 묻기」로 마지막에 저장한 폴더 */
+function getChromeDownloadDirs() {
+  const out = [];
+  const root = path.join(process.env.LOCALAPPDATA || "", "Google", "Chrome", "User Data");
+  let names = [];
+  try {
+    names = fs.readdirSync(root);
+  } catch (e) {
+    return out;
+  }
+  for (let i = 0; i < names.length; i++) {
+    const n = names[i];
+    if (n !== "Default" && !/^Profile \d+$/i.test(n)) continue;
+    try {
+      const prefs = JSON.parse(fs.readFileSync(path.join(root, n, "Preferences"), "utf8"));
+      const cands = [
+        prefs && prefs.download && prefs.download.default_directory,
+        prefs && prefs.savefile && prefs.savefile.default_directory,
+      ];
+      for (let k = 0; k < cands.length; k++) {
+        const d = cands[k];
+        if (typeof d === "string" && d.trim()) out.push(d.trim());
+      }
+    } catch (e2) {}
+  }
+  return out;
+}
+
+/** SLA 엑셀을 찾아볼 폴더 — Windows 다운로드 폴더 + 크롬 저장 폴더 (겹치면 하나만) */
+function getSlaWatchDirs() {
+  const list = [];
+  const seen = Object.create(null);
+  function add(d) {
+    if (!d) return;
+    let full = "";
+    try {
+      full = path.resolve(d);
+      if (!fs.existsSync(full) || !fs.statSync(full).isDirectory()) return;
+    } catch (e) {
+      return;
+    }
+    const key = full.replace(/[\\/]+$/, "").toLowerCase();
+    if (seen[key]) return;
+    seen[key] = 1;
+    list.push(full);
+  }
+  add(getDownloadsDirOrEmpty());
+  getChromeDownloadDirs().forEach(add);
+  return list;
+}
+
 function sanitizeDownloadFilename(name, fallback) {
   let base = path.basename(
     String(name || fallback || "download").replace(/\\/g, "/")
@@ -1022,8 +1074,8 @@ async function fetchSharePointSlaViaChromeDownloadInner(message) {
     return { ok: false, error: "SharePoint URL만 허용" };
   }
 
-  const downloadsDir = getDownloadsDirOrEmpty();
-  if (!downloadsDir) {
+  const watchDirs = getSlaWatchDirs();
+  if (!watchDirs.length) {
     return {
       ok: false,
       error: "Downloads 폴더를 찾을 수 없습니다",
@@ -1055,7 +1107,13 @@ async function fetchSharePointSlaViaChromeDownloadInner(message) {
         "Downloads에서 엑셀 대기 중… " + left + "s (Chrome 로그인·다운로드 확인)"
       );
     }
-    const cands = listCandidateDownloads(downloadsDir, startedAt, nameIncludes);
+    let cands = [];
+    for (let wi = 0; wi < watchDirs.length; wi++) {
+      cands = cands.concat(listCandidateDownloads(watchDirs[wi], startedAt, nameIncludes));
+    }
+    cands.sort(function (a, b) {
+      return b.mtimeMs - a.mtimeMs;
+    });
     if (cands.length) {
       const hit = cands[0];
       const okStable = await waitFileStable(hit.full);
@@ -1103,6 +1161,7 @@ async function fetchSharePointSlaViaChromeDownloadInner(message) {
           byteLength: buf.length,
           source: "chrome-download",
           filename: hit.name,
+          dir: path.dirname(hit.full),
           deleted: deleted,
         };
       } catch (eRead) {
@@ -1119,7 +1178,9 @@ async function fetchSharePointSlaViaChromeDownloadInner(message) {
     error:
       "Chrome Downloads에서 " +
       label +
-      " 엑셀을 찾지 못했습니다. Chrome에서 SharePoint 로그인·다운로드 허용 후 다시 시도하세요.",
+      " 엑셀을 찾지 못했습니다. Chrome에서 SharePoint 로그인·다운로드 허용 후 다시 시도하세요.\n(찾아본 폴더: " +
+      watchDirs.join(" · ") +
+      ")",
   };
 }
 
@@ -1209,7 +1270,7 @@ async function handleRuntimeMessage(message) {
       const fetched = await fetchSharePointSlaViaChromeDownload(message);
       if (!fetched || !fetched.ok) return fetched;
       try {
-        const dir = getDownloadsDirOrEmpty();
+        const dir = fetched.dir || getDownloadsDirOrEmpty();
         const srcName = String(fetched.filename || "");
         const src = dir && srcName ? path.join(dir, srcName) : "";
         if (src && fs.existsSync(src) && srcName !== wantName) {
