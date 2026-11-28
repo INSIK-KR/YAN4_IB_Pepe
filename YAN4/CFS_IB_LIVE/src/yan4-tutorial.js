@@ -508,11 +508,11 @@
         t: function () {
           return atsViewTabBtn("CT");
         },
-        act: "「CT 진행표」를 눌러 보세요",
+        act: "「CT별 보충」을 눌러 보세요",
         done: function () {
           return atsViewTabOn("CT");
         },
-        title: "CT 진행표",
+        title: "CT별 보충",
         text: "같은 결과를 <b>CT(차량)</b> 기준으로 묶어 봅니다. 어느 CT부터 꺼낼지 정할 때 씁니다.",
       },
       {
@@ -526,18 +526,18 @@
         t: function () {
           return qa(".yna4-ats-teams-btn-group button", atsP()).filter(isVis);
         },
-        title: "진행표 복사",
-        text: "CT 진행표에서는 위 버튼이 <b>온도대별</b>(냉장 · 상온 · 냉동 · 전체)로 바뀝니다. 누르면 그 온도대의 <b>진행표 목록</b>(CT별 색)이 복사됩니다.<br>「팀즈」 모드면 표로, 「이미지」 모드면 이미지로 복사됩니다. 보충지출력은 보충 현황 탭에서 합니다.",
+        title: "CT별 보충 복사",
+        text: "CT별 보충에서는 위 버튼이 <b>온도대별</b>(냉장 · 상온 · 냉동 · 전체)로 바뀝니다. 누르면 그 온도대의 <b>CT별 보충 목록</b>(CT별 색)이 복사됩니다.<br>「팀즈」 모드면 표로, 「이미지」 모드면 이미지로 복사됩니다. 보충지출력은 구간별 보충 탭에서 합니다.",
       },
       {
         t: function () {
-          return atsViewTabBtn("보충 현황");
+          return atsViewTabBtn("구간별 보충");
         },
-        act: "「보충 현황」을 눌러 돌아가 보세요",
+        act: "「구간별 보충」을 눌러 돌아가 보세요",
         done: function () {
-          return atsViewTabOn("보충 현황");
+          return atsViewTabOn("구간별 보충");
         },
-        title: "보충 현황으로",
+        title: "구간별 보충으로",
         text: "구간별 목록 화면으로 돌아갑니다.",
       },
       {
