@@ -1655,10 +1655,18 @@
         Object.keys(r.info || {}).forEach(function (k) {
           meta.push(k + " " + r.info[k]);
         });
+        var noteLists = [];
         Object.keys(r.notes || {}).forEach(function (k) {
-          meta.push(k + " " + r.notes[k]);
+          if (Array.isArray(r.notes[k])) noteLists.push(k);
+          else meta.push(k + " " + r.notes[k]);
         });
         if (meta.length) lines.push("  " + meta.join(" · "));
+        noteLists.forEach(function (k) {
+          lines.push("  [" + k + "]");
+          r.notes[k].forEach(function (x) {
+            lines.push("  - " + x);
+          });
+        });
         lines.push("  [단계] 걸린시간 · 요청수 · 요청시간합 · 최대 · 쉼 · 실패");
         (r.stages || []).forEach(function (s) {
           lines.push(
@@ -3516,11 +3524,34 @@
   }
 
   /** NeedToReplenish Copier 와 동일: pagingSize 100 + 조회(POST/GET) 후 HTML 반환 */
-  async function applyOutboundPagingSize100(baseUrl, html0) {
+  /** 받은 화면에서 선택돼 있는 「몇 줄씩 보기」 값 (기록용) */
+  function outboundPagingSizeShown(html) {
+    try {
+      var d = new DOMParser().parseFromString(String(html || ""), "text/html");
+      var sel = d.querySelector('select[name="pagingSize"]');
+      if (!sel) return "없음";
+      var o = sel.querySelector("option[selected]") || sel.options[sel.selectedIndex];
+      var opts = [].map.call(sel.options, function (x) {
+        return x.value;
+      });
+      return (o ? o.value : "?") + " (고를 수 있는 값 " + opts.join("/") + ")";
+    } catch (eS) {
+      return "?";
+    }
+  }
+
+  async function applyOutboundPagingSize100(baseUrl, html0, info) {
+    info = info || {};
     var doc = new DOMParser().parseFromString(String(html0 || ""), "text/html");
     var form = findOutboundListSearchForm(doc);
-    if (!form) return html0;
-    if (!doc.querySelector('select[name="pagingSize"]')) return html0;
+    if (!form) {
+      info.size = "검색폼 없음";
+      return html0;
+    }
+    if (!doc.querySelector('select[name="pagingSize"]')) {
+      info.size = "줄수 선택칸 없음";
+      return html0;
+    }
     var method = String(form.method || form.getAttribute("method") || "get")
       .toUpperCase()
       .trim();
@@ -3562,12 +3593,18 @@
           headers: Object.assign({}, hdr, xh),
           tag: "outbound pagingSize=100 GET",
         });
-        if (parseOutboundItemsFromHtml(htmlGet).list.length) return htmlGet;
+        if (parseOutboundItemsFromHtml(htmlGet).list.length) {
+          info.size = "GET";
+          return htmlGet;
+        }
       } catch (eG) {}
     }
     try {
-      return await postSize100();
+      var htmlPost100 = await postSize100();
+      info.size = method === "GET" ? "GET 빈화면 → POST" : "POST";
+      return htmlPost100;
     } catch (eP) {
+      info.size = "실패";
       return html0;
     }
   }
@@ -3575,7 +3612,9 @@
   /** 출고 목록 다음 페이지를 받는 방식 — 0~2: GET 주소 형식, 3: POST. -1 = 아직 모름 */
   var outboundPageMethod = -1;
 
-  async function fetchOutboundListPageHtml(baseUrl, uiPage, contextHtml) {
+  async function fetchOutboundListPageHtml(baseUrl, uiPage, contextHtml, info) {
+    info = info || {};
+    info.tries = info.tries || 0;
     var tryUrls = [
       buildOutboundPageUrl(baseUrl, "page", Math.max(0, uiPage - 1)),
       buildOutboundPageUrl(baseUrl, "page", uiPage),
@@ -3596,6 +3635,7 @@
     for (oi = 0; oi < order.length; oi++) {
       ai = order[oi];
       try {
+        info.tries++;
         var htmlGet = await gmXhr({
           url: tryUrls[ai],
           headers: outboundDetailHeaders(baseUrl),
@@ -3605,6 +3645,7 @@
         if (!storeGet.list.length) continue;
         if (parseOutboundActivePageFromHtml(htmlGet) === uiPage) {
           outboundPageMethod = ai;
+          info.how = "GET" + ai;
           return htmlGet;
         }
       } catch (eGet) {}
@@ -3628,6 +3669,7 @@
       outboundFetchHeaders(baseUrl),
       outboundCsrfFromDoc(doc)
     );
+    info.tries++;
     var htmlPost = await gmXhr({
       method: "POST",
       url: submitUrl,
@@ -3641,17 +3683,24 @@
       throw new Error("outbound page mismatch " + uiPage);
     }
     outboundPageMethod = 3;
+    info.how = "POST";
     return htmlPost;
   }
 
-  async function collectOutboundItemsAllPages(baseUrl, firstHtml, onPageProgress) {
+  async function collectOutboundItemsAllPages(baseUrl, firstHtml, onPageProgress, info) {
+    info = info || {};
+    info.first = parseOutboundItemsFromHtml(firstHtml).list.length;
+    info.pages = [];
+    info.tries = 0;
     var htmlReady = firstHtml;
     try {
-      htmlReady = await applyOutboundPagingSize100(baseUrl, firstHtml);
+      htmlReady = await applyOutboundPagingSize100(baseUrl, firstHtml, info);
     } catch (eSz) {
       htmlReady = firstHtml;
     }
+    info.shown = outboundPagingSizeShown(htmlReady);
     var store = parseOutboundItemsFromHtml(htmlReady);
+    info.pages.push(store.list.length);
     var maxHint = parseOutboundMaxPageFromHtml(htmlReady);
     if (!isFinite(maxHint) || maxHint < 1) maxHint = 1;
     var seenSig = Object.create(null);
@@ -3662,17 +3711,29 @@
       if (stopRequested) break;
       if (onPageProgress) onPageProgress(p, maxHint);
       var htmlP = "";
+      var pInfo = {};
       try {
-        htmlP = await fetchOutboundListPageHtml(baseUrl, p, contextHtml);
+        htmlP = await fetchOutboundListPageHtml(baseUrl, p, contextHtml, pInfo);
       } catch (eMove) {
+        info.tries += pInfo.tries || 0;
+        info.end = p + "쪽 못 받음";
         // 마지막 페이지 다음은 원래 실패로 끝남 — 있다고 알려진 페이지에서 실패했을 때만 집계
         if (p <= maxHint) store.failed = (store.failed || 0) + 1;
         break;
       }
+      info.tries += pInfo.tries || 0;
+      info.how = pInfo.how || info.how;
       var storeP = parseOutboundItemsFromHtml(htmlP);
-      if (!storeP.list.length) break;
+      if (!storeP.list.length) {
+        info.end = p + "쪽 빈 화면";
+        break;
+      }
       var sig = outboundPageStoreSig(storeP);
-      if (seenSig[sig]) break;
+      if (seenSig[sig]) {
+        info.end = p + "쪽 앞쪽과 같음";
+        break;
+      }
+      info.pages.push(storeP.list.length);
       seenSig[sig] = 1;
       mergeOutboundStores(store, storeP);
       contextHtml = htmlP;
@@ -3681,10 +3742,25 @@
       }
       await sleep(OUTBOUND_PAGE_DELAY_MS);
     }
+    info.maxHint = maxHint;
+    info.total = store.list.length;
     return store;
   }
 
+  /** 조회 기록용 한 줄 — 바코드 등은 안 남김 */
+  function outboundPageInfoText(n, info) {
+    if (!info) return "시간대" + n + ": 못 받음";
+    return (
+      "시간대" + n + ": 첫 화면 " + info.first + "줄 · 100줄 보기 " + (info.size || "-") +
+      " → " + info.pages.length + "쪽 받음 (쪽별 " + info.pages.join(",") + "줄, 합 " + info.total + ")" +
+      " · 화면의 줄수 " + info.shown + " · 끝쪽 표시 " + info.maxHint +
+      " · 다음쪽 요청 " + info.tries + "회" + (info.how ? "(" + info.how + ")" : "") +
+      " · 멈춘 이유 " + (info.end || "최대 쪽수")
+    );
+  }
+
   async function collectOutboundItemsFromDetailUrls(urls, onProgress) {
+    var pageInfos = new Array(urls.length);
     var store = outboundItemStore();
     /* 시간대(컷라인) 2개씩 동시에 — 한 시간대 안의 페이지는 차례대로. 합치기는 원래 순서대로 */
     var parts = new Array(urls.length);
@@ -3701,9 +3777,15 @@
           headers: outboundDetailHeaders(urls[di]),
           tag: "outbound 상세 p1",
         });
-        parts[di] = await collectOutboundItemsAllPages(urls[di], html, function (p, maxH) {
-          if (onProgress) onProgress(ci, urls.length, urls[di], p, maxH);
-        });
+        pageInfos[di] = {};
+        parts[di] = await collectOutboundItemsAllPages(
+          urls[di],
+          html,
+          function (p, maxH) {
+            if (onProgress) onProgress(ci, urls.length, urls[di], p, maxH);
+          },
+          pageInfos[di]
+        );
       } catch (eD) {
         // 실패한 컷라인은 건너뛰되 개수는 남김 — 완료 메시지에 표시
         failedCt += 1;
@@ -3714,6 +3796,12 @@
       if (parts[di]) mergeOutboundStores(store, parts[di]);
     }
     if (failedCt) store.failed = (store.failed || 0) + failedCt;
+    atsPerfNote(
+      "출고 대시보드 페이지",
+      pageInfos.map(function (x, i) {
+        return outboundPageInfoText(i + 1, x && x.pages ? x : null);
+      })
+    );
     return store;
   }
 
